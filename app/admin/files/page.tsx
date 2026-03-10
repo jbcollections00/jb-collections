@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import AdminHeader from "@/app/components/AdminHeader"
 import { createClient } from "@/lib/supabase/client"
 
@@ -37,7 +38,9 @@ type R2UploadResult = {
 
 export default function FilesPage() {
   const supabase = createClient()
+  const router = useRouter()
 
+  const [checkingAdmin, setCheckingAdmin] = useState(true)
   const [files, setFiles] = useState<FileItem[]>([])
   const [categories, setCategories] = useState<Category[]>([])
 
@@ -64,6 +67,44 @@ export default function FilesPage() {
   const [errorMessage, setErrorMessage] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
 
+  useEffect(() => {
+    checkAdminAndLoad()
+  }, [])
+
+  async function checkAdminAndLoad() {
+    try {
+      setCheckingAdmin(true)
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        router.replace("/admin/login")
+        return
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+
+      if (profileError || profile?.role !== "admin") {
+        router.replace("/admin/login")
+        return
+      }
+
+      await loadData()
+    } catch (error) {
+      console.error("Admin files auth check failed:", error)
+      router.replace("/admin/login")
+    } finally {
+      setCheckingAdmin(false)
+    }
+  }
+
   async function loadData() {
     setLoading(true)
     setErrorMessage("")
@@ -82,11 +123,6 @@ export default function FilesPage() {
     setCategories((categoriesData as Category[]) || [])
     setLoading(false)
   }
-
-  useEffect(() => {
-    loadData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   function clearMessages() {
     setErrorMessage("")
@@ -391,6 +427,17 @@ export default function FilesPage() {
     } finally {
       setDeletingId(null)
     }
+  }
+
+  if (checkingAdmin) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
+        <div className="rounded-[20px] border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
+          <p className="text-lg font-bold text-slate-800">Checking admin access...</p>
+          <p className="mt-2 text-sm text-slate-500">Please wait.</p>
+        </div>
+      </div>
+    )
   }
 
   return (
