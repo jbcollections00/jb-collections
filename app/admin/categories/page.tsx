@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import AdminHeader from "@/app/components/AdminHeader"
 import { createClient } from "@/lib/supabase/client"
 
@@ -13,20 +14,60 @@ type Category = {
 
 export default function CategoriesPage() {
   const supabase = createClient()
+  const router = useRouter()
 
+  const [checkingAdmin, setCheckingAdmin] = useState(true)
   const [categories, setCategories] = useState<Category[]>([])
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [editingId, setEditingId] = useState<string | null>(null)
 
-  async function loadCategories() {
-    const { data } = await supabase.from("categories").select("*").order("created_at", { ascending: false })
-    setCategories((data as Category[]) || [])
+  useEffect(() => {
+    checkAdminAndLoad()
+  }, [])
+
+  async function checkAdminAndLoad() {
+    try {
+      setCheckingAdmin(true)
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        router.replace("/admin/login")
+        return
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+
+      if (profileError || profile?.role !== "admin") {
+        router.replace("/admin/login")
+        return
+      }
+
+      await loadCategories()
+    } catch (error) {
+      console.error("Admin categories auth check failed:", error)
+      router.replace("/admin/login")
+    } finally {
+      setCheckingAdmin(false)
+    }
   }
 
-  useEffect(() => {
-    loadCategories()
-  }, [])
+  async function loadCategories() {
+    const { data } = await supabase
+      .from("categories")
+      .select("*")
+      .order("created_at", { ascending: false })
+
+    setCategories((data as Category[]) || [])
+  }
 
   async function saveCategory() {
     if (!name.trim()) return
@@ -66,6 +107,40 @@ export default function CategoriesPage() {
     setName("")
     setDescription("")
     setEditingId(null)
+  }
+
+  if (checkingAdmin) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "linear-gradient(180deg, #eef4ff 0%, #f8fbff 45%, #ffffff 100%)",
+          fontFamily: "Arial, Helvetica, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "24px",
+        }}
+      >
+        <div
+          style={{
+            background: "white",
+            border: "1px solid #e2e8f0",
+            borderRadius: "24px",
+            padding: "28px 32px",
+            boxShadow: "0 12px 30px rgba(0,0,0,0.05)",
+            textAlign: "center",
+          }}
+        >
+          <p style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a", margin: 0 }}>
+            Checking admin access...
+          </p>
+          <p style={{ fontSize: "14px", color: "#64748b", margin: "8px 0 0" }}>
+            Please wait.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (
