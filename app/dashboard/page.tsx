@@ -46,14 +46,38 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [loggingOut, setLoggingOut] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [checkingAuth, setCheckingAuth] = useState(true)
 
   useEffect(() => {
-    fetchDashboardData()
+    checkUserAndLoad()
   }, [])
 
-  async function fetchDashboardData() {
-    setLoading(true)
+  async function checkUserAndLoad() {
+    try {
+      setLoading(true)
+      setCheckingAuth(true)
 
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        router.replace("/login")
+        return
+      }
+
+      await fetchDashboardData()
+    } catch (error) {
+      console.error("Dashboard auth check failed:", error)
+      router.replace("/login")
+    } finally {
+      setCheckingAuth(false)
+      setLoading(false)
+    }
+  }
+
+  async function fetchDashboardData() {
     const [{ data: categoriesData, error: categoriesError }, { data: filesData, error: filesError }] =
       await Promise.all([
         supabase.from("categories").select("*").order("name", { ascending: true }),
@@ -80,8 +104,6 @@ export default function DashboardPage() {
 
       setFileCounts(counts)
     }
-
-    setLoading(false)
   }
 
   async function handleLogout() {
@@ -96,7 +118,7 @@ export default function DashboardPage() {
         return
       }
 
-      router.push("/login")
+      router.replace("/login")
       router.refresh()
     } catch (error) {
       console.error("Logout failed:", error)
@@ -108,20 +130,28 @@ export default function DashboardPage() {
 
   const totalDownloads = Object.values(fileCounts).reduce((sum, count) => sum + count, 0)
 
+  if (checkingAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="rounded-3xl border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
+          <p className="text-lg font-semibold text-slate-800">Checking your account...</p>
+          <p className="mt-2 text-sm text-slate-500">Please wait.</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="mx-auto w-full max-w-[1800px] px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        {/* HEADER */}
         <div className="mb-6 overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm sm:mb-8 sm:rounded-[30px]">
           <div className="relative overflow-hidden bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 px-4 py-5 text-white sm:px-6 sm:py-8 lg:px-8 lg:py-10">
             <div className="relative">
-              {/* TOP ROW */}
               <div className="flex items-center justify-between gap-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/80 sm:text-sm">
                   JB Collections
                 </p>
 
-                {/* DESKTOP / TABLET NAV */}
                 <div className="hidden items-center gap-3 lg:flex">
                   <Link
                     href="/dashboard"
@@ -161,7 +191,6 @@ export default function DashboardPage() {
                   </button>
                 </div>
 
-                {/* MOBILE HAMBURGER */}
                 <button
                   type="button"
                   onClick={() => setMobileMenuOpen((prev) => !prev)}
@@ -172,7 +201,6 @@ export default function DashboardPage() {
                 </button>
               </div>
 
-              {/* MOBILE / TABLET MENU */}
               {mobileMenuOpen && (
                 <div className="mt-4 grid grid-cols-1 gap-3 lg:hidden">
                   <Link
@@ -218,7 +246,6 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* TITLE */}
               <div className="mt-6">
                 <h1 className="text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
                   Dashboard
@@ -232,7 +259,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* CATEGORY HEADER */}
         <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl lg:text-4xl">
@@ -248,7 +274,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* CONTENT */}
         {loading ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-4">
             {Array.from({ length: 4 }).map((_, index) => (
