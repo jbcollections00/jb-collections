@@ -18,8 +18,9 @@ export async function middleware(request: NextRequest) {
     "/categories",
   ]
 
-  const isProtectedUserRoute =
-    protectedUserRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+  const isProtectedUserRoute = protectedUserRoutes.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  )
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -73,12 +74,19 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/admin",
     "/admin/:path*",
+    "/dashboard",
     "/dashboard/:path*",
+    "/profile",
     "/profile/:path*",
+    "/messages",
     "/messages/:path*",
+    "/upgrade",
     "/upgrade/:path*",
+    "/contact",
     "/contact/:path*",
+    "/categories",
     "/categories/:path*",
   ],
 }
