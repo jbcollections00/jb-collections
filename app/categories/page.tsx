@@ -38,16 +38,40 @@ export default function CategoriesPage() {
 
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
+  const [checkingAuth, setCheckingAuth] = useState(true)
   const [search, setSearch] = useState("")
   const [loggingOut, setLoggingOut] = useState(false)
 
   useEffect(() => {
-    fetchCategories()
+    checkUserAndLoad()
   }, [])
 
-  async function fetchCategories() {
-    setLoading(true)
+  async function checkUserAndLoad() {
+    try {
+      setCheckingAuth(true)
+      setLoading(true)
 
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser()
+
+      if (error || !user) {
+        router.replace("/login")
+        return
+      }
+
+      await fetchCategories()
+    } catch (error) {
+      console.error("Categories auth check failed:", error)
+      router.replace("/login")
+    } finally {
+      setCheckingAuth(false)
+      setLoading(false)
+    }
+  }
+
+  async function fetchCategories() {
     const { data, error } = await supabase
       .from("categories")
       .select("*")
@@ -59,15 +83,13 @@ export default function CategoriesPage() {
     } else {
       setCategories(data || [])
     }
-
-    setLoading(false)
   }
 
   async function handleLogout() {
     try {
       setLoggingOut(true)
       await supabase.auth.signOut()
-      router.push("/login")
+      router.replace("/login")
       router.refresh()
     } catch (error) {
       console.error("Logout failed:", error)
@@ -88,6 +110,17 @@ export default function CategoriesPage() {
       return name.includes(keyword) || description.includes(keyword)
     })
   }, [categories, search])
+
+  if (checkingAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="rounded-3xl border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
+          <p className="text-lg font-semibold text-slate-800">Checking your account...</p>
+          <p className="mt-2 text-sm text-slate-500">Please wait.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
