@@ -6,8 +6,20 @@ export async function middleware(request: NextRequest) {
   const response = NextResponse.next()
   const pathname = request.nextUrl.pathname
 
-  const isLoginPage = pathname === "/admin/login"
-  const isProtectedAdminRoute = pathname.startsWith("/admin") && !isLoginPage
+  const isAdminLoginPage = pathname === "/admin/login"
+  const isProtectedAdminRoute = pathname.startsWith("/admin") && !isAdminLoginPage
+
+  const protectedUserRoutes = [
+    "/dashboard",
+    "/profile",
+    "/messages",
+    "/upgrade",
+    "/contact",
+    "/categories",
+  ]
+
+  const isProtectedUserRoute =
+    protectedUserRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -36,6 +48,10 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  if (isProtectedUserRoute && !user) {
+    return NextResponse.redirect(new URL("/login", request.url))
+  }
+
   if (isProtectedAdminRoute) {
     if (!user) {
       return NextResponse.redirect(new URL("/admin/login", request.url))
@@ -56,5 +72,13 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: [
+    "/admin/:path*",
+    "/dashboard/:path*",
+    "/profile/:path*",
+    "/messages/:path*",
+    "/upgrade/:path*",
+    "/contact/:path*",
+    "/categories/:path*",
+  ],
 }
