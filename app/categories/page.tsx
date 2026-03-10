@@ -202,7 +202,7 @@ export default function CategoriesPage() {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
             {Array.from({ length: 8 }).map((_, index) => (
               <div
                 key={index}
@@ -232,7 +232,7 @@ export default function CategoriesPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
             {filteredCategories.map((category) => {
               const previewImage = getCategoryImage(category)
               const icon = getCategoryIcon(category.name)
