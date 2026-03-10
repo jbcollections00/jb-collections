@@ -59,7 +59,7 @@ export async function middleware(request: NextRequest) {
 
   if (isProtectedAdminRoute) {
     if (!user) {
-      return NextResponse.redirect(new URL("/admin/login", request.url))
+      return NextResponse.redirect(new URL("/secure-admin-portal-7X9", request.url))
     }
 
     const { data: profile, error: profileError } = await supabase
@@ -69,7 +69,7 @@ export async function middleware(request: NextRequest) {
       .single()
 
     if (profileError || profile?.role !== "admin") {
-      return NextResponse.redirect(new URL("/admin/login", request.url))
+      return NextResponse.redirect(new URL("/secure-admin-portal-7X9", request.url))
     }
   }
 
