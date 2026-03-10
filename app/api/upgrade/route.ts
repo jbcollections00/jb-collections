@@ -1,0 +1,74 @@
+import { NextResponse } from "next/server"
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
+
+export async function POST(req: Request) {
+  try {
+    const formData = await req.formData()
+
+    const subject = String(formData.get("subject") || "").trim()
+    const message = String(formData.get("message") || "").trim()
+
+    if (!message) {
+      return NextResponse.redirect(
+        new URL("/profile?error=Upgrade reason is required", req.url)
+      )
+    }
+
+    const cookieStore = await cookies()
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value
+          },
+          set() {},
+          remove() {},
+        },
+      }
+    )
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.redirect(
+        new URL("/login", req.url)
+      )
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", user.id)
+      .single()
+
+    const { error } = await supabase.from("upgrades").insert({
+      sender_id: user.id,
+      name: profile?.full_name || null,
+      email: profile?.email || user.email || null,
+      plan: "premium",
+      subject: subject || "Premium upgrade request",
+      body: message,
+      status: "pending",
+    })
+
+    if (error) {
+      return NextResponse.redirect(
+        new URL(`/profile?error=${encodeURIComponent(error.message)}`, req.url)
+      )
+    }
+
+    return NextResponse.redirect(
+      new URL("/profile?success=Upgrade request sent successfully", req.url)
+    )
+  } catch {
+    return NextResponse.redirect(
+      new URL("/profile?error=Something went wrong", req.url)
+    )
+  }
+}

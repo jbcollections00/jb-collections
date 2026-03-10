@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Plan {
+  FREE
+  PREMIUM
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(USER)
+  plan         Plan      @default(FREE)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  messagesSent Message[] @relation("senderMessages")
+  downloads    Download[]
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  files       File[]
+}
+
+model File {
+  id          String     @id @default(cuid())
+  title       String
+  slug        String     @unique
+  description String?
+  isPremium   Boolean    @default(true)
+  objectKey   String?
+  fileUrl     String?
+  fileSize    String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  categoryId  String
+  category    Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  downloads   Download[]
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  subject     String
+  body        String
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+  senderId    String
+  recipientId String
+  sender      User     @relation("senderMessages", fields: [senderId], references: [id], onDelete: Cascade)
+}
+
+model Download {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  userId     String
+  fileId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  file       File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, fileId])
+}
