@@ -101,6 +101,7 @@ export default function CategoryPage() {
   const [allCategories, setAllCategories] = useState<CategoryLinkItem[]>([])
   const [files, setFiles] = useState<FileItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [checkingAuth, setCheckingAuth] = useState(true)
   const [loggingOut, setLoggingOut] = useState(false)
   const [search, setSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -108,7 +109,7 @@ export default function CategoryPage() {
 
   useEffect(() => {
     if (categoryId) {
-      fetchCategoryPage()
+      checkUserAndLoad()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryId])
@@ -117,9 +118,32 @@ export default function CategoryPage() {
     setCurrentPage(1)
   }, [search])
 
-  async function fetchCategoryPage() {
-    setLoading(true)
+  async function checkUserAndLoad() {
+    try {
+      setCheckingAuth(true)
+      setLoading(true)
 
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser()
+
+      if (error || !user) {
+        router.replace("/login")
+        return
+      }
+
+      await fetchCategoryPage()
+    } catch (error) {
+      console.error("Category auth check failed:", error)
+      router.replace("/login")
+    } finally {
+      setCheckingAuth(false)
+      setLoading(false)
+    }
+  }
+
+  async function fetchCategoryPage() {
     const [
       { data: categoryData, error: categoryError },
       { data: filesData, error: filesError },
@@ -161,8 +185,6 @@ export default function CategoryPage() {
     } else {
       setAllCategories(categoriesData || [])
     }
-
-    setLoading(false)
   }
 
   const filteredFiles = useMemo(() => {
@@ -204,7 +226,7 @@ export default function CategoryPage() {
     try {
       setLoggingOut(true)
       await supabase.auth.signOut()
-      router.push("/login")
+      router.replace("/login")
       router.refresh()
     } catch (error) {
       console.error("Logout failed:", error)
@@ -212,6 +234,17 @@ export default function CategoryPage() {
     } finally {
       setLoggingOut(false)
     }
+  }
+
+  if (checkingAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="rounded-3xl border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
+          <p className="text-lg font-semibold text-slate-800">Checking your account...</p>
+          <p className="mt-2 text-sm text-slate-500">Please wait.</p>
+        </div>
+      </div>
+    )
   }
 
   if (loading) {
@@ -272,7 +305,6 @@ export default function CategoryPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="mx-auto w-full max-w-[1800px] px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        {/* HEADER */}
         <div className="mb-6 overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm sm:mb-8 sm:rounded-[30px]">
           <div className="relative overflow-hidden bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 px-4 py-5 text-white sm:px-6 sm:py-8 lg:px-8 lg:py-10">
             <div className="absolute inset-0 opacity-20">
@@ -281,13 +313,11 @@ export default function CategoryPage() {
             </div>
 
             <div className="relative">
-              {/* TOP ROW */}
               <div className="flex items-center justify-between gap-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/80 sm:text-sm">
                   JB Collections
                 </p>
 
-                {/* DESKTOP NAV */}
                 <div className="hidden items-center gap-3 lg:flex">
                   <Link
                     href="/dashboard"
@@ -327,7 +357,6 @@ export default function CategoryPage() {
                   </button>
                 </div>
 
-                {/* MOBILE HAMBURGER */}
                 <button
                   type="button"
                   onClick={() => setMobileMenuOpen((prev) => !prev)}
@@ -338,7 +367,6 @@ export default function CategoryPage() {
                 </button>
               </div>
 
-              {/* MOBILE MENU */}
               {mobileMenuOpen && (
                 <div className="mt-4 grid grid-cols-1 gap-3 lg:hidden">
                   <Link
@@ -384,7 +412,6 @@ export default function CategoryPage() {
                 </div>
               )}
 
-              {/* TITLE + SEARCH */}
               <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_minmax(320px,680px)] lg:items-start">
                 <div>
                   <h1 className="text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
