@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 
-const ADMIN_LOGIN_PATH = "/secure-admin-portal-7X9"
+const ADMIN_LOGIN_PATH = "/admin/login"
 
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: "🏠" },
@@ -68,7 +68,6 @@ export default function AdminHeader() {
         </button>
       </div>
 
-      {/* Desktop menu */}
       <div className="mt-5 hidden flex-wrap items-center gap-3 lg:flex">
         {navItems.map((item) => {
           const active = isActive(item.href)
@@ -99,7 +98,6 @@ export default function AdminHeader() {
         </button>
       </div>
 
-      {/* Mobile / tablet menu */}
       {mobileMenuOpen && (
         <div className="mt-5 grid grid-cols-1 gap-3 lg:hidden">
           {navItems.map((item) => {

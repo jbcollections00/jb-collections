@@ -31,7 +31,11 @@ export async function middleware(request: NextRequest) {
           return request.cookies.get(name)?.value
         },
         set(name: string, value: string, options: any) {
-          response.cookies.set({ name, value, ...options })
+          response.cookies.set({
+            name,
+            value,
+            ...options,
+          })
         },
         remove(name: string, options: any) {
           response.cookies.set({
@@ -58,13 +62,13 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/admin/login", request.url))
     }
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .single()
 
-    if (profile?.role !== "admin") {
+    if (profileError || profile?.role !== "admin") {
       return NextResponse.redirect(new URL("/admin/login", request.url))
     }
   }
