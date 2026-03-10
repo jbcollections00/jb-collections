@@ -66,7 +66,7 @@ export default function AdminPage() {
       } = await supabase.auth.getUser()
 
       if (userError || !user) {
-        router.replace("/admin/login")
+        router.replace("/secure-admin-portal-7X9")
         return
       }
 
@@ -77,14 +77,14 @@ export default function AdminPage() {
         .single()
 
       if (profileError || profile?.role !== "admin") {
-        router.replace("/admin/login")
+        router.replace("/secure-admin-portal-7X9")
         return
       }
 
       await loadStats()
     } catch (error) {
       console.error("Admin auth check failed:", error)
-      router.replace("/admin/login")
+      router.replace("/secure-admin-portal-7X9")
     } finally {
       setCheckingAdmin(false)
     }

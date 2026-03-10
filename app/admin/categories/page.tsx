@@ -36,7 +36,7 @@ export default function CategoriesPage() {
       } = await supabase.auth.getUser()
 
       if (userError || !user) {
-        router.replace("/admin/login")
+        router.replace("/secure-admin-portal-7X9")
         return
       }
 
@@ -47,14 +47,14 @@ export default function CategoriesPage() {
         .single()
 
       if (profileError || profile?.role !== "admin") {
-        router.replace("/admin/login")
+        router.replace("/secure-admin-portal-7X9")
         return
       }
 
       await loadCategories()
     } catch (error) {
       console.error("Admin categories auth check failed:", error)
-      router.replace("/admin/login")
+      router.replace("/secure-admin-portal-7X9")
     } finally {
       setCheckingAdmin(false)
     }

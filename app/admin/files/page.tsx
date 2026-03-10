@@ -81,7 +81,7 @@ export default function FilesPage() {
       } = await supabase.auth.getUser()
 
       if (userError || !user) {
-        router.replace("/admin/login")
+        router.replace("/secure-admin-portal-7X9")
         return
       }
 
@@ -92,14 +92,14 @@ export default function FilesPage() {
         .single()
 
       if (profileError || profile?.role !== "admin") {
-        router.replace("/admin/login")
+        router.replace("/secure-admin-portal-7X9")
         return
       }
 
       await loadData()
     } catch (error) {
       console.error("Admin files auth check failed:", error)
-      router.replace("/admin/login")
+      router.replace("/secure-admin-portal-7X9")
     } finally {
       setCheckingAdmin(false)
     }

@@ -98,7 +98,7 @@ export default function UpgradesPage() {
       } = await supabase.auth.getUser()
 
       if (userError || !user) {
-        router.replace("/admin/login")
+        router.replace("/secure-admin-portal-7X9")
         return false
       }
 
@@ -109,14 +109,14 @@ export default function UpgradesPage() {
         .single()
 
       if (profileError || profile?.role !== "admin") {
-        router.replace("/admin/login")
+        router.replace("/secure-admin-portal-7X9")
         return false
       }
 
       return true
     } catch (error) {
       console.error("Admin upgrades auth check failed:", error)
-      router.replace("/admin/login")
+      router.replace("/secure-admin-portal-7X9")
       return false
     } finally {
       setCheckingAdmin(false)

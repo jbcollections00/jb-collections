@@ -87,7 +87,7 @@ export default function AdminMessagesPage() {
       } = await supabase.auth.getUser()
 
       if (userError || !user) {
-        router.replace("/admin/login")
+        router.replace("/secure-admin-portal-7X9")
         return false
       }
 
@@ -98,14 +98,14 @@ export default function AdminMessagesPage() {
         .single()
 
       if (profileError || profile?.role !== "admin") {
-        router.replace("/admin/login")
+        router.replace("/secure-admin-portal-7X9")
         return false
       }
 
       return true
     } catch (err) {
       console.error("Admin messages auth check failed:", err)
-      router.replace("/admin/login")
+      router.replace("/secure-admin-portal-7X9")
       return false
     } finally {
       setCheckingAdmin(false)
