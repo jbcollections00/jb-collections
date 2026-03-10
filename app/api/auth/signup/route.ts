@@ -35,7 +35,7 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.redirect(new URL("/login", req.url));
+    return NextResponse.redirect(new URL("/login", req.url), 303);
   } catch (error: any) {
     console.error("SIGNUP ERROR:", error);
     return NextResponse.json(
