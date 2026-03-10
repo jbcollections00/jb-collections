@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 
-const ADMIN_LOGIN_PATH = "/admin/login"
+const ADMIN_LOGIN_PATH = "/secure-admin-portal-7X9"
 
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: "🏠" },

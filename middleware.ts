@@ -6,7 +6,7 @@ export async function middleware(request: NextRequest) {
   const response = NextResponse.next()
   const pathname = request.nextUrl.pathname
 
-  const isAdminLoginPage = pathname === "/admin/login"
+  const isAdminLoginPage = pathname === "/secure-admin-portal-7X9"
   const isProtectedAdminRoute = pathname.startsWith("/admin") && !isAdminLoginPage
 
   const protectedUserRoutes = [
