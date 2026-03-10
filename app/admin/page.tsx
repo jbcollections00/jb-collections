@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import AdminHeader from "@/app/components/AdminHeader"
 import { createClient } from "@/lib/supabase/client"
 
@@ -41,7 +42,9 @@ const cards = [
 
 export default function AdminPage() {
   const supabase = createClient()
+  const router = useRouter()
 
+  const [checkingAdmin, setCheckingAdmin] = useState(true)
   const [stats, setStats] = useState<StatItem[]>([
     { label: "Categories", value: "0", icon: "📂", color: "#2563eb" },
     { label: "Files", value: "0", icon: "📁", color: "#0f172a" },
@@ -50,8 +53,42 @@ export default function AdminPage() {
   ])
 
   useEffect(() => {
-    loadStats()
+    checkAdminAndLoad()
   }, [])
+
+  async function checkAdminAndLoad() {
+    try {
+      setCheckingAdmin(true)
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        router.replace("/admin/login")
+        return
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+
+      if (profileError || profile?.role !== "admin") {
+        router.replace("/admin/login")
+        return
+      }
+
+      await loadStats()
+    } catch (error) {
+      console.error("Admin auth check failed:", error)
+      router.replace("/admin/login")
+    } finally {
+      setCheckingAdmin(false)
+    }
+  }
 
   async function loadStats() {
     try {
@@ -101,6 +138,17 @@ export default function AdminPage() {
     } catch (error) {
       console.error("Failed to load admin stats:", error)
     }
+  }
+
+  if (checkingAdmin) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-[#eef4ff] via-[#f8fbff] to-white px-4">
+        <div className="rounded-[24px] border border-slate-200 bg-white px-8 py-6 text-center shadow-[0_12px_28px_rgba(0,0,0,0.05)]">
+          <p className="text-lg font-bold text-slate-800">Checking admin access...</p>
+          <p className="mt-2 text-sm text-slate-500">Please wait.</p>
+        </div>
+      </div>
+    )
   }
 
   return (
