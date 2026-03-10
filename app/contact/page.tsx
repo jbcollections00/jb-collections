@@ -4,7 +4,6 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import {
   Mail,
-  MessageSquare,
   Send,
   User,
   FileText,
@@ -50,6 +49,7 @@ export default function ContactPage() {
   const [success, setSuccess] = useState("")
   const [error, setError] = useState("")
   const [loadingUser, setLoadingUser] = useState(true)
+  const [checkingAuth, setCheckingAuth] = useState(true)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -60,13 +60,14 @@ export default function ContactPage() {
   async function loadUserDetails() {
     try {
       setLoadingUser(true)
+      setCheckingAuth(true)
 
       const {
         data: { user },
       } = await supabase.auth.getUser()
 
       if (!user) {
-        setLoadingUser(false)
+        router.replace("/login")
         return
       }
 
@@ -100,8 +101,10 @@ export default function ContactPage() {
       }
     } catch (err) {
       console.error("Failed to load user details:", err)
+      router.replace("/login")
     } finally {
       setLoadingUser(false)
+      setCheckingAuth(false)
     }
   }
 
@@ -177,7 +180,8 @@ export default function ContactPage() {
       } = await supabase.auth.getUser()
 
       if (!user) {
-        throw new Error("You must be logged in to send a message.")
+        router.replace("/login")
+        return
       }
 
       let activeConversationId = conversation?.id ?? null
@@ -269,20 +273,29 @@ export default function ContactPage() {
     router.push("/login")
   }
 
+  if (checkingAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 px-4">
+        <div className="rounded-[24px] border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
+          <p className="text-lg font-bold text-slate-800">Checking your account...</p>
+          <p className="mt-2 text-sm text-slate-500">Please wait.</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
       <div className="absolute left-[-80px] top-[-80px] h-72 w-72 rounded-full bg-blue-200/40 blur-3xl" />
       <div className="absolute bottom-[-80px] right-[-80px] h-80 w-80 rounded-full bg-indigo-200/40 blur-3xl" />
 
       <div className="relative mx-auto max-w-7xl">
-        {/* HERO */}
         <div className="mb-6 overflow-hidden rounded-[24px] bg-gradient-to-r from-cyan-600 via-sky-500 to-violet-600 p-5 shadow-2xl shadow-slate-300/40 sm:rounded-[30px] sm:p-8">
           <div className="flex items-center justify-between gap-4">
             <p className="text-xs font-bold uppercase tracking-[0.3em] text-white/90 sm:text-sm sm:tracking-[0.45em]">
               JB Collections
             </p>
 
-            {/* DESKTOP NAV */}
             <div className="hidden items-center gap-3 lg:flex">
               <Link
                 href="/dashboard"
@@ -318,7 +331,6 @@ export default function ContactPage() {
               </button>
             </div>
 
-            {/* MOBILE HAMBURGER */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen((prev) => !prev)}
@@ -329,7 +341,6 @@ export default function ContactPage() {
             </button>
           </div>
 
-          {/* MOBILE MENU */}
           {mobileMenuOpen && (
             <div className="mt-4 grid grid-cols-1 gap-3 lg:hidden">
               <Link
@@ -383,62 +394,7 @@ export default function ContactPage() {
           </div>
         </div>
 
-        {/* MAIN CONTENT */}
-        <div className="grid overflow-hidden rounded-[24px] border border-white/60 bg-white/75 shadow-2xl shadow-slate-200/50 backdrop-blur-xl lg:grid-cols-[0.95fr_1.05fr] lg:rounded-[32px]">
-          {/* LEFT PANEL */}
-          <div className="bg-gradient-to-br from-blue-600 via-indigo-600 to-slate-900 p-6 text-white sm:p-10 lg:p-12">
-            <div className="inline-flex items-center rounded-full bg-white/15 px-4 py-2 text-sm font-semibold backdrop-blur">
-              Contact Support
-            </div>
-
-            <h2 className="mt-6 text-3xl font-extrabold leading-tight sm:text-5xl">
-              Message Admin
-            </h2>
-
-            <p className="mt-4 max-w-md text-sm leading-7 text-white/85 sm:text-base">
-              Send your concern, request, or question to the admin. Your messages are now saved in one continuous conversation thread.
-            </p>
-
-            <div className="mt-8 space-y-4 sm:mt-10">
-              <div className="flex items-start gap-4 rounded-2xl bg-white/10 p-4 backdrop-blur">
-                <div className="rounded-xl bg-white/15 p-3">
-                  <Mail size={20} />
-                </div>
-                <div>
-                  <p className="font-semibold">Fast communication</p>
-                  <p className="mt-1 text-sm text-white/80">
-                    Send concerns, requests, and questions in one place.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4 rounded-2xl bg-white/10 p-4 backdrop-blur">
-                <div className="rounded-xl bg-white/15 p-3">
-                  <MessageSquare size={20} />
-                </div>
-                <div>
-                  <p className="font-semibold">Messenger-style thread</p>
-                  <p className="mt-1 text-sm text-white/80">
-                    Your messages and admin replies now stay in one conversation.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4 rounded-2xl bg-white/10 p-4 backdrop-blur">
-                <div className="rounded-xl bg-white/15 p-3">
-                  <Send size={20} />
-                </div>
-                <div>
-                  <p className="font-semibold">Simple and direct</p>
-                  <p className="mt-1 text-sm text-white/80">
-                    No extra steps — just fill in the form and send.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT PANEL */}
+        <div className="overflow-hidden rounded-[24px] border border-white/60 bg-white/75 shadow-2xl shadow-slate-200/50 backdrop-blur-xl lg:rounded-[32px]">
           <div className="p-5 sm:p-8 lg:p-12">
             <div className="mx-auto max-w-xl">
               <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
