@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import AdminHeader from "@/app/components/AdminHeader"
 import { createClient } from "@/lib/supabase/client"
 
@@ -37,8 +38,10 @@ type ConversationWithMeta = Conversation & {
 
 export default function AdminMessagesPage() {
   const supabase = createClient()
+  const router = useRouter()
   const bottomRef = useRef<HTMLDivElement | null>(null)
 
+  const [checkingAdmin, setCheckingAdmin] = useState(true)
   const [conversations, setConversations] = useState<ConversationWithMeta[]>([])
   const [selectedConversation, setSelectedConversation] = useState<ConversationWithMeta | null>(null)
   const [search, setSearch] = useState("")
@@ -50,19 +53,64 @@ export default function AdminMessagesPage() {
   const [error, setError] = useState("")
 
   useEffect(() => {
-    loadAll(true)
+    let interval: NodeJS.Timeout | null = null
 
-    const interval = setInterval(() => {
-      loadAll(false)
-    }, 4000)
+    async function init() {
+      const ok = await checkAdmin()
+      if (!ok) return
 
-    return () => clearInterval(interval)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      await loadAll(true)
+
+      interval = setInterval(() => {
+        loadAll(false)
+      }, 4000)
+    }
+
+    init()
+
+    return () => {
+      if (interval) clearInterval(interval)
+    }
   }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [selectedConversation?.messages.length])
+
+  async function checkAdmin() {
+    try {
+      setCheckingAdmin(true)
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        router.replace("/admin/login")
+        return false
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+
+      if (profileError || profile?.role !== "admin") {
+        router.replace("/admin/login")
+        return false
+      }
+
+      return true
+    } catch (err) {
+      console.error("Admin messages auth check failed:", err)
+      router.replace("/admin/login")
+      return false
+    } finally {
+      setCheckingAdmin(false)
+    }
+  }
 
   async function loadAll(showLoader = false) {
     if (showLoader) setLoading(true)
@@ -287,6 +335,17 @@ export default function AdminMessagesPage() {
       closed: conversations.filter((item) => item.status === "closed").length,
     }
   }, [conversations])
+
+  if (checkingAdmin) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-[#eef4ff] via-[#f8fbff] to-white px-4">
+        <div className="rounded-[24px] border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
+          <p className="text-lg font-bold text-slate-800">Checking admin access...</p>
+          <p className="mt-2 text-sm text-slate-500">Please wait.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#eef4ff] via-[#f8fbff] to-white px-4 py-4 text-slate-900 sm:px-6 sm:py-6 lg:px-8">
