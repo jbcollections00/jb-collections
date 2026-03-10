@@ -2,12 +2,20 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { Suspense, useMemo, useState, type CSSProperties } from "react"
 import { useSearchParams } from "next/navigation"
 
 export default function SignupPage() {
+  return (
+    <Suspense fallback={<SignupPageFallback />}>
+      <SignupPageContent />
+    </Suspense>
+  )
+}
+
+function SignupPageContent() {
   const searchParams = useSearchParams()
-  const error = searchParams.get("error")
+  const error = searchParams?.get("error") ?? ""
 
   const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
@@ -30,14 +38,166 @@ export default function SignupPage() {
   }, [password, confirmPassword])
 
   const formValid =
-    fullName.trim() &&
-    email.trim() &&
-    password.trim() &&
-    confirmPassword.trim() &&
+    !!fullName.trim() &&
+    !!email.trim() &&
+    !!password.trim() &&
+    !!confirmPassword.trim() &&
     emailValid &&
     passwordValid &&
     passwordsMatch
 
+  return (
+    <SignupLayout>
+      <form method="post" action="/api/auth/signup" style={{ marginTop: "22px" }}>
+        {error && (
+          <div
+            style={{
+              marginBottom: "16px",
+              padding: "12px 14px",
+              borderRadius: "12px",
+              background: "#fee2e2",
+              color: "#991b1b",
+              fontSize: "14px",
+              fontWeight: 600,
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <FloatingInput
+          id="fullName"
+          name="fullName"
+          type="text"
+          label="Full Name"
+          value={fullName}
+          onChange={setFullName}
+          placeholder=" "
+          required
+        />
+
+        <FloatingInput
+          id="email"
+          name="email"
+          type="email"
+          label="Email"
+          value={email}
+          onChange={setEmail}
+          placeholder=" "
+          required
+          error={!emailValid ? "Please enter a valid email address." : ""}
+        />
+
+        <FloatingInput
+          id="password"
+          name="password"
+          type="password"
+          label="Password"
+          value={password}
+          onChange={setPassword}
+          placeholder=" "
+          required
+          error={!passwordValid ? "Password must be at least 6 characters." : ""}
+        />
+
+        <FloatingInput
+          id="confirmPassword"
+          name="confirmPassword"
+          type="password"
+          label="Confirm Password"
+          value={confirmPassword}
+          onChange={setConfirmPassword}
+          placeholder=" "
+          required
+          error={!passwordsMatch ? "Passwords do not match." : ""}
+        />
+
+        <button
+          type="submit"
+          disabled={!formValid}
+          style={{
+            width: "100%",
+            height: "54px",
+            border: "none",
+            borderRadius: "16px",
+            background: formValid ? "#1557ff" : "#9db8ff",
+            color: "#fff",
+            fontSize: "18px",
+            fontWeight: 700,
+            cursor: formValid ? "pointer" : "not-allowed",
+            boxShadow: "0 10px 24px rgba(21,87,255,0.24)",
+            transition: "0.2s ease",
+            marginTop: "6px",
+          }}
+        >
+          Sign Up
+        </button>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "16px",
+            margin: "26px 0",
+          }}
+        >
+          <div style={{ flex: 1, height: "1px", background: "#d6def8" }} />
+          <span style={{ color: "#64748b", fontSize: "15px" }}>or</span>
+          <div style={{ flex: 1, height: "1px", background: "#d6def8" }} />
+        </div>
+
+        <button type="button" style={googleButton}>
+          <span style={{ fontSize: "22px", lineHeight: 1 }}>G</span>
+          Continue with Google
+        </button>
+
+        <div
+          style={{
+            marginTop: "24px",
+            textAlign: "center",
+            fontSize: "15px",
+            color: "#475569",
+          }}
+        >
+          Already have an account?{" "}
+          <Link
+            href="/login"
+            style={{
+              color: "#1557ff",
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
+            Login
+          </Link>
+        </div>
+
+        <div
+          style={{
+            marginTop: "24px",
+            textAlign: "center",
+            fontSize: "14px",
+            color: "#64748b",
+          }}
+        >
+          © JB Collections 2025
+        </div>
+      </form>
+    </SignupLayout>
+  )
+}
+
+function SignupPageFallback() {
+  return (
+    <SignupLayout>
+      <div style={{ marginTop: "22px", color: "#64748b", textAlign: "center" }}>
+        Loading...
+      </div>
+    </SignupLayout>
+  )
+}
+
+function SignupLayout({ children }: { children: React.ReactNode }) {
   return (
     <main
       style={{
@@ -99,141 +259,7 @@ export default function SignupPage() {
           </p>
         </div>
 
-        <form method="post" action="/api/auth/signup" style={{ marginTop: "22px" }}>
-          {error && (
-            <div
-              style={{
-                marginBottom: "16px",
-                padding: "12px 14px",
-                borderRadius: "12px",
-                background: "#fee2e2",
-                color: "#991b1b",
-                fontSize: "14px",
-                fontWeight: 600,
-              }}
-            >
-              {error}
-            </div>
-          )}
-
-          <FloatingInput
-            id="fullName"
-            name="fullName"
-            type="text"
-            label="Full Name"
-            value={fullName}
-            onChange={setFullName}
-            placeholder=" "
-            required
-          />
-
-          <FloatingInput
-            id="email"
-            name="email"
-            type="email"
-            label="Email"
-            value={email}
-            onChange={setEmail}
-            placeholder=" "
-            required
-            error={!emailValid ? "Please enter a valid email address." : ""}
-          />
-
-          <FloatingInput
-            id="password"
-            name="password"
-            type="password"
-            label="Password"
-            value={password}
-            onChange={setPassword}
-            placeholder=" "
-            required
-            error={!passwordValid ? "Password must be at least 6 characters." : ""}
-          />
-
-          <FloatingInput
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            label="Confirm Password"
-            value={confirmPassword}
-            onChange={setConfirmPassword}
-            placeholder=" "
-            required
-            error={!passwordsMatch ? "Passwords do not match." : ""}
-          />
-
-          <button
-            type="submit"
-            disabled={!formValid}
-            style={{
-              width: "100%",
-              height: "54px",
-              border: "none",
-              borderRadius: "16px",
-              background: formValid ? "#1557ff" : "#9db8ff",
-              color: "#fff",
-              fontSize: "18px",
-              fontWeight: 700,
-              cursor: formValid ? "pointer" : "not-allowed",
-              boxShadow: "0 10px 24px rgba(21,87,255,0.24)",
-              transition: "0.2s ease",
-              marginTop: "6px",
-            }}
-          >
-            Sign Up
-          </button>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "16px",
-              margin: "26px 0",
-            }}
-          >
-            <div style={{ flex: 1, height: "1px", background: "#d6def8" }} />
-            <span style={{ color: "#64748b", fontSize: "15px" }}>or</span>
-            <div style={{ flex: 1, height: "1px", background: "#d6def8" }} />
-          </div>
-
-          <button type="button" style={googleButton}>
-            <span style={{ fontSize: "22px", lineHeight: 1 }}>G</span>
-            Continue with Google
-          </button>
-
-          <div
-            style={{
-              marginTop: "24px",
-              textAlign: "center",
-              fontSize: "15px",
-              color: "#475569",
-            }}
-          >
-            Already have an account?{" "}
-            <Link
-              href="/login"
-              style={{
-                color: "#1557ff",
-                fontWeight: 700,
-                textDecoration: "none",
-              }}
-            >
-              Login
-            </Link>
-          </div>
-
-          <div
-            style={{
-              marginTop: "24px",
-              textAlign: "center",
-              fontSize: "14px",
-              color: "#64748b",
-            }}
-          >
-            © JB Collections 2025
-          </div>
-        </form>
+        {children}
       </div>
     </main>
   )
@@ -322,7 +348,7 @@ function FloatingInput({
   )
 }
 
-const googleButton: React.CSSProperties = {
+const googleButton: CSSProperties = {
   width: "100%",
   height: "56px",
   borderRadius: "14px",
