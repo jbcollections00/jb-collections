@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import AdminHeader from "@/app/components/AdminHeader"
 import { createClient } from "@/lib/supabase/client"
 
@@ -23,7 +24,9 @@ type FilterType = "all" | "pending" | "approved" | "rejected"
 
 export default function UpgradesPage() {
   const supabase = createClient()
+  const router = useRouter()
 
+  const [checkingAdmin, setCheckingAdmin] = useState(true)
   const [requests, setRequests] = useState<UpgradeRequest[]>([])
   const [selectedRequest, setSelectedRequest] = useState<UpgradeRequest | null>(null)
   const [search, setSearch] = useState("")
@@ -46,13 +49,24 @@ export default function UpgradesPage() {
   const [savingReplyEdit, setSavingReplyEdit] = useState(false)
 
   useEffect(() => {
-    loadRequests(true)
+    let interval: NodeJS.Timeout | null = null
 
-    const interval = setInterval(() => {
-      loadRequests(false)
-    }, 5000)
+    async function init() {
+      const ok = await checkAdmin()
+      if (!ok) return
 
-    return () => clearInterval(interval)
+      await loadRequests(true)
+
+      interval = setInterval(() => {
+        loadRequests(false)
+      }, 5000)
+    }
+
+    init()
+
+    return () => {
+      if (interval) clearInterval(interval)
+    }
   }, [])
 
   useEffect(() => {
@@ -73,6 +87,41 @@ export default function UpgradesPage() {
     setIsEditingRequest(false)
     setIsEditingReply(false)
   }, [selectedRequest])
+
+  async function checkAdmin() {
+    try {
+      setCheckingAdmin(true)
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        router.replace("/admin/login")
+        return false
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+
+      if (profileError || profile?.role !== "admin") {
+        router.replace("/admin/login")
+        return false
+      }
+
+      return true
+    } catch (error) {
+      console.error("Admin upgrades auth check failed:", error)
+      router.replace("/admin/login")
+      return false
+    } finally {
+      setCheckingAdmin(false)
+    }
+  }
 
   async function loadRequests(showLoader = false) {
     if (showLoader) setLoading(true)
@@ -298,6 +347,17 @@ export default function UpgradesPage() {
       rejected: requests.filter((req) => getStatusLabel(req) === "rejected").length,
     }
   }, [requests])
+
+  if (checkingAdmin) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-[#eef4ff] via-[#f8fbff] to-white px-4">
+        <div className="rounded-[24px] border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
+          <p className="text-lg font-bold text-slate-800">Checking admin access...</p>
+          <p className="mt-2 text-sm text-slate-500">Please wait.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#eef4ff] via-[#f8fbff] to-white px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
