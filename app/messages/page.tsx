@@ -205,7 +205,7 @@ export default function MessagesPage() {
       setError("")
       setSuccess("")
 
-      let activeConversationId = conversation?.id ?? null
+      let activeConversationId: string | null = conversation?.id ?? null
       let attachmentUrl: string | null = null
 
       if (attachment) {
@@ -233,6 +233,10 @@ export default function MessagesPage() {
         }
 
         activeConversationId = newConversation.id
+      }
+
+      if (!activeConversationId) {
+        throw new Error("Conversation ID is missing.")
       }
 
       const { error: messageError } = await supabase
@@ -509,7 +513,7 @@ export default function MessagesPage() {
                       value={subject}
                       onChange={(e) => setSubject(e.target.value)}
                       placeholder="What is this conversation about?"
-                      className="h-13 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
                     />
                   </div>
                 )}
