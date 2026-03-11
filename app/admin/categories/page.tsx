@@ -8,8 +8,19 @@ import { createClient } from "@/lib/supabase/client"
 type Category = {
   id: string
   name: string
+  slug: string
   description: string | null
   created_at: string
+}
+
+function makeSlug(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
 }
 
 export default function CategoriesPage() {
@@ -21,6 +32,8 @@ export default function CategoriesPage() {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
 
   useEffect(() => {
     checkAdminAndLoad()
@@ -61,46 +74,104 @@ export default function CategoriesPage() {
   }
 
   async function loadCategories() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("categories")
       .select("*")
       .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("Failed to load categories:", error)
+      setMessage(error.message)
+      return
+    }
 
     setCategories((data as Category[]) || [])
   }
 
   async function saveCategory() {
-    if (!name.trim()) return
-
-    if (editingId) {
-      await supabase
-        .from("categories")
-        .update({
-          name: name.trim(),
-          description: description.trim() || null,
-        })
-        .eq("id", editingId)
-    } else {
-      await supabase.from("categories").insert({
-        name: name.trim(),
-        description: description.trim() || null,
-      })
+    if (!name.trim()) {
+      setMessage("Category name is required.")
+      return
     }
 
-    clearForm()
-    loadCategories()
+    try {
+      setSaving(true)
+      setMessage(null)
+
+      const trimmedName = name.trim()
+      const trimmedDescription = description.trim() || null
+      const slug = makeSlug(trimmedName)
+
+      if (!slug) {
+        setMessage("Please enter a valid category name.")
+        return
+      }
+
+      if (editingId) {
+        const { error } = await supabase
+          .from("categories")
+          .update({
+            name: trimmedName,
+            slug,
+            description: trimmedDescription,
+          })
+          .eq("id", editingId)
+
+        if (error) {
+          console.error("Update category failed:", error)
+          setMessage(error.message)
+          return
+        }
+
+        setMessage("Category updated successfully.")
+      } else {
+        const { error } = await supabase.from("categories").insert({
+          name: trimmedName,
+          slug,
+          description: trimmedDescription,
+        })
+
+        if (error) {
+          console.error("Create category failed:", error)
+          setMessage(error.message)
+          return
+        }
+
+        setMessage("Category created successfully.")
+      }
+
+      clearForm()
+      await loadCategories()
+    } catch (error) {
+      console.error("Save category failed:", error)
+      setMessage("Something went wrong while saving the category.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   function editCategory(cat: Category) {
     setName(cat.name)
     setDescription(cat.description || "")
     setEditingId(cat.id)
+    setMessage(null)
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
   async function deleteCategory(id: string) {
-    await supabase.from("categories").delete().eq("id", id)
-    loadCategories()
+    const confirmed = window.confirm("Delete this category?")
+    if (!confirmed) return
+
+    const { error } = await supabase.from("categories").delete().eq("id", id)
+
+    if (error) {
+      console.error("Delete category failed:", error)
+      setMessage(error.message)
+      return
+    }
+
+    setMessage("Category deleted successfully.")
+    await loadCategories()
   }
 
   function clearForm() {
@@ -176,6 +247,23 @@ export default function CategoriesPage() {
             Category Manager
           </h2>
 
+          {message ? (
+            <div
+              style={{
+                marginBottom: "16px",
+                padding: "12px 14px",
+                borderRadius: "12px",
+                background: "#eff6ff",
+                border: "1px solid #bfdbfe",
+                color: "#1d4ed8",
+                fontSize: "14px",
+                fontWeight: 600,
+              }}
+            >
+              {message}
+            </div>
+          ) : null}
+
           <input
             placeholder="Category name"
             value={name}
@@ -210,17 +298,18 @@ export default function CategoriesPage() {
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button
               onClick={saveCategory}
+              disabled={saving}
               style={{
                 padding: "12px 18px",
                 borderRadius: "12px",
-                background: "#2563eb",
+                background: saving ? "#93c5fd" : "#2563eb",
                 color: "white",
                 border: "none",
                 fontWeight: 700,
-                cursor: "pointer",
+                cursor: saving ? "not-allowed" : "pointer",
               }}
             >
-              {editingId ? "Update Category" : "Create Category"}
+              {saving ? "Saving..." : editingId ? "Update Category" : "Create Category"}
             </button>
 
             <button
@@ -258,6 +347,18 @@ export default function CategoriesPage() {
               }}
             >
               <h3 style={{ fontSize: "24px", margin: "0 0 8px", color: "#0f172a" }}>{cat.name}</h3>
+
+              <p
+                style={{
+                  color: "#2563eb",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  margin: "0 0 10px",
+                  wordBreak: "break-word",
+                }}
+              >
+                /{cat.slug}
+              </p>
 
               <p style={{ color: "#64748b", fontSize: "15px", lineHeight: 1.7, minHeight: "54px" }}>
                 {cat.description || "No description"}
