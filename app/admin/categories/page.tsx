@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
 import AdminHeader from "@/app/components/AdminHeader"
 import { createClient } from "@/lib/supabase/client"
@@ -10,6 +10,7 @@ type Category = {
   name: string
   slug: string
   description: string | null
+  thumbnail_url: string | null
   created_at: string
 }
 
@@ -31,8 +32,10 @@ export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
+  const [thumbnailUrl, setThumbnailUrl] = useState("")
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
 
   useEffect(() => {
@@ -80,12 +83,63 @@ export default function CategoriesPage() {
       .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("Failed to load categories:", error)
-      setMessage(error.message)
+      console.error(error)
+      setMessage("Failed to load categories.")
       return
     }
 
     setCategories((data as Category[]) || [])
+  }
+
+  async function handleThumbnailUpload(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      setUploadingThumbnail(true)
+      setMessage(null)
+
+      if (!file.type.startsWith("image/")) {
+        setMessage("Please upload an image file only.")
+        return
+      }
+
+      const fileExt = file.name.split(".").pop() || "jpg"
+      const safeName = file.name
+        .replace(/\.[^/.]+$/, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+
+      const fileName = `${Date.now()}-${safeName}.${fileExt}`
+      const filePath = `categories/${fileName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from("category-thumbnails")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+        })
+
+      if (uploadError) {
+        console.error(uploadError)
+        setMessage("Thumbnail upload failed.")
+        return
+      }
+
+      const { data } = supabase.storage
+        .from("category-thumbnails")
+        .getPublicUrl(filePath)
+
+      setThumbnailUrl(data.publicUrl)
+      setMessage("Thumbnail uploaded successfully.")
+    } catch (error) {
+      console.error(error)
+      setMessage("Something went wrong while uploading thumbnail.")
+    } finally {
+      setUploadingThumbnail(false)
+      e.target.value = ""
+    }
   }
 
   async function saveCategory() {
@@ -100,12 +154,8 @@ export default function CategoriesPage() {
 
       const trimmedName = name.trim()
       const trimmedDescription = description.trim() || null
+      const trimmedThumbnail = thumbnailUrl.trim() || null
       const slug = makeSlug(trimmedName)
-
-      if (!slug) {
-        setMessage("Please enter a valid category name.")
-        return
-      }
 
       if (editingId) {
         const { error } = await supabase
@@ -114,12 +164,13 @@ export default function CategoriesPage() {
             name: trimmedName,
             slug,
             description: trimmedDescription,
+            thumbnail_url: trimmedThumbnail,
           })
           .eq("id", editingId)
 
         if (error) {
-          console.error("Update category failed:", error)
-          setMessage(error.message)
+          console.error(error)
+          setMessage("Failed to update category.")
           return
         }
 
@@ -129,11 +180,12 @@ export default function CategoriesPage() {
           name: trimmedName,
           slug,
           description: trimmedDescription,
+          thumbnail_url: trimmedThumbnail,
         })
 
         if (error) {
-          console.error("Create category failed:", error)
-          setMessage(error.message)
+          console.error(error)
+          setMessage("Failed to create category.")
           return
         }
 
@@ -143,8 +195,8 @@ export default function CategoriesPage() {
       clearForm()
       await loadCategories()
     } catch (error) {
-      console.error("Save category failed:", error)
-      setMessage("Something went wrong while saving the category.")
+      console.error(error)
+      setMessage("Something went wrong while saving.")
     } finally {
       setSaving(false)
     }
@@ -153,6 +205,7 @@ export default function CategoriesPage() {
   function editCategory(cat: Category) {
     setName(cat.name)
     setDescription(cat.description || "")
+    setThumbnailUrl(cat.thumbnail_url || "")
     setEditingId(cat.id)
     setMessage(null)
     window.scrollTo({ top: 0, behavior: "smooth" })
@@ -165,8 +218,8 @@ export default function CategoriesPage() {
     const { error } = await supabase.from("categories").delete().eq("id", id)
 
     if (error) {
-      console.error("Delete category failed:", error)
-      setMessage(error.message)
+      console.error(error)
+      setMessage("Failed to delete category.")
       return
     }
 
@@ -177,7 +230,9 @@ export default function CategoriesPage() {
   function clearForm() {
     setName("")
     setDescription("")
+    setThumbnailUrl("")
     setEditingId(null)
+    setMessage(null)
   }
 
   if (checkingAdmin) {
@@ -185,31 +240,14 @@ export default function CategoriesPage() {
       <div
         style={{
           minHeight: "100vh",
-          background: "linear-gradient(180deg, #eef4ff 0%, #f8fbff 45%, #ffffff 100%)",
+          background: "linear-gradient(180deg,#eef4ff 0%,#f8fbff 45%,#ffffff 100%)",
           fontFamily: "Arial, Helvetica, sans-serif",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: "24px",
         }}
       >
-        <div
-          style={{
-            background: "white",
-            border: "1px solid #e2e8f0",
-            borderRadius: "24px",
-            padding: "28px 32px",
-            boxShadow: "0 12px 30px rgba(0,0,0,0.05)",
-            textAlign: "center",
-          }}
-        >
-          <p style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a", margin: 0 }}>
-            Checking admin access...
-          </p>
-          <p style={{ fontSize: "14px", color: "#64748b", margin: "8px 0 0" }}>
-            Please wait.
-          </p>
-        </div>
+        Checking admin access...
       </div>
     )
   }
@@ -218,18 +256,19 @@ export default function CategoriesPage() {
     <div
       style={{
         minHeight: "100vh",
-        background: "linear-gradient(180deg, #eef4ff 0%, #f8fbff 45%, #ffffff 100%)",
+        background: "linear-gradient(180deg,#eef4ff 0%,#f8fbff 45%,#ffffff 100%)",
         fontFamily: "Arial, Helvetica, sans-serif",
-        padding: "40px 24px",
+        padding: "28px 18px 40px",
       }}
     >
-      <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
+      <div style={{ maxWidth: "1700px", margin: "0 auto" }}>
         <AdminHeader />
 
-        <h1 style={{ fontSize: "42px", fontWeight: 800, margin: "0 0 10px", color: "#0f172a" }}>
+        <h1 style={{ fontSize: "42px", fontWeight: 800, margin: "0 0 10px" }}>
           Categories
         </h1>
-        <p style={{ color: "#64748b", margin: "0 0 24px", fontSize: "17px" }}>
+
+        <p style={{ color: "#64748b", margin: "0 0 20px", fontSize: "17px" }}>
           Create, update, and organize your categories.
         </p>
 
@@ -238,21 +277,21 @@ export default function CategoriesPage() {
             background: "white",
             border: "1px solid #e2e8f0",
             borderRadius: "24px",
-            padding: "28px",
-            boxShadow: "0 12px 30px rgba(0,0,0,0.05)",
-            marginBottom: "28px",
+            padding: "22px",
+            marginBottom: "24px",
+            boxShadow: "0 8px 24px rgba(15,23,42,0.05)",
           }}
         >
-          <h2 style={{ fontSize: "28px", fontWeight: 800, margin: "0 0 18px", color: "#0f172a" }}>
+          <h2 style={{ fontSize: "24px", fontWeight: 800, margin: "0 0 16px" }}>
             Category Manager
           </h2>
 
-          {message ? (
+          {message && (
             <div
               style={{
-                marginBottom: "16px",
+                marginBottom: "14px",
                 padding: "12px 14px",
-                borderRadius: "12px",
+                borderRadius: "14px",
                 background: "#eff6ff",
                 border: "1px solid #bfdbfe",
                 color: "#1d4ed8",
@@ -262,77 +301,195 @@ export default function CategoriesPage() {
             >
               {message}
             </div>
-          ) : null}
+          )}
 
-          <input
-            placeholder="Category name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+          <div
             style={{
-              width: "100%",
-              padding: "14px",
-              borderRadius: "14px",
-              border: "1px solid #cbd5e1",
-              marginBottom: "14px",
-              fontSize: "16px",
-              boxSizing: "border-box",
+              display: "grid",
+              gridTemplateColumns: "1.3fr 1fr",
+              gap: "18px",
+              alignItems: "start",
             }}
-          />
+          >
+            <div>
+              <input
+                placeholder="Category name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "14px",
+                  borderRadius: "14px",
+                  border: "1px solid #cbd5e1",
+                  marginBottom: "12px",
+                  fontSize: "16px",
+                }}
+              />
 
-          <textarea
-            placeholder="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            style={{
-              width: "100%",
-              minHeight: "120px",
-              padding: "14px",
-              borderRadius: "14px",
-              border: "1px solid #cbd5e1",
-              marginBottom: "16px",
-              fontSize: "16px",
-              boxSizing: "border-box",
-            }}
-          />
+              <textarea
+                placeholder="Description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                style={{
+                  width: "100%",
+                  minHeight: "110px",
+                  padding: "14px",
+                  borderRadius: "14px",
+                  border: "1px solid #cbd5e1",
+                  marginBottom: "12px",
+                  fontSize: "16px",
+                  resize: "vertical",
+                }}
+              />
 
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button
-              onClick={saveCategory}
-              disabled={saving}
+              <div
+                style={{
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "18px",
+                  padding: "14px",
+                  marginBottom: "14px",
+                  background: "#f8fafc",
+                }}
+              >
+                <p
+                  style={{
+                    margin: "0 0 10px 0",
+                    fontSize: "14px",
+                    fontWeight: 700,
+                    color: "#334155",
+                  }}
+                >
+                  Upload Thumbnail
+                </p>
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleThumbnailUpload}
+                  disabled={uploadingThumbnail}
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    borderRadius: "14px",
+                    border: "1px solid #cbd5e1",
+                    background: "white",
+                    fontSize: "14px",
+                    marginBottom: "10px",
+                  }}
+                />
+
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: "13px",
+                    color: "#64748b",
+                  }}
+                >
+                  {uploadingThumbnail
+                    ? "Uploading thumbnail..."
+                    : thumbnailUrl
+                      ? "Thumbnail uploaded and ready to save."
+                      : "Choose an image file for this category."}
+                </p>
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button
+                  onClick={saveCategory}
+                  disabled={saving || uploadingThumbnail}
+                  style={{
+                    padding: "12px 18px",
+                    borderRadius: "12px",
+                    background: "#2563eb",
+                    color: "white",
+                    border: "none",
+                    fontWeight: 700,
+                    cursor: saving || uploadingThumbnail ? "not-allowed" : "pointer",
+                    opacity: saving || uploadingThumbnail ? 0.7 : 1,
+                  }}
+                >
+                  {saving ? "Saving..." : editingId ? "Update Category" : "Create Category"}
+                </button>
+
+                <button
+                  onClick={clearForm}
+                  disabled={saving || uploadingThumbnail}
+                  style={{
+                    padding: "12px 18px",
+                    borderRadius: "12px",
+                    border: "1px solid #cbd5e1",
+                    background: "white",
+                    cursor: saving || uploadingThumbnail ? "not-allowed" : "pointer",
+                    fontWeight: 700,
+                    opacity: saving || uploadingThumbnail ? 0.7 : 1,
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <div
               style={{
-                padding: "12px 18px",
-                borderRadius: "12px",
-                background: saving ? "#93c5fd" : "#2563eb",
-                color: "white",
-                border: "none",
-                fontWeight: 700,
-                cursor: saving ? "not-allowed" : "pointer",
+                border: "1px solid #e2e8f0",
+                borderRadius: "18px",
+                padding: "14px",
+                background: "#f8fafc",
+                minHeight: "100%",
               }}
             >
-              {saving ? "Saving..." : editingId ? "Update Category" : "Create Category"}
-            </button>
+              <p
+                style={{
+                  margin: "0 0 10px 0",
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  color: "#334155",
+                }}
+              >
+                Thumbnail Preview
+              </p>
 
-            <button
-              onClick={clearForm}
-              style={{
-                padding: "12px 18px",
-                borderRadius: "12px",
-                border: "1px solid #cbd5e1",
-                background: "white",
-                cursor: "pointer",
-                fontWeight: 700,
-              }}
-            >
-              Clear
-            </button>
+              {thumbnailUrl.trim() ? (
+                <img
+                  src={thumbnailUrl}
+                  alt="Thumbnail preview"
+                  style={{
+                    width: "100%",
+                    height: "240px",
+                    objectFit: "cover",
+                    borderRadius: "16px",
+                    border: "1px solid #cbd5e1",
+                    display: "block",
+                    background: "#ffffff",
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: "100%",
+                    height: "240px",
+                    borderRadius: "16px",
+                    border: "1px dashed #cbd5e1",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#64748b",
+                    background: "#ffffff",
+                  }}
+                >
+                  No thumbnail preview
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))",
-            gap: "20px",
+            gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+            gap: "14px",
+            alignItems: "stretch",
           }}
         >
           {categories.map((cat) => (
@@ -341,39 +498,87 @@ export default function CategoriesPage() {
               style={{
                 background: "white",
                 border: "1px solid #e2e8f0",
-                borderRadius: "20px",
-                padding: "22px",
-                boxShadow: "0 10px 20px rgba(0,0,0,0.05)",
+                borderRadius: "18px",
+                padding: "12px",
+                boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
+                display: "flex",
+                flexDirection: "column",
+                minHeight: "250px",
               }}
             >
-              <h3 style={{ fontSize: "24px", margin: "0 0 8px", color: "#0f172a" }}>{cat.name}</h3>
+              <div
+                style={{
+                  width: "100%",
+                  height: "110px",
+                  borderRadius: "14px",
+                  overflow: "hidden",
+                  background: "#f1f5f9",
+                  border: "1px solid #e2e8f0",
+                  marginBottom: "10px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                {cat.thumbnail_url ? (
+                  <img
+                    src={cat.thumbnail_url}
+                    alt={cat.name}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                    }}
+                  />
+                ) : (
+                  <span style={{ fontSize: "30px" }}>📁</span>
+                )}
+              </div>
+
+              <h3
+                style={{
+                  fontSize: "16px",
+                  margin: "0 0 6px",
+                  fontWeight: 800,
+                  lineHeight: 1.3,
+                  color: "#0f172a",
+                }}
+              >
+                {cat.name}
+              </h3>
 
               <p
                 style={{
-                  color: "#2563eb",
-                  fontSize: "13px",
-                  fontWeight: 700,
-                  margin: "0 0 10px",
-                  wordBreak: "break-word",
+                  color: "#64748b",
+                  fontSize: "12px",
+                  lineHeight: 1.45,
+                  margin: 0,
+                  flexGrow: 1,
+                  overflow: "hidden",
                 }}
               >
-                /{cat.slug}
-              </p>
-
-              <p style={{ color: "#64748b", fontSize: "15px", lineHeight: 1.7, minHeight: "54px" }}>
                 {cat.description || "No description"}
               </p>
 
-              <div style={{ marginTop: "16px", display: "flex", gap: "10px" }}>
+              <div
+                style={{
+                  marginTop: "12px",
+                  display: "flex",
+                  gap: "8px",
+                }}
+              >
                 <button
                   onClick={() => editCategory(cat)}
                   style={{
-                    padding: "10px 14px",
+                    flex: 1,
+                    padding: "8px 10px",
                     borderRadius: "10px",
                     border: "1px solid #cbd5e1",
                     background: "white",
                     cursor: "pointer",
                     fontWeight: 700,
+                    fontSize: "12px",
                   }}
                 >
                   Edit
@@ -382,13 +587,15 @@ export default function CategoriesPage() {
                 <button
                   onClick={() => deleteCategory(cat.id)}
                   style={{
-                    padding: "10px 14px",
+                    flex: 1,
+                    padding: "8px 10px",
                     borderRadius: "10px",
                     border: "none",
                     background: "#ef4444",
                     color: "white",
                     cursor: "pointer",
                     fontWeight: 700,
+                    fontSize: "12px",
                   }}
                 >
                   Delete

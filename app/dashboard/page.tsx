@@ -275,23 +275,23 @@ export default function DashboardPage() {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, index) => (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {Array.from({ length: 10 }).map((_, index) => (
               <div
                 key={index}
-                className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm sm:rounded-[30px]"
+                className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm"
               >
-                <div className="aspect-[4/3] animate-pulse bg-slate-200" />
-                <div className="space-y-3 p-4 sm:p-5">
-                  <div className="h-5 w-2/3 animate-pulse rounded bg-slate-200" />
-                  <div className="h-4 w-full animate-pulse rounded bg-slate-200" />
-                  <div className="h-11 w-full animate-pulse rounded-2xl bg-slate-200" />
+                <div className="aspect-[4/2.6] animate-pulse bg-slate-200" />
+                <div className="space-y-2 p-3">
+                  <div className="h-4 w-2/3 animate-pulse rounded bg-slate-200" />
+                  <div className="h-3 w-full animate-pulse rounded bg-slate-200" />
+                  <div className="h-10 w-full animate-pulse rounded-2xl bg-slate-200" />
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {categories.map((category) => {
               const previewImage = getCategoryImage(category)
               const icon = getCategoryIcon(category.name)
@@ -300,39 +300,39 @@ export default function DashboardPage() {
               return (
                 <div
                   key={category.id}
-                  className="group overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg sm:rounded-[30px]"
+                  className="group overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
                 >
-                  <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
+                  <div className="relative aspect-[4/2.6] overflow-hidden bg-slate-100">
                     {previewImage ? (
                       <img
                         src={previewImage}
                         alt={category.name}
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                       />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-5xl sm:text-6xl">
+                      <div className="flex h-full w-full items-center justify-center text-4xl">
                         {icon}
                       </div>
                     )}
 
-                    <div className="absolute left-3 top-3 rounded-full bg-white px-3 py-1 text-xs font-semibold shadow sm:left-4 sm:top-4">
+                    <div className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow">
                       {formatNumber(fileCount)} files
                     </div>
                   </div>
 
-                  <div className="p-4 sm:p-5">
-                    <h3 className="text-lg font-bold text-slate-900 sm:text-xl">
+                  <div className="p-3">
+                    <h3 className="line-clamp-1 text-base font-bold text-slate-900">
                       {category.name}
                     </h3>
 
-                    <p className="mt-2 min-h-[48px] text-sm text-slate-600">
+                    <p className="mt-1 min-h-[40px] text-xs leading-5 text-slate-600">
                       {category.description ||
                         "Open this category to browse downloadable files."}
                     </p>
 
                     <Link
                       href={`/categories/${category.id}`}
-                      className="mt-5 inline-flex w-full items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+                      className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
                     >
                       Open Category
                     </Link>

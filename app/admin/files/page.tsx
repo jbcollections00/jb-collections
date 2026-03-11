@@ -474,111 +474,123 @@ export default function FilesPage() {
           </div>
         )}
 
-        <div className="mb-5 rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[18px] sm:p-5">
+        <div className="mb-5 rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <h2 className="mb-4 text-xl font-extrabold text-slate-900 sm:text-2xl">
             {editingId ? "Edit File" : "Upload File"}
           </h2>
 
           <div className="grid gap-4">
-            <input
-              placeholder="File title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              disabled={saving}
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
-            />
-
-            <textarea
-              placeholder="Description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={saving}
-              className="min-h-[100px] w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
-            />
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <label
-                htmlFor="file-upload-input"
-                className="mb-2 block text-sm font-bold text-slate-700"
-              >
-                {editingId ? "Replace file (optional)" : "Choose file"}
-              </label>
-
+            <div className="grid gap-4 md:grid-cols-2">
               <input
-                id="file-upload-input"
-                type="file"
+                placeholder="File title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
                 disabled={saving}
-                onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
-                className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
               />
 
-              {selectedFile && (
-                <div className="mt-3">
-                  <p className="text-sm font-bold text-blue-600">{selectedFile.name}</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Size: {formatFileSize(selectedFile.size)}
-                  </p>
-                </div>
-              )}
+              <select
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                disabled={saving}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+              >
+                <option value="">Select category</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <label
-                htmlFor="thumbnail-upload-input"
-                className="mb-2 block text-sm font-bold text-slate-700"
-              >
-                {editingId ? "Replace thumbnail (optional)" : "Choose thumbnail image"}
-              </label>
-
-              <input
-                id="thumbnail-upload-input"
-                type="file"
-                accept="image/*"
+            <div className="grid gap-4 md:grid-cols-[1fr_220px]">
+              <textarea
+                placeholder="Description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
                 disabled={saving}
-                onChange={(e) => handleThumbnailChange(e.target.files?.[0] || null)}
-                className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white"
+                className="min-h-[86px] w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
               />
 
-              {selectedThumbnail && (
-                <img
-                  src={URL.createObjectURL(selectedThumbnail)}
-                  alt="Thumbnail preview"
-                  className="mt-3 h-24 w-24 rounded-xl border border-slate-300 object-cover"
+              <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900 md:min-h-[86px]">
+                <input
+                  type="checkbox"
+                  checked={isPremium}
+                  onChange={(e) => setIsPremium(e.target.checked)}
+                  disabled={saving}
                 />
-              )}
-
-              {!selectedThumbnail && existingThumbnailUrl && (
-                <img
-                  src={existingThumbnailUrl}
-                  alt="Current thumbnail"
-                  className="mt-3 h-24 w-24 rounded-xl border border-slate-300 object-cover"
-                />
-              )}
+                Premium file
+              </label>
             </div>
 
-            <select
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              disabled={saving}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
-            >
-              <option value="">Select category</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <label
+                  htmlFor="file-upload-input"
+                  className="mb-2 block text-sm font-bold text-slate-700"
+                >
+                  {editingId ? "Replace file (optional)" : "Choose file"}
+                </label>
 
-            <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900">
-              <input
-                type="checkbox"
-                checked={isPremium}
-                onChange={(e) => setIsPremium(e.target.checked)}
-                disabled={saving}
-              />
-              Premium file
-            </label>
+                <input
+                  id="file-upload-input"
+                  type="file"
+                  disabled={saving}
+                  onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
+                  className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white"
+                />
+
+                {selectedFile && (
+                  <div className="mt-3">
+                    <p className="text-sm font-bold text-blue-600">{selectedFile.name}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Size: {formatFileSize(selectedFile.size)}
+                    </p>
+                  </div>
+                )}
+
+                {!selectedFile && existingFileUrl && editingId && (
+                  <div className="mt-3">
+                    <p className="text-xs font-bold text-slate-500">Current file attached</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <label
+                  htmlFor="thumbnail-upload-input"
+                  className="mb-2 block text-sm font-bold text-slate-700"
+                >
+                  {editingId ? "Replace thumbnail (optional)" : "Choose thumbnail image"}
+                </label>
+
+                <input
+                  id="thumbnail-upload-input"
+                  type="file"
+                  accept="image/*"
+                  disabled={saving}
+                  onChange={(e) => handleThumbnailChange(e.target.files?.[0] || null)}
+                  className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white"
+                />
+
+                {selectedThumbnail && (
+                  <img
+                    src={URL.createObjectURL(selectedThumbnail)}
+                    alt="Thumbnail preview"
+                    className="mt-3 h-24 w-24 rounded-xl border border-slate-300 object-cover"
+                  />
+                )}
+
+                {!selectedThumbnail && existingThumbnailUrl && (
+                  <img
+                    src={existingThumbnailUrl}
+                    alt="Current thumbnail"
+                    className="mt-3 h-24 w-24 rounded-xl border border-slate-300 object-cover"
+                  />
+                )}
+              </div>
+            </div>
 
             <div className="flex flex-col gap-3 sm:flex-row">
               <button
