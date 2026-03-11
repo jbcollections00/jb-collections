@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
+import { GetObjectCommand } from "@aws-sdk/client-s3"
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
+import { r2 } from "@/lib/r2"
+
+export const runtime = "nodejs"
 
 export async function GET(req: Request) {
   try {
@@ -38,7 +43,7 @@ export async function GET(req: Request) {
 
     const { data: file, error: fileError } = await supabase
       .from("files")
-      .select("id, file_url, is_premium, downloads_count")
+      .select("id, title, file_url, storage_key, is_premium, downloads_count")
       .eq("id", fileId)
       .single()
 
@@ -53,11 +58,13 @@ export async function GET(req: Request) {
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("is_premium")
+        .select("is_premium, role")
         .eq("id", user.id)
         .single()
 
-      if (profileError || !profile?.is_premium) {
+      const isAllowed = Boolean(profile?.is_premium) || profile?.role === "admin"
+
+      if (profileError || !isAllowed) {
         return NextResponse.redirect(new URL("/upgrade", req.url))
       }
     }
@@ -68,7 +75,25 @@ export async function GET(req: Request) {
       .update({ downloads_count: currentCount + 1 })
       .eq("id", file.id)
 
-    return NextResponse.redirect(file.file_url)
+    if (file.storage_key) {
+      const signedUrl = await getSignedUrl(
+        r2,
+        new GetObjectCommand({
+          Bucket: process.env.R2_BUCKET!,
+          Key: file.storage_key,
+          ResponseContentDisposition: `attachment; filename="${(file.title || "download").replace(/"/g, "")}"`,
+        }),
+        { expiresIn: 60 * 5 }
+      )
+
+      return NextResponse.redirect(signedUrl)
+    }
+
+    if (file.file_url) {
+      return NextResponse.redirect(file.file_url)
+    }
+
+    return NextResponse.json({ error: "Download URL not available." }, { status: 404 })
   } catch (error) {
     return NextResponse.json(
       {

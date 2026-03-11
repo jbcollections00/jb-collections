@@ -22,6 +22,7 @@ type FileItem = {
   title?: string | null
   description: string | null
   file_url: string
+  storage_key?: string | null
   category_id: string
   thumbnail_url?: string | null
   cover_url?: string | null
