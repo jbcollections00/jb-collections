@@ -65,11 +65,12 @@ export async function GET(req: Request) {
       const isAllowed = Boolean(profile?.is_premium) || profile?.role === "admin"
 
       if (profileError || !isAllowed) {
-        return NextResponse.redirect(new URL("/upgrade", req.url))
+        return NextResponse.redirect(new URL("/profile", req.url))
       }
     }
 
     const currentCount = file.downloads_count ?? 0
+
     await supabase
       .from("files")
       .update({ downloads_count: currentCount + 1 })
