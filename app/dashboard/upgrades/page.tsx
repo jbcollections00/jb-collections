@@ -25,7 +25,7 @@ export default function PremiumMembershipPage() {
       await supabase.auth.signOut()
       window.location.href = "/login"
     } catch (error) {
-      console.error(error)
+      console.error("Logout failed:", error)
       setLoggingOut(false)
     }
   }
@@ -38,9 +38,10 @@ export default function PremiumMembershipPage() {
 
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser()
 
-      if (!user) {
+      if (userError || !user) {
         alert("You must be logged in.")
         return
       }
@@ -48,20 +49,31 @@ export default function PremiumMembershipPage() {
       let receiptUrl: string | null = null
 
       if (receipt) {
-        const ext = receipt.name.split(".").pop() || "jpg"
-        const path = `${user.id}/${Date.now()}-${receipt.name}`
+        const ext = receipt.name.split(".").pop()?.toLowerCase() || "jpg"
+        const safeBaseName = receipt.name
+          .replace(/\.[^/.]+$/, "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+
+        const path = `${user.id}/${Date.now()}-${safeBaseName}.${ext}`
 
         const { error: uploadError } = await supabase.storage
           .from("upgrade-receipts")
-          .upload(path, receipt)
+          .upload(path, receipt, {
+            cacheControl: "3600",
+            upsert: false,
+          })
 
-        if (!uploadError) {
-          const { data } = supabase.storage
-            .from("upgrade-receipts")
-            .getPublicUrl(path)
-
-          receiptUrl = data.publicUrl
+        if (uploadError) {
+          throw uploadError
         }
+
+        const { data } = supabase.storage
+          .from("upgrade-receipts")
+          .getPublicUrl(path)
+
+        receiptUrl = data.publicUrl
       }
 
       const { error } = await supabase.from("upgrade_requests").insert({
@@ -70,7 +82,8 @@ export default function PremiumMembershipPage() {
         name:
           user.user_metadata?.full_name ||
           user.user_metadata?.name ||
-          user.email,
+          user.email ||
+          "User",
         plan: "premium",
         subject: "Premium Upgrade Request",
         body: message,
@@ -82,15 +95,13 @@ export default function PremiumMembershipPage() {
 
       setReceipt(null)
 
-      const input = document.getElementById(
-        "receipt-upload"
-      ) as HTMLInputElement | null
+      const input = document.getElementById("receipt-upload") as HTMLInputElement | null
       if (input) input.value = ""
 
       alert("Upgrade request sent to admin.")
     } catch (err) {
-      console.error(err)
-      alert("Failed to send request.")
+      console.error("Upgrade request failed:", err)
+      alert(err instanceof Error ? err.message : "Failed to send request.")
     } finally {
       setSubmitting(false)
     }
@@ -99,54 +110,102 @@ export default function PremiumMembershipPage() {
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-6 md:px-6">
       <div className="mx-auto max-w-6xl space-y-6">
-
         <section className="rounded-2xl bg-white p-6 shadow">
-          <h1 className="text-3xl font-bold mb-4">Premium Membership</h1>
+          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="mb-2 text-3xl font-bold text-slate-900">Premium Membership</h1>
+              <p className="text-slate-600">
+                Send your payment proof and request premium access.
+              </p>
+            </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/dashboard"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+              >
+                Dashboard
+              </Link>
 
-            <div className="border rounded-xl p-5">
-              <h2 className="font-bold text-xl mb-3">GCash Payment</h2>
+              <Link
+                href="/profile"
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+              >
+                Profile
+              </Link>
 
-              <p><b>Name:</b> {GCASH_NAME}</p>
-              <p><b>Number:</b> {GCASH_NUMBER}</p>
-              <p><b>Price:</b> {PREMIUM_PRICE}</p>
+              <Link
+                href="/dashboard/inbox"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+              >
+                Inbox
+              </Link>
+
+              <Link
+                href="/contact"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+              >
+                Message Admin
+              </Link>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {loggingOut ? "Logging out..." : "Logout"}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="rounded-xl border p-5">
+              <h2 className="mb-3 text-xl font-bold">GCash Payment</h2>
+
+              <p className="mb-2">
+                <b>Name:</b> {GCASH_NAME}
+              </p>
+              <p className="mb-2">
+                <b>Number:</b> {GCASH_NUMBER}
+              </p>
+              <p className="mb-2">
+                <b>Price:</b> {PREMIUM_PRICE}
+              </p>
+
+              <p className="mb-4 text-sm text-slate-500">
+                Use your email as reference when sending payment.
+              </p>
 
               <img
                 src={GCASH_QR}
-                className="mt-4 w-44 border rounded"
+                alt="GCash QR"
+                className="mt-4 w-44 rounded border"
               />
             </div>
 
-            <form onSubmit={handleSubmit} className="border rounded-xl p-5">
-
-              <label className="font-semibold block mb-2">
-                Message to Admin
-              </label>
+            <form onSubmit={handleSubmit} className="rounded-xl border p-5">
+              <label className="mb-2 block font-semibold">Message to Admin</label>
 
               <textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 rows={4}
-                className="w-full border rounded-lg p-3 mb-4"
+                className="mb-4 w-full rounded-lg border p-3"
               />
 
-              <label className="font-semibold block mb-2">
-                Upload Receipt
-              </label>
+              <label className="mb-2 block font-semibold">Upload Receipt</label>
 
               <input
                 id="receipt-upload"
                 type="file"
                 accept="image/*,.pdf"
-                onChange={(e) =>
-                  setReceipt(e.target.files?.[0] || null)
-                }
-                className="mb-4"
+                onChange={(e) => setReceipt(e.target.files?.[0] || null)}
+                className="mb-4 block w-full text-sm"
               />
 
               {receipt && (
-                <div className="text-sm mb-3">
+                <div className="mb-4 rounded-lg border bg-slate-50 px-3 py-2 text-sm text-slate-700">
                   Selected: {receipt.name}
                 </div>
               )}
@@ -154,24 +213,13 @@ export default function PremiumMembershipPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="bg-blue-600 text-white px-5 py-2 rounded-lg"
+                className="rounded-lg bg-blue-600 px-5 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {submitting ? "Sending..." : "Send Request"}
               </button>
             </form>
-
-          </div>
-
-          <div className="mt-6">
-            <button
-              onClick={handleLogout}
-              className="bg-red-600 text-white px-4 py-2 rounded"
-            >
-              Logout
-            </button>
           </div>
         </section>
-
       </div>
     </div>
   )
