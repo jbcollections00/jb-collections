@@ -26,13 +26,17 @@ type Category = {
   name: string
 }
 
-type R2UploadResult = {
+type PresignResponse = {
   success?: boolean
-  key: string
-  url: string
-  originalName?: string
-  contentType?: string
-  size?: number
+  uploadUrl?: string
+  key?: string
+  url?: string
+  error?: string
+}
+
+type FinalizeResponse = {
+  success?: boolean
+  message?: string
   error?: string
 }
 
@@ -58,14 +62,17 @@ export default function FilesPage() {
   const [existingStorageKey, setExistingStorageKey] = useState<string | null>(null)
   const [existingThumbnailUrl, setExistingThumbnailUrl] = useState<string | null>(null)
   const [existingThumbnailStorageKey, setExistingThumbnailStorageKey] = useState<string | null>(null)
+  const [existingFileSize, setExistingFileSize] = useState<number | null>(null)
+  const [existingFileType, setExistingFileType] = useState<string | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [statusText, setStatusText] = useState("")
 
+  const [statusText, setStatusText] = useState("")
   const [errorMessage, setErrorMessage] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
+  const [uploadProgress, setUploadProgress] = useState<number>(0)
 
   useEffect(() => {
     checkAdminAndLoad()
@@ -128,6 +135,7 @@ export default function FilesPage() {
     setErrorMessage("")
     setSuccessMessage("")
     setStatusText("")
+    setUploadProgress(0)
   }
 
   function resetFileInputs() {
@@ -150,6 +158,8 @@ export default function FilesPage() {
     setExistingStorageKey(null)
     setExistingThumbnailUrl(null)
     setExistingThumbnailStorageKey(null)
+    setExistingFileSize(null)
+    setExistingFileType(null)
     clearMessages()
     resetFileInputs()
   }
@@ -161,6 +171,10 @@ export default function FilesPage() {
     return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
   }
 
+  function getFileType(name: string) {
+    return name.includes(".") ? name.split(".").pop()?.toUpperCase() || null : null
+  }
+
   function handleFileChange(file: File | null) {
     clearMessages()
 
@@ -169,11 +183,11 @@ export default function FilesPage() {
       return
     }
 
-    const maxSizeInBytes = 200 * 1024 * 1024
+    const maxSizeInBytes = 5 * 1024 * 1024 * 1024
     if (file.size > maxSizeInBytes) {
       setSelectedFile(null)
       resetFileInputs()
-      setErrorMessage("File is too large. Maximum allowed size is 200MB.")
+      setErrorMessage("File is too large. Maximum allowed size is 5GB.")
       return
     }
 
@@ -221,35 +235,108 @@ export default function FilesPage() {
     setExistingStorageKey(file.storage_key || null)
     setExistingThumbnailUrl(file.thumbnail_url || null)
     setExistingThumbnailStorageKey(file.thumbnail_storage_key || null)
+    setExistingFileSize(file.file_size || null)
+    setExistingFileType(file.file_type || null)
     resetFileInputs()
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  async function uploadThumbnailToR2(
-    file: File,
-    folder: "thumbnails"
-  ): Promise<{ url: string; key: string; size?: number; contentType?: string }> {
-    const formData = new FormData()
-    formData.append("file", file)
-    formData.append("folder", folder)
-
+  async function requestPresignedUpload(params: {
+    fileName: string
+    contentType: string
+    title?: string
+    categoryId?: string
+    folder?: string
+  }) {
     const response = await fetch("/api/admin/files/upload", {
       method: "POST",
-      body: formData,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: "presign",
+        ...params,
+      }),
     })
 
-    const result = (await response.json()) as R2UploadResult
+    const result = (await response.json()) as PresignResponse
 
-    if (!response.ok) {
-      throw new Error(result.error || "Thumbnail upload failed.")
+    if (!response.ok || !result.uploadUrl || !result.key || !result.url) {
+      throw new Error(result.error || "Failed to get upload URL.")
     }
 
     return {
-      url: result.url,
+      uploadUrl: result.uploadUrl,
       key: result.key,
-      size: result.size,
-      contentType: result.contentType,
+      url: result.url,
     }
+  }
+
+  function uploadFileDirect(
+    file: File,
+    uploadUrl: string,
+    onProgress?: (percent: number) => void
+  ) {
+    return new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open("PUT", uploadUrl)
+      xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream")
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) {
+          const percent = Math.round((event.loaded / event.total) * 100)
+          onProgress(percent)
+        }
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve()
+        } else {
+          reject(new Error(`Upload failed with status ${xhr.status}.`))
+        }
+      }
+
+      xhr.onerror = () => {
+        reject(new Error("Network error during upload."))
+      }
+
+      xhr.send(file)
+    })
+  }
+
+  async function finalizeFileRecord(payload: {
+    mode: "create" | "update"
+    id?: string
+    title: string
+    description: string
+    categoryId: string
+    isPremium: boolean
+    fileUrl: string | null
+    storageKey: string | null
+    thumbnailUrl: string | null
+    thumbnailStorageKey: string | null
+    fileSize: number | null
+    fileType: string | null
+  }) {
+    const response = await fetch("/api/admin/files/upload", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: "finalize",
+        ...payload,
+      }),
+    })
+
+    const result = (await response.json()) as FinalizeResponse
+
+    if (!response.ok) {
+      throw new Error(result.error || "Failed to save file record.")
+    }
+
+    return result
   }
 
   async function saveFile() {
@@ -277,126 +364,79 @@ export default function FilesPage() {
       let finalStorageKey: string | null = existingStorageKey || null
       let finalThumbnailUrl: string | null = existingThumbnailUrl || null
       let finalThumbnailStorageKey: string | null = existingThumbnailStorageKey || null
-      let finalFileSize: number | null = null
-      let finalFileType: string | null = null
+      let finalFileSize: number | null = existingFileSize || null
+      let finalFileType: string | null = existingFileType || null
 
-      if (editingId) {
-        if (selectedFile) {
-          setStatusText("Uploading replacement file...")
+      if (selectedFile) {
+        setStatusText("Preparing main file upload...")
 
-          const formData = new FormData()
-          formData.append("title", title.trim())
-          formData.append("description", description.trim())
-          formData.append("categoryId", categoryId)
-          formData.append("isPremium", String(isPremium))
-          formData.append("file", selectedFile)
-
-          const response = await fetch("/api/admin/files/upload", {
-            method: "POST",
-            body: formData,
-          })
-
-          const result = (await response.json()) as R2UploadResult
-
-          if (!response.ok) {
-            throw new Error(result.error || "File upload failed.")
-          }
-
-          finalFileUrl = result.url || null
-          finalStorageKey = result.key
-          finalFileSize = result.size || selectedFile.size
-          finalFileType = selectedFile.name.includes(".")
-            ? selectedFile.name.split(".").pop()?.toUpperCase() || null
-            : null
-        }
-
-        if (selectedThumbnail) {
-          setStatusText("Uploading thumbnail...")
-          const uploadedThumbnail = await uploadThumbnailToR2(selectedThumbnail, "thumbnails")
-          finalThumbnailUrl = uploadedThumbnail.url
-          finalThumbnailStorageKey = uploadedThumbnail.key
-        }
-
-        setStatusText("Updating file record...")
-
-        const updatePayload = {
+        const presignedMain = await requestPresignedUpload({
+          fileName: selectedFile.name,
+          contentType: selectedFile.type || "application/octet-stream",
           title: title.trim(),
-          description: description.trim() || null,
-          file_url: finalFileUrl,
-          storage_key: finalStorageKey,
-          thumbnail_url: finalThumbnailUrl,
-          thumbnail_storage_key: finalThumbnailStorageKey,
-          is_premium: isPremium,
-          category_id: categoryId || null,
-          file_size: finalFileSize ?? undefined,
-          file_type: finalFileType ?? undefined,
-        }
-
-        const { error } = await supabase.from("files").update(updatePayload).eq("id", editingId)
-
-        if (error) throw new Error(error.message || "Failed to update file.")
-        setSuccessMessage("File updated successfully.")
-      } else {
-        setStatusText("Uploading main file...")
-
-        const formData = new FormData()
-        formData.append("title", title.trim())
-        formData.append("description", description.trim())
-        formData.append("categoryId", categoryId)
-        formData.append("isPremium", String(isPremium))
-        formData.append("file", selectedFile!)
-
-        const response = await fetch("/api/admin/files/upload", {
-          method: "POST",
-          body: formData,
+          categoryId,
         })
 
-        const result = (await response.json()) as R2UploadResult
+        setStatusText("Uploading main file...")
+        setUploadProgress(0)
 
-        if (!response.ok) {
-          throw new Error(result.error || "File upload failed.")
-        }
+        await uploadFileDirect(selectedFile, presignedMain.uploadUrl, (percent) => {
+          setUploadProgress(percent)
+          setStatusText(`Uploading main file... ${percent}%`)
+        })
 
-        finalFileUrl = result.url || null
-        finalStorageKey = result.key
-        finalFileSize = result.size || selectedFile!.size
-        finalFileType = selectedFile!.name.includes(".")
-          ? selectedFile!.name.split(".").pop()?.toUpperCase() || null
-          : null
-
-        if (selectedThumbnail) {
-          setStatusText("Uploading thumbnail...")
-          const uploadedThumbnail = await uploadThumbnailToR2(selectedThumbnail, "thumbnails")
-          finalThumbnailUrl = uploadedThumbnail.url
-          finalThumbnailStorageKey = uploadedThumbnail.key
-        }
-
-        if (selectedThumbnail || finalFileSize || finalFileType || finalThumbnailUrl || finalThumbnailStorageKey) {
-          setStatusText("Finalizing file record...")
-
-          const updateAfterInsert = {
-            thumbnail_url: finalThumbnailUrl,
-            thumbnail_storage_key: finalThumbnailStorageKey,
-            file_size: finalFileSize,
-            file_type: finalFileType,
-          }
-
-          const { error } = await supabase
-            .from("files")
-            .update(updateAfterInsert)
-            .eq("storage_key", finalStorageKey)
-
-          if (error) throw new Error(error.message || "Failed to finalize uploaded file.")
-        }
-
-        setSuccessMessage("File uploaded successfully.")
+        finalFileUrl = presignedMain.url
+        finalStorageKey = presignedMain.key
+        finalFileSize = selectedFile.size
+        finalFileType = getFileType(selectedFile.name)
       }
 
+      if (selectedThumbnail) {
+        setStatusText("Preparing thumbnail upload...")
+
+        const presignedThumb = await requestPresignedUpload({
+          fileName: selectedThumbnail.name,
+          contentType: selectedThumbnail.type || "application/octet-stream",
+          folder: "thumbnails",
+        })
+
+        setUploadProgress(0)
+        setStatusText("Uploading thumbnail...")
+
+        await uploadFileDirect(selectedThumbnail, presignedThumb.uploadUrl, (percent) => {
+          setUploadProgress(percent)
+          setStatusText(`Uploading thumbnail... ${percent}%`)
+        })
+
+        finalThumbnailUrl = presignedThumb.url
+        finalThumbnailStorageKey = presignedThumb.key
+      }
+
+      setUploadProgress(0)
+      setStatusText("Saving file record...")
+
+      await finalizeFileRecord({
+        mode: editingId ? "update" : "create",
+        id: editingId || undefined,
+        title: title.trim(),
+        description,
+        categoryId,
+        isPremium,
+        fileUrl: finalFileUrl,
+        storageKey: finalStorageKey,
+        thumbnailUrl: finalThumbnailUrl,
+        thumbnailStorageKey: finalThumbnailStorageKey,
+        fileSize: finalFileSize,
+        fileType: finalFileType,
+      })
+
       setStatusText("")
+      setSuccessMessage(editingId ? "File updated successfully." : "File uploaded successfully.")
       clearForm()
       await loadData()
     } catch (error) {
       setStatusText("")
+      setUploadProgress(0)
       setErrorMessage(error instanceof Error ? error.message : "Something went wrong.")
     } finally {
       setSaving(false)
@@ -470,7 +510,16 @@ export default function FilesPage() {
                   : "border border-blue-200 bg-blue-50 text-blue-700"
             }`}
           >
-            {errorMessage || successMessage || statusText}
+            <div>{errorMessage || successMessage || statusText}</div>
+
+            {!errorMessage && !successMessage && uploadProgress > 0 && (
+              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-blue-100">
+                <div
+                  className="h-full rounded-full bg-blue-600 transition-all"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -530,7 +579,7 @@ export default function FilesPage() {
                   htmlFor="file-upload-input"
                   className="mb-2 block text-sm font-bold text-slate-700"
                 >
-                  {editingId ? "Replace file (optional)" : "Choose file"}
+                  {editingId ? "Replace file (optional, up to 5GB)" : "Choose file (up to 5GB)"}
                 </label>
 
                 <input
@@ -553,6 +602,11 @@ export default function FilesPage() {
                 {!selectedFile && existingFileUrl && editingId && (
                   <div className="mt-3">
                     <p className="text-xs font-bold text-slate-500">Current file attached</p>
+                    {existingFileSize ? (
+                      <p className="mt-1 text-xs text-slate-500">
+                        Size: {formatFileSize(existingFileSize)}
+                      </p>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -598,7 +652,7 @@ export default function FilesPage() {
                 disabled={saving}
                 className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {saving ? "Saving..." : editingId ? "Update File" : "Upload & Create"}
+                {saving ? "Uploading..." : editingId ? "Update File" : "Upload & Create"}
               </button>
 
               <button

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { PutObjectCommand } from "@aws-sdk/client-s3"
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { r2 } from "@/lib/r2"
 
 export const runtime = "nodejs"
@@ -26,54 +27,51 @@ function sanitizeFileName(name: string) {
     .replace(/^-+|-+$/g, "")
 }
 
-export async function POST(req: Request) {
-  try {
-    const formData = await req.formData()
+function getExtension(name: string) {
+  return name.includes(".") ? name.split(".").pop()?.toLowerCase() || "" : ""
+}
 
-    const file = formData.get("file") as File | null
-    const folder = String(formData.get("folder") || "")
-    const title = String(formData.get("title") || "")
-    const description = String(formData.get("description") || "")
-    const categoryId = String(formData.get("categoryId") || "")
-    const isPremium = formData.get("isPremium") === "true"
+function getPublicUrl(storageKey: string) {
+  const base = process.env.R2_PUBLIC_BASE_URL
+  if (!base) {
+    throw new Error("R2_PUBLIC_BASE_URL is missing.")
+  }
+  return `${base.replace(/\/$/, "")}/${storageKey}`
+}
 
-    if (!file) {
-      return NextResponse.json({ error: "Missing file." }, { status: 400 })
-    }
+async function handlePresign(body: any) {
+  const {
+    fileName,
+    contentType,
+    title,
+    categoryId,
+    folder,
+  }: {
+    fileName?: string
+    contentType?: string
+    title?: string
+    categoryId?: string
+    folder?: string
+  } = body || {}
 
-    // THUMBNAIL-ONLY MODE
-    if (folder === "thumbnails") {
-      const bytes = await file.arrayBuffer()
-      const buffer = Buffer.from(bytes)
+  if (!fileName) {
+    return NextResponse.json({ error: "Missing fileName." }, { status: 400 })
+  }
 
-      const ext = file.name.includes(".") ? file.name.split(".").pop()?.toLowerCase() : ""
-      const safeName = sanitizeFileName(file.name)
-      const randomPart = Math.random().toString(36).slice(2, 10)
-      const storageKey = `thumbnails/${Date.now()}-${randomPart}-${safeName}${ext ? `.${ext}` : ""}`
+  const ext = getExtension(fileName)
+  const safeName = sanitizeFileName(fileName)
+  const randomPart = Math.random().toString(36).slice(2, 10)
 
-      await r2.send(
-        new PutObjectCommand({
-          Bucket: process.env.R2_BUCKET!,
-          Key: storageKey,
-          Body: buffer,
-          ContentType: file.type || "application/octet-stream",
-        })
-      )
+  let storageKey = ""
 
-      const publicUrl = `${process.env.R2_PUBLIC_BASE_URL}/${storageKey}`
-
-      return NextResponse.json({
-        success: true,
-        url: publicUrl,
-        key: storageKey,
-        size: file.size,
-        contentType: file.type || "application/octet-stream",
-      })
-    }
-
-    // MAIN FILE MODE
+  if (folder === "thumbnails") {
+    storageKey = `thumbnails/${Date.now()}-${randomPart}-${safeName}${ext ? `.${ext}` : ""}`
+  } else {
     if (!title || !categoryId) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+      return NextResponse.json(
+        { error: "Missing title or categoryId for main file upload." },
+        { status: 400 }
+      )
     }
 
     const { data: categoryRow, error: categoryError } = await supabase
@@ -86,55 +84,153 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Category not found." }, { status: 400 })
     }
 
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
-
-    const ext = file.name.includes(".") ? file.name.split(".").pop()?.toLowerCase() : ""
     const safeTitle = slugify(title)
-    const storageKey = `${categoryRow.slug}/${Date.now()}-${safeTitle}${ext ? `.${ext}` : ""}`
+    const categorySlug =
+      categoryRow.slug || slugify(categoryRow.name || "uncategorized")
 
-    await r2.send(
-      new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET!,
-        Key: storageKey,
-        Body: buffer,
-        ContentType: file.type || "application/octet-stream",
-      })
+    storageKey = `${categorySlug}/${Date.now()}-${safeTitle}${ext ? `.${ext}` : ""}`
+  }
+
+  const command = new PutObjectCommand({
+    Bucket: process.env.R2_BUCKET!,
+    Key: storageKey,
+    ContentType: contentType || "application/octet-stream",
+  })
+
+  const uploadUrl = await getSignedUrl(r2, command, { expiresIn: 60 * 15 })
+
+  return NextResponse.json({
+    success: true,
+    uploadUrl,
+    key: storageKey,
+    url: getPublicUrl(storageKey),
+  })
+}
+
+async function handleFinalize(body: any) {
+  const {
+    mode,
+    id,
+    title,
+    description,
+    categoryId,
+    isPremium,
+    fileUrl,
+    storageKey,
+    thumbnailUrl,
+    thumbnailStorageKey,
+    fileSize,
+    fileType,
+  }: {
+    mode?: "create" | "update"
+    id?: string
+    title?: string
+    description?: string
+    categoryId?: string
+    isPremium?: boolean
+    fileUrl?: string | null
+    storageKey?: string | null
+    thumbnailUrl?: string | null
+    thumbnailStorageKey?: string | null
+    fileSize?: number | null
+    fileType?: string | null
+  } = body || {}
+
+  if (!title || !categoryId) {
+    return NextResponse.json(
+      { error: "Missing required fields for finalize." },
+      { status: 400 }
     )
+  }
 
-    const publicUrl = `${process.env.R2_PUBLIC_BASE_URL}/${storageKey}`
+  if (mode === "update") {
+    if (!id) {
+      return NextResponse.json({ error: "Missing file id." }, { status: 400 })
+    }
 
-    const { error: insertError } = await supabase.from("files").insert({
-      title,
-      slug: `${safeTitle}-${Date.now()}`,
-      description: description || null,
-      category_id: categoryRow.id,
-      storage_key: storageKey,
-      file_url: publicUrl,
-      file_type: ext?.toUpperCase() || null,
-      file_size: file.size,
-      is_premium: isPremium,
-      downloads_count: 0,
-    })
+    const updatePayload = {
+      title: title.trim(),
+      description: description?.trim() || null,
+      category_id: categoryId,
+      is_premium: Boolean(isPremium),
+      file_url: fileUrl || null,
+      storage_key: storageKey || null,
+      thumbnail_url: thumbnailUrl || null,
+      thumbnail_storage_key: thumbnailStorageKey || null,
+      file_size: fileSize ?? null,
+      file_type: fileType || null,
+    }
 
-    if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 })
+    const { error } = await supabase.from("files").update(updatePayload).eq("id", id)
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
-      message: "File uploaded successfully",
-      file_url: publicUrl,
-      storage_key: storageKey,
-      size: file.size,
-      contentType: file.type || "application/octet-stream",
+      message: "File updated successfully.",
     })
+  }
+
+  if (mode === "create") {
+    if (!fileUrl || !storageKey) {
+      return NextResponse.json(
+        { error: "Missing uploaded file details for create." },
+        { status: 400 }
+      )
+    }
+
+    const safeTitle = slugify(title)
+
+    const { error } = await supabase.from("files").insert({
+      title: title.trim(),
+      slug: `${safeTitle}-${Date.now()}`,
+      description: description?.trim() || null,
+      category_id: categoryId,
+      storage_key: storageKey,
+      file_url: fileUrl,
+      thumbnail_url: thumbnailUrl || null,
+      thumbnail_storage_key: thumbnailStorageKey || null,
+      file_type: fileType || null,
+      file_size: fileSize ?? null,
+      is_premium: Boolean(isPremium),
+      downloads_count: 0,
+    })
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "File created successfully.",
+    })
+  }
+
+  return NextResponse.json({ error: "Invalid finalize mode." }, { status: 400 })
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json()
+    const action = body?.action
+
+    if (action === "presign") {
+      return await handlePresign(body)
+    }
+
+    if (action === "finalize") {
+      return await handleFinalize(body)
+    }
+
+    return NextResponse.json({ error: "Invalid action." }, { status: 400 })
   } catch (err: any) {
-    console.error("UPLOAD ERROR FULL:", err)
+    console.error("UPLOAD ROUTE ERROR:", err)
     console.error("STACK:", err?.stack)
 
     return NextResponse.json(
-      { error: err?.message || "Upload failed" },
+      { error: err?.message || "Upload failed." },
       { status: 500 }
     )
   }
