@@ -36,62 +36,24 @@ export default function PremiumMembershipPage() {
     try {
       setSubmitting(true)
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
-
-      if (userError || !user) {
-        alert("You must be logged in.")
-        return
-      }
-
-      let receiptUrl: string | null = null
+      const formData = new FormData()
+      formData.append("subject", "Premium Upgrade Request")
+      formData.append("message", message)
 
       if (receipt) {
-        const ext = receipt.name.split(".").pop()?.toLowerCase() || "jpg"
-        const safeBaseName = receipt.name
-          .replace(/\.[^/.]+$/, "")
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "")
-
-        const path = `${user.id}/${Date.now()}-${safeBaseName}.${ext}`
-
-        const { error: uploadError } = await supabase.storage
-          .from("upgrade-receipts")
-          .upload(path, receipt, {
-            cacheControl: "3600",
-            upsert: false,
-          })
-
-        if (uploadError) {
-          throw uploadError
-        }
-
-        const { data } = supabase.storage
-          .from("upgrade-receipts")
-          .getPublicUrl(path)
-
-        receiptUrl = data.publicUrl
+        formData.append("receipt", receipt)
       }
 
-      const { error } = await supabase.from("upgrade_requests").insert({
-        sender_id: user.id,
-        email: user.email,
-        name:
-          user.user_metadata?.full_name ||
-          user.user_metadata?.name ||
-          user.email ||
-          "User",
-        plan: "premium",
-        subject: "Premium Upgrade Request",
-        body: message,
-        status: "pending",
-        receipt_url: receiptUrl,
+      const response = await fetch("/api/upgrades/request", {
+        method: "POST",
+        body: formData,
       })
 
-      if (error) throw error
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to send request.")
+      }
 
       setReceipt(null)
 

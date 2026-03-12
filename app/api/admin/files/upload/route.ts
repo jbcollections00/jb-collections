@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+import { createClient as createAdminClient } from "@supabase/supabase-js"
+import { createClient as createServerClient } from "@/lib/supabase-server"
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
-import { r2 } from "@/lib/r2"
+import { r2, getR2BucketName } from "@/lib/r2"
 
 export const runtime = "nodejs"
 
-const supabase = createClient(
+const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
@@ -31,15 +32,39 @@ function getExtension(name: string) {
   return name.includes(".") ? name.split(".").pop()?.toLowerCase() || "" : ""
 }
 
-function getPublicUrl(storageKey: string) {
-  const base = process.env.R2_PUBLIC_BASE_URL
-  if (!base) {
-    throw new Error("R2_PUBLIC_BASE_URL is missing.")
+async function requireAdmin() {
+  const supabase = await createServerClient()
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    return {
+      error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+    }
   }
-  return `${base.replace(/\/$/, "")}/${storageKey}`
+
+  const { data: profile, error: profileError } = await adminSupabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  if (profileError || profile?.role !== "admin") {
+    return {
+      error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+    }
+  }
+
+  return { user }
 }
 
 async function handlePresign(body: any) {
+  const adminCheck = await requireAdmin()
+  if ("error" in adminCheck) return adminCheck.error
+
   const {
     fileName,
     contentType,
@@ -74,7 +99,7 @@ async function handlePresign(body: any) {
       )
     }
 
-    const { data: categoryRow, error: categoryError } = await supabase
+    const { data: categoryRow, error: categoryError } = await adminSupabase
       .from("categories")
       .select("id, slug, name")
       .eq("id", categoryId)
@@ -88,11 +113,11 @@ async function handlePresign(body: any) {
     const categorySlug =
       categoryRow.slug || slugify(categoryRow.name || "uncategorized")
 
-    storageKey = `${categorySlug}/${Date.now()}-${safeTitle}${ext ? `.${ext}` : ""}`
+    storageKey = `archives/${categorySlug}/${Date.now()}-${safeTitle}${ext ? `.${ext}` : ""}`
   }
 
   const command = new PutObjectCommand({
-    Bucket: process.env.R2_BUCKET!,
+    Bucket: getR2BucketName(),
     Key: storageKey,
     ContentType: contentType || "application/octet-stream",
   })
@@ -103,11 +128,13 @@ async function handlePresign(body: any) {
     success: true,
     uploadUrl,
     key: storageKey,
-    url: getPublicUrl(storageKey),
   })
 }
 
 async function handleFinalize(body: any) {
+  const adminCheck = await requireAdmin()
+  if ("error" in adminCheck) return adminCheck.error
+
   const {
     mode,
     id,
@@ -115,10 +142,8 @@ async function handleFinalize(body: any) {
     description,
     categoryId,
     isPremium,
-    fileUrl,
     storageKey,
     thumbnailUrl,
-    thumbnailStorageKey,
     fileSize,
     fileType,
   }: {
@@ -128,10 +153,8 @@ async function handleFinalize(body: any) {
     description?: string
     categoryId?: string
     isPremium?: boolean
-    fileUrl?: string | null
     storageKey?: string | null
     thumbnailUrl?: string | null
-    thumbnailStorageKey?: string | null
     fileSize?: number | null
     fileType?: string | null
   } = body || {}
@@ -143,6 +166,9 @@ async function handleFinalize(body: any) {
     )
   }
 
+  const visibility = isPremium ? "premium" : "free"
+  const archiveType = fileType?.toLowerCase() || getExtension(storageKey || "") || "zip"
+
   if (mode === "update") {
     if (!id) {
       return NextResponse.json({ error: "Missing file id." }, { status: 400 })
@@ -150,21 +176,46 @@ async function handleFinalize(body: any) {
 
     const updatePayload = {
       title: title.trim(),
+      slug: `${slugify(title)}-${Date.now()}`,
       description: description?.trim() || null,
       category_id: categoryId,
-      is_premium: Boolean(isPremium),
-      file_url: fileUrl || null,
-      storage_key: storageKey || null,
-      thumbnail_url: thumbnailUrl || null,
-      thumbnail_storage_key: thumbnailStorageKey || null,
-      file_size: fileSize ?? null,
-      file_type: fileType || null,
+      visibility,
+      status: "published",
+      cover_url: thumbnailUrl || null,
     }
 
-    const { error } = await supabase.from("files").update(updatePayload).eq("id", id)
+    const { error: updateError } = await adminSupabase
+      .from("files")
+      .update(updatePayload)
+      .eq("id", id)
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (updateError) {
+      return NextResponse.json({ error: updateError.message }, { status: 500 })
+    }
+
+    if (storageKey) {
+      await adminSupabase
+        .from("file_versions")
+        .update({ is_current: false })
+        .eq("file_id", id)
+        .eq("is_current", true)
+
+      const { error: versionError } = await adminSupabase
+        .from("file_versions")
+        .insert({
+          file_id: id,
+          version_label: `v${Date.now()}`,
+          object_key: storageKey,
+          bucket_name: getR2BucketName(),
+          archive_type: archiveType,
+          mime_type: null,
+          file_size_bytes: fileSize ?? null,
+          is_current: true,
+        })
+
+      if (versionError) {
+        return NextResponse.json({ error: versionError.message }, { status: 500 })
+      }
     }
 
     return NextResponse.json({
@@ -174,37 +225,57 @@ async function handleFinalize(body: any) {
   }
 
   if (mode === "create") {
-    if (!fileUrl || !storageKey) {
+    if (!storageKey) {
       return NextResponse.json(
-        { error: "Missing uploaded file details for create." },
+        { error: "Missing uploaded file key for create." },
         { status: 400 }
       )
     }
 
-    const safeTitle = slugify(title)
+    const slug = `${slugify(title)}-${Date.now()}`
 
-    const { error } = await supabase.from("files").insert({
-      title: title.trim(),
-      slug: `${safeTitle}-${Date.now()}`,
-      description: description?.trim() || null,
-      category_id: categoryId,
-      storage_key: storageKey,
-      file_url: fileUrl,
-      thumbnail_url: thumbnailUrl || null,
-      thumbnail_storage_key: thumbnailStorageKey || null,
-      file_type: fileType || null,
-      file_size: fileSize ?? null,
-      is_premium: Boolean(isPremium),
-      downloads_count: 0,
-    })
+    const { data: insertedFile, error: insertFileError } = await adminSupabase
+      .from("files")
+      .insert({
+        title: title.trim(),
+        slug,
+        description: description?.trim() || null,
+        category_id: categoryId,
+        visibility,
+        status: "published",
+        cover_url: thumbnailUrl || null,
+      })
+      .select("id")
+      .single()
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (insertFileError || !insertedFile) {
+      return NextResponse.json(
+        { error: insertFileError?.message || "Failed to create file." },
+        { status: 500 }
+      )
+    }
+
+    const { error: versionError } = await adminSupabase
+      .from("file_versions")
+      .insert({
+        file_id: insertedFile.id,
+        version_label: "v1",
+        object_key: storageKey,
+        bucket_name: getR2BucketName(),
+        archive_type: archiveType,
+        mime_type: null,
+        file_size_bytes: fileSize ?? null,
+        is_current: true,
+      })
+
+    if (versionError) {
+      return NextResponse.json({ error: versionError.message }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
       message: "File created successfully.",
+      fileId: insertedFile.id,
     })
   }
 

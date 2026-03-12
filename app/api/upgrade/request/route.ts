@@ -34,9 +34,10 @@ export async function POST(req: Request) {
 
     const {
       data: { user },
+      error: userError,
     } = await supabase.auth.getUser()
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -44,9 +45,9 @@ export async function POST(req: Request) {
       .from("profiles")
       .select("full_name, email")
       .eq("id", user.id)
-      .single()
+      .maybeSingle()
 
-    const { error } = await supabase.from("upgrades").insert({
+    const { error: insertError } = await supabase.from("upgrades").insert({
       sender_id: user.id,
       name: profile?.full_name || null,
       email: profile?.email || user.email || null,
@@ -56,14 +57,15 @@ export async function POST(req: Request) {
       status: "pending",
     })
 
-    if (error) {
+    if (insertError) {
+      console.error("Insert upgrade error:", insertError)
       return NextResponse.json(
-        { error: error.message },
+        { error: insertError.message },
         { status: 500 }
       )
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true }, { status: 200 })
   } catch (error) {
     console.error("Upgrade request error:", error)
     return NextResponse.json(

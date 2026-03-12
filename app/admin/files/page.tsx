@@ -10,14 +10,10 @@ type FileItem = {
   title: string
   slug?: string | null
   description: string | null
-  file_url: string | null
-  storage_key?: string | null
-  thumbnail_url?: string | null
-  thumbnail_storage_key?: string | null
-  is_premium?: boolean | null
+  cover_url?: string | null
+  visibility?: "free" | "premium" | "private" | null
+  status?: "draft" | "review" | "published" | "flagged" | "removed" | null
   category_id: string | null
-  file_size?: number | null
-  file_type?: string | null
   created_at: string
 }
 
@@ -30,7 +26,6 @@ type PresignResponse = {
   success?: boolean
   uploadUrl?: string
   key?: string
-  url?: string
   error?: string
 }
 
@@ -38,6 +33,7 @@ type FinalizeResponse = {
   success?: boolean
   message?: string
   error?: string
+  fileId?: string
 }
 
 export default function FilesPage() {
@@ -58,10 +54,8 @@ export default function FilesPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null)
 
-  const [existingFileUrl, setExistingFileUrl] = useState<string | null>(null)
-  const [existingStorageKey, setExistingStorageKey] = useState<string | null>(null)
   const [existingThumbnailUrl, setExistingThumbnailUrl] = useState<string | null>(null)
-  const [existingThumbnailStorageKey, setExistingThumbnailStorageKey] = useState<string | null>(null)
+  const [existingStorageKey, setExistingStorageKey] = useState<string | null>(null)
   const [existingFileSize, setExistingFileSize] = useState<number | null>(null)
   const [existingFileType, setExistingFileType] = useState<string | null>(null)
 
@@ -76,6 +70,7 @@ export default function FilesPage() {
 
   useEffect(() => {
     checkAdminAndLoad()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function checkAdminAndLoad() {
@@ -118,7 +113,10 @@ export default function FilesPage() {
 
     const [{ data: filesData, error: filesError }, { data: categoriesData, error: categoriesError }] =
       await Promise.all([
-        supabase.from("files").select("*").order("created_at", { ascending: false }),
+        supabase
+          .from("files")
+          .select("id, title, slug, description, cover_url, visibility, status, category_id, created_at")
+          .order("created_at", { ascending: false }),
         supabase.from("categories").select("id,name").order("name", { ascending: true }),
       ])
 
@@ -154,10 +152,8 @@ export default function FilesPage() {
     setSelectedFile(null)
     setSelectedThumbnail(null)
     setEditingId(null)
-    setExistingFileUrl(null)
-    setExistingStorageKey(null)
     setExistingThumbnailUrl(null)
-    setExistingThumbnailStorageKey(null)
+    setExistingStorageKey(null)
     setExistingFileSize(null)
     setExistingFileType(null)
     clearMessages()
@@ -227,16 +223,14 @@ export default function FilesPage() {
     setTitle(file.title || "")
     setDescription(file.description || "")
     setCategoryId(file.category_id || "")
-    setIsPremium(Boolean(file.is_premium))
+    setIsPremium(file.visibility === "premium")
     setSelectedFile(null)
     setSelectedThumbnail(null)
     setEditingId(file.id)
-    setExistingFileUrl(file.file_url || null)
-    setExistingStorageKey(file.storage_key || null)
-    setExistingThumbnailUrl(file.thumbnail_url || null)
-    setExistingThumbnailStorageKey(file.thumbnail_storage_key || null)
-    setExistingFileSize(file.file_size || null)
-    setExistingFileType(file.file_type || null)
+    setExistingThumbnailUrl(file.cover_url || null)
+    setExistingStorageKey(null)
+    setExistingFileSize(null)
+    setExistingFileType(null)
     resetFileInputs()
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
@@ -261,14 +255,13 @@ export default function FilesPage() {
 
     const result = (await response.json()) as PresignResponse
 
-    if (!response.ok || !result.uploadUrl || !result.key || !result.url) {
+    if (!response.ok || !result.uploadUrl || !result.key) {
       throw new Error(result.error || "Failed to get upload URL.")
     }
 
     return {
       uploadUrl: result.uploadUrl,
       key: result.key,
-      url: result.url,
     }
   }
 
@@ -312,10 +305,8 @@ export default function FilesPage() {
     description: string
     categoryId: string
     isPremium: boolean
-    fileUrl: string | null
     storageKey: string | null
     thumbnailUrl: string | null
-    thumbnailStorageKey: string | null
     fileSize: number | null
     fileType: string | null
   }) {
@@ -360,10 +351,8 @@ export default function FilesPage() {
     setSaving(true)
 
     try {
-      let finalFileUrl: string | null = existingFileUrl || null
       let finalStorageKey: string | null = existingStorageKey || null
       let finalThumbnailUrl: string | null = existingThumbnailUrl || null
-      let finalThumbnailStorageKey: string | null = existingThumbnailStorageKey || null
       let finalFileSize: number | null = existingFileSize || null
       let finalFileType: string | null = existingFileType || null
 
@@ -385,7 +374,6 @@ export default function FilesPage() {
           setStatusText(`Uploading main file... ${percent}%`)
         })
 
-        finalFileUrl = presignedMain.url
         finalStorageKey = presignedMain.key
         finalFileSize = selectedFile.size
         finalFileType = getFileType(selectedFile.name)
@@ -408,8 +396,7 @@ export default function FilesPage() {
           setStatusText(`Uploading thumbnail... ${percent}%`)
         })
 
-        finalThumbnailUrl = presignedThumb.url
-        finalThumbnailStorageKey = presignedThumb.key
+        finalThumbnailUrl = `${process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL?.replace(/\/$/, "") || ""}/${presignedThumb.key}`
       }
 
       setUploadProgress(0)
@@ -422,10 +409,8 @@ export default function FilesPage() {
         description,
         categoryId,
         isPremium,
-        fileUrl: finalFileUrl,
         storageKey: finalStorageKey,
         thumbnailUrl: finalThumbnailUrl,
-        thumbnailStorageKey: finalThumbnailStorageKey,
         fileSize: finalFileSize,
         fileType: finalFileType,
       })
@@ -599,7 +584,7 @@ export default function FilesPage() {
                   </div>
                 )}
 
-                {!selectedFile && existingFileUrl && editingId && (
+                {!selectedFile && editingId && (
                   <div className="mt-3">
                     <p className="text-xs font-bold text-slate-500">Current file attached</p>
                     {existingFileSize ? (
@@ -685,9 +670,9 @@ export default function FilesPage() {
                   className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
                 >
                   <div className="flex aspect-square items-center justify-center bg-slate-100">
-                    {file.thumbnail_url ? (
+                    {file.cover_url ? (
                       <img
-                        src={file.thumbnail_url}
+                        src={file.cover_url}
                         alt={file.title}
                         className="h-full w-full object-cover"
                       />
@@ -700,10 +685,22 @@ export default function FilesPage() {
 
                   <div className="p-3">
                     <div
-                      className="mb-3 line-clamp-2 min-h-[38px] text-sm font-extrabold leading-5 text-slate-900"
+                      className="mb-2 line-clamp-2 min-h-[38px] text-sm font-extrabold leading-5 text-slate-900"
                       title={file.title}
                     >
                       {file.title}
+                    </div>
+
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {file.visibility === "premium" && (
+                        <span className="rounded-full bg-slate-900 px-2 py-1 text-[10px] font-bold text-white">
+                          Premium
+                        </span>
+                      )}
+
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-700">
+                        {file.status || "draft"}
+                      </span>
                     </div>
 
                     <div className="flex gap-2">
