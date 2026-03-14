@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
+export const runtime = "nodejs"
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData()
@@ -49,6 +51,7 @@ export async function POST(req: Request) {
       .maybeSingle()
 
     let receiptUrl: string | null = null
+    let receiptPath: string | null = null
 
     if (receipt && receipt.size > 0) {
       const fileExt = receipt.name.split(".").pop() || "jpg"
@@ -61,7 +64,7 @@ export async function POST(req: Request) {
         .upload(fileName, receipt, {
           cacheControl: "3600",
           upsert: false,
-          contentType: receipt.type || undefined,
+          contentType: receipt.type || "application/octet-stream",
         })
 
       if (uploadError) {
@@ -77,9 +80,10 @@ export async function POST(req: Request) {
         .getPublicUrl(fileName)
 
       receiptUrl = publicUrlData.publicUrl
+      receiptPath = fileName
     }
 
-    const { error: insertError } = await supabase.from("upgrades").insert({
+    const payload = {
       sender_id: user.id,
       name: profile?.full_name || null,
       email: profile?.email || user.email || null,
@@ -87,8 +91,12 @@ export async function POST(req: Request) {
       subject: subject || "Premium upgrade request",
       body: message,
       status: "pending",
+      admin_reply: null,
       receipt_url: receiptUrl,
-    })
+      receipt_path: receiptPath,
+    }
+
+    const { error: insertError } = await supabase.from("upgrades").insert(payload)
 
     if (insertError) {
       console.error("Insert upgrade error:", insertError)
@@ -102,7 +110,9 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("Upgrade request error:", error)
     return NextResponse.json(
-      { error: "Something went wrong" },
+      {
+        error: error instanceof Error ? error.message : "Something went wrong",
+      },
       { status: 500 }
     )
   }

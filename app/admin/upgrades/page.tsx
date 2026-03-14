@@ -48,6 +48,9 @@ export default function UpgradesPage() {
   const [editReplyText, setEditReplyText] = useState("")
   const [savingReplyEdit, setSavingReplyEdit] = useState(false)
 
+  const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [deletingRequest, setDeletingRequest] = useState(false)
+
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null
 
@@ -149,36 +152,131 @@ export default function UpgradesPage() {
     if (showLoader) setLoading(false)
   }
 
-  async function updateStatus(
-    id: string,
-    status: "approved" | "rejected" | "pending"
-  ) {
-    const { error } = await supabase.from("upgrades").update({ status }).eq("id", id)
+  async function setPending(id: string) {
+    try {
+      setUpdatingStatus(true)
 
-    if (error) {
-      console.error("Update upgrade status error:", error)
-      alert(`Update failed: ${error.message}`)
+      const { error } = await supabase
+        .from("upgrades")
+        .update({ status: "pending" })
+        .eq("id", id)
+
+      if (error) {
+        console.error("Set pending error:", error)
+        alert(`Update failed: ${error.message}`)
+        return
+      }
+
+      await loadRequests(false)
+      alert("Request set to pending.")
+    } finally {
+      setUpdatingStatus(false)
+    }
+  }
+
+  async function approveRequest(request: UpgradeRequest) {
+    if (!request.sender_id) {
+      alert("This request has no sender_id, so it cannot be approved.")
       return
     }
 
-    await loadRequests(false)
+    try {
+      setUpdatingStatus(true)
+
+      const response = await fetch("/api/admin/upgrades/approve", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          upgradeId: request.id,
+          userId: request.sender_id,
+        }),
+      })
+
+      const text = await response.text()
+      let result: { error?: string; success?: boolean } = {}
+
+      try {
+        result = text ? JSON.parse(text) : {}
+      } catch {
+        result = { error: text || "Invalid server response" }
+      }
+
+      if (!response.ok) {
+        alert(result.error || "Approve failed.")
+        return
+      }
+
+      await loadRequests(false)
+      alert("Request approved. User is now premium.")
+    } catch (error) {
+      console.error("Approve request error:", error)
+      alert("Approve failed.")
+    } finally {
+      setUpdatingStatus(false)
+    }
+  }
+
+  async function rejectRequest(request: UpgradeRequest) {
+    try {
+      setUpdatingStatus(true)
+
+      const response = await fetch("/api/admin/upgrades/reject", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          upgradeId: request.id,
+        }),
+      })
+
+      const text = await response.text()
+      let result: { error?: string; success?: boolean } = {}
+
+      try {
+        result = text ? JSON.parse(text) : {}
+      } catch {
+        result = { error: text || "Invalid server response" }
+      }
+
+      if (!response.ok) {
+        alert(result.error || "Reject failed.")
+        return
+      }
+
+      await loadRequests(false)
+      alert("Request rejected.")
+    } catch (error) {
+      console.error("Reject request error:", error)
+      alert("Reject failed.")
+    } finally {
+      setUpdatingStatus(false)
+    }
   }
 
   async function deleteRequest(id: string) {
     const confirmed = window.confirm("Delete this upgrade request?")
     if (!confirmed) return
 
-    const { error } = await supabase.from("upgrades").delete().eq("id", id)
+    try {
+      setDeletingRequest(true)
 
-    if (error) {
-      console.error("Delete upgrade request error:", error)
-      alert(`Delete failed: ${error.message}`)
-      return
+      const { error } = await supabase.from("upgrades").delete().eq("id", id)
+
+      if (error) {
+        console.error("Delete upgrade request error:", error)
+        alert(`Delete failed: ${error.message}`)
+        return
+      }
+
+      setSelectedRequest(null)
+      await loadRequests(false)
+      alert("Request deleted.")
+    } finally {
+      setDeletingRequest(false)
     }
-
-    setSelectedRequest(null)
-    await loadRequests(false)
-    alert("Request deleted.")
   }
 
   async function sendReply() {
@@ -537,9 +635,10 @@ export default function UpgradesPage() {
 
                     <button
                       onClick={() => deleteRequest(selectedRequest.id)}
-                      className="rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-600"
+                      disabled={deletingRequest}
+                      className="rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
                     >
-                      Delete
+                      {deletingRequest ? "Deleting..." : "Delete"}
                     </button>
                   </div>
                 </div>
@@ -749,24 +848,27 @@ export default function UpgradesPage() {
                     </button>
 
                     <button
-                      onClick={() => updateStatus(selectedRequest.id, "approved")}
-                      className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-700"
+                      onClick={() => approveRequest(selectedRequest)}
+                      disabled={updatingStatus}
+                      className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
                     >
-                      Approve
+                      {updatingStatus ? "Working..." : "Approve"}
                     </button>
 
                     <button
-                      onClick={() => updateStatus(selectedRequest.id, "rejected")}
-                      className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-amber-600"
+                      onClick={() => rejectRequest(selectedRequest)}
+                      disabled={updatingStatus}
+                      className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-70"
                     >
-                      Reject
+                      {updatingStatus ? "Working..." : "Reject"}
                     </button>
 
                     <button
-                      onClick={() => updateStatus(selectedRequest.id, "pending")}
-                      className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 transition hover:bg-slate-50"
+                      onClick={() => setPending(selectedRequest.id)}
+                      disabled={updatingStatus}
+                      className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
                     >
-                      Set Pending
+                      {updatingStatus ? "Working..." : "Set Pending"}
                     </button>
                   </div>
                 </div>
