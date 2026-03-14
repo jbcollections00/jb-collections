@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
+export const runtime = "nodejs"
+
 export async function POST(req: Request) {
   try {
     const { upgradeId } = await req.json()
@@ -38,28 +40,37 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: adminProfile } = await supabase
+    const { data: adminProfile, error: adminProfileError } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .maybeSingle()
 
-    if (adminProfile?.role !== "admin") {
+    if (adminProfileError || adminProfile?.role !== "admin") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const { error } = await supabase
+    const { error: rejectError } = await supabase
       .from("upgrades")
       .update({ status: "rejected" })
       .eq("id", upgradeId)
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (rejectError) {
+      return NextResponse.json(
+        { error: rejectError.message },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({ success: true }, { status: 200 })
   } catch (error) {
     console.error("Reject upgrade error:", error)
-    return NextResponse.json({ error: "Failed" }, { status: 500 })
+
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Failed to reject upgrade",
+      },
+      { status: 500 }
+    )
   }
 }

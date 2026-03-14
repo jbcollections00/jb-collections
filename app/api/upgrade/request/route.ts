@@ -13,10 +13,7 @@ export async function POST(req: Request) {
     const receipt = formData.get("receipt") as File | null
 
     if (!message) {
-      return NextResponse.json(
-        { error: "Upgrade reason is required" },
-        { status: 400 }
-      )
+      return NextResponse.redirect(new URL("/upgrade?error=missing-message", req.url))
     }
 
     const cookieStore = await cookies()
@@ -41,7 +38,7 @@ export async function POST(req: Request) {
     } = await supabase.auth.getUser()
 
     if (userError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return NextResponse.redirect(new URL("/login", req.url))
     }
 
     const { data: profile } = await supabase
@@ -69,10 +66,7 @@ export async function POST(req: Request) {
 
       if (uploadError) {
         console.error("Receipt upload error:", uploadError)
-        return NextResponse.json(
-          { error: uploadError.message },
-          { status: 500 }
-        )
+        return NextResponse.redirect(new URL("/upgrade?error=upload-failed", req.url))
       }
 
       const { data: publicUrlData } = supabase.storage
@@ -100,20 +94,12 @@ export async function POST(req: Request) {
 
     if (insertError) {
       console.error("Insert upgrade error:", insertError)
-      return NextResponse.json(
-        { error: insertError.message },
-        { status: 500 }
-      )
+      return NextResponse.redirect(new URL("/upgrade?error=insert-failed", req.url))
     }
 
-    return NextResponse.json({ success: true }, { status: 200 })
+    return NextResponse.redirect(new URL("/upgrade?success=1", req.url))
   } catch (error) {
     console.error("Upgrade request error:", error)
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Something went wrong",
-      },
-      { status: 500 }
-    )
+    return NextResponse.redirect(new URL("/upgrade?error=unexpected", req.url))
   }
 }
