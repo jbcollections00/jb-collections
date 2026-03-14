@@ -6,10 +6,10 @@ export const runtime = "nodejs"
 
 export async function GET(
   req: NextRequest,
-  { params }: RouteContext<"/api/download/[fileId]">
+  context: { params: { fileId: string } }
 ) {
   try {
-    const { fileId } = await params
+    const fileId = context.params.fileId
 
     if (!fileId) {
       return NextResponse.json({ error: "Missing file id" }, { status: 400 })
