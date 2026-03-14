@@ -105,8 +105,8 @@ export default function ProfilePage() {
     }
   }
 
-  const successParam = searchParams.get("success")
-  const errorParam = searchParams.get("error")
+  const successParam = searchParams?.get("success") ?? ""
+  const errorParam = searchParams?.get("error") ?? ""
 
   const successMessage = useMemo(() => {
     if (successParam === "upgrade-requested") {
