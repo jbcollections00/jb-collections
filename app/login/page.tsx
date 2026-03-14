@@ -31,7 +31,7 @@ export default function LoginPage() {
   }, [])
 
   const errorMessage = useMemo(() => {
-    const error = searchParams.get("error")
+    const error = searchParams?.get("error") ?? ""
 
     if (error === "invalid") return "Invalid email or password."
     if (error === "failed") return "Login failed. Please try again."
@@ -120,7 +120,6 @@ export default function LoginPage() {
           style={{ marginTop: "20px" }}
         >
           {errorMessage ? <div style={errorBox}>{errorMessage}</div> : null}
-
           {googleError ? <div style={errorBox}>{googleError}</div> : null}
 
           <div style={{ marginBottom: "16px" }}>
@@ -140,12 +139,17 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               style={{
                 ...inputStyle,
-                border: email && !emailLooksValid ? "1px solid #f87171" : inputStyle.border,
+                border:
+                  email && !emailLooksValid
+                    ? "1px solid #f87171"
+                    : inputStyle.border,
               }}
             />
 
             {email && !emailLooksValid ? (
-              <div style={helperErrorText}>Please enter a valid email address.</div>
+              <div style={helperErrorText}>
+                Please enter a valid email address.
+              </div>
             ) : null}
           </div>
 
