@@ -1,20 +1,56 @@
+import { randomUUID } from "crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase-server"
-import { getSignedDownloadUrl } from "@/lib/r2"
+import { getR2BucketName, getSignedUploadUrl } from "@/lib/r2"
 
 export const runtime = "nodejs"
 
-export async function GET(
-  req: NextRequest,
-  context: { params: { fileId: string } }
-) {
-  try {
-    const fileId = context.params.fileId
-
-    if (!fileId) {
-      return NextResponse.json({ error: "Missing file id" }, { status: 400 })
+type RequestBody =
+  | {
+      action: "presign"
+      fileName?: string
+      contentType?: string
+      title?: string
+      categoryId?: string
+      folder?: string
+    }
+  | {
+      action: "finalize"
+      mode?: "create" | "update"
+      id?: string
+      title?: string
+      description?: string
+      categoryId?: string
+      isPremium?: boolean
+      storageKey?: string | null
+      thumbnailUrl?: string | null
+      fileSize?: number | null
+      fileType?: string | null
     }
 
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
+function sanitizeFileName(fileName: string) {
+  return fileName.replace(/[^\w.\-]+/g, "_")
+}
+
+function getExtension(fileName: string) {
+  const parts = fileName.split(".")
+  if (parts.length < 2) return ""
+  return parts.pop()?.toLowerCase() || ""
+}
+
+export async function POST(req: NextRequest) {
+  try {
     const supabase = await createClient()
 
     const {
@@ -26,129 +62,234 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .maybeSingle()
 
-    const isAdmin = profile?.role === "admin"
-
-    const { data: fileRow, error: fileError } = await supabase
-      .from("files")
-      .select(`
-        id,
-        title,
-        slug,
-        visibility,
-        status,
-        file_versions!inner (
-          id,
-          object_key,
-          bucket_name,
-          archive_type,
-          mime_type,
-          file_size_bytes,
-          is_current
-        )
-      `)
-      .eq("id", fileId)
-      .eq("status", "published")
-      .eq("file_versions.is_current", true)
-      .single()
-
-    if (fileError || !fileRow) {
-      return NextResponse.json({ error: "File not found" }, { status: 404 })
+    if (profileError || profile?.role !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const currentVersion =
-      Array.isArray(fileRow.file_versions) && fileRow.file_versions.length > 0
-        ? fileRow.file_versions[0]
-        : null
+    const body = (await req.json()) as RequestBody
 
-    if (!currentVersion?.object_key) {
-      return NextResponse.json(
-        { error: "No active file version found" },
-        { status: 404 }
-      )
+    if (!body?.action) {
+      return NextResponse.json({ error: "Missing action" }, { status: 400 })
     }
 
-    let allowed = false
-    const visibility = (fileRow.visibility || "free").toLowerCase()
+    if (body.action === "presign") {
+      const fileName = String(body.fileName || "").trim()
+      const contentType = String(body.contentType || "application/octet-stream").trim()
+      const folder = String(body.folder || "").trim()
+      const title = String(body.title || "").trim()
 
-    if (isAdmin) {
-      allowed = true
-    } else if (visibility === "free") {
-      allowed = true
-    } else if (visibility === "premium") {
-      const { data: subscription, error: subError } = await supabase
-        .from("subscriptions")
-        .select("id, status, current_period_end")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .order("current_period_end", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (!subError && subscription) {
-        if (
-          !subscription.current_period_end ||
-          new Date(subscription.current_period_end).getTime() > Date.now()
-        ) {
-          allowed = true
-        }
+      if (!fileName) {
+        return NextResponse.json({ error: "Missing file name" }, { status: 400 })
       }
-    } else if (visibility === "private") {
-      allowed = false
-    }
 
-    if (!allowed) {
-      await supabase.from("download_logs").insert({
-        user_id: user.id,
-        file_id: fileRow.id,
-        file_version_id: currentVersion.id,
-        result: "denied",
-        user_agent: req.headers.get("user-agent"),
+      const ext = getExtension(fileName)
+      const safeTitle = slugify(title || fileName.replace(/\.[^/.]+$/, "")) || "file"
+      const safeFileName = sanitizeFileName(fileName)
+      const unique = `${Date.now()}-${randomUUID()}`
+      const key = folder
+        ? `${folder}/${unique}-${safeFileName}`
+        : `files/${safeTitle}/${unique}-${safeFileName}`
+
+      const uploadUrl = await getSignedUploadUrl({
+        key,
+        contentType,
+        bucket: getR2BucketName(),
+        expiresInSeconds: 900,
       })
 
-      return NextResponse.json(
-        { error: "You do not have access to this file" },
-        { status: 403 }
-      )
+      return NextResponse.json({
+        success: true,
+        uploadUrl,
+        key,
+        extension: ext || null,
+      })
     }
 
-    const extension =
-      currentVersion.archive_type?.trim()?.toLowerCase() || "zip"
+    if (body.action === "finalize") {
+      const mode = body.mode === "update" ? "update" : "create"
+      const title = String(body.title || "").trim()
+      const description = String(body.description || "").trim()
+      const categoryId = String(body.categoryId || "").trim()
+      const isPremium = Boolean(body.isPremium)
+      const storageKey =
+        typeof body.storageKey === "string" && body.storageKey.trim()
+          ? body.storageKey.trim()
+          : null
+      const thumbnailUrl =
+        typeof body.thumbnailUrl === "string" && body.thumbnailUrl.trim()
+          ? body.thumbnailUrl.trim()
+          : null
+      const fileSize =
+        typeof body.fileSize === "number" && Number.isFinite(body.fileSize)
+          ? body.fileSize
+          : null
+      const fileType =
+        typeof body.fileType === "string" && body.fileType.trim()
+          ? body.fileType.trim().toLowerCase()
+          : null
 
-    const baseName = (fileRow.slug || fileRow.title || fileRow.id)
-      .toString()
-      .replace(/[^a-zA-Z0-9-_]/g, "_")
-      .replace(/_+/g, "_")
-      .replace(/^_+|_+$/g, "")
+      if (!title) {
+        return NextResponse.json({ error: "Title is required" }, { status: 400 })
+      }
 
-    const safeFilename = `${baseName || "download"}.${extension}`
+      if (!categoryId) {
+        return NextResponse.json({ error: "Category is required" }, { status: 400 })
+      }
 
-    const signedUrl = await getSignedDownloadUrl({
-      key: currentVersion.object_key,
-      bucket: currentVersion.bucket_name || undefined,
-      expiresInSeconds: 120,
-      downloadFilename: safeFilename,
-    })
+      const slug = slugify(title)
+      const visibility = isPremium ? "premium" : "free"
+      const bucketName = getR2BucketName()
 
-    await supabase.from("download_logs").insert({
-      user_id: user.id,
-      file_id: fileRow.id,
-      file_version_id: currentVersion.id,
-      result: "success",
-      user_agent: req.headers.get("user-agent"),
-    })
+      if (mode === "create") {
+        if (!storageKey) {
+          return NextResponse.json(
+            { error: "A main file upload is required for new files." },
+            { status: 400 }
+          )
+        }
 
-    return NextResponse.redirect(signedUrl, { status: 302 })
+        const { data: insertedFile, error: insertFileError } = await supabase
+          .from("files")
+          .insert({
+            title,
+            slug,
+            description: description || null,
+            cover_url: thumbnailUrl,
+            visibility,
+            status: "published",
+            category_id: categoryId,
+          })
+          .select("id")
+          .single()
+
+        if (insertFileError || !insertedFile) {
+          return NextResponse.json(
+            { error: insertFileError?.message || "Failed to create file record." },
+            { status: 500 }
+          )
+        }
+
+        const versionPayload = {
+          file_id: insertedFile.id,
+          object_key: storageKey,
+          bucket_name: bucketName,
+          archive_type: fileType,
+          mime_type: null,
+          file_size_bytes: fileSize,
+          is_current: true,
+        }
+
+        const { error: insertVersionError } = await supabase
+          .from("file_versions")
+          .insert(versionPayload)
+
+        if (insertVersionError) {
+          await supabase.from("files").delete().eq("id", insertedFile.id)
+
+          return NextResponse.json(
+            { error: insertVersionError.message || "Failed to create file version." },
+            { status: 500 }
+          )
+        }
+
+        return NextResponse.json({
+          success: true,
+          message: "File created successfully.",
+          fileId: insertedFile.id,
+        })
+      }
+
+      const fileId = String(body.id || "").trim()
+
+      if (!fileId) {
+        return NextResponse.json({ error: "Missing file id for update." }, { status: 400 })
+      }
+
+      const { data: existingFile, error: existingFileError } = await supabase
+        .from("files")
+        .select("id")
+        .eq("id", fileId)
+        .single()
+
+      if (existingFileError || !existingFile) {
+        return NextResponse.json({ error: "File not found." }, { status: 404 })
+      }
+
+      const { error: updateFileError } = await supabase
+        .from("files")
+        .update({
+          title,
+          slug,
+          description: description || null,
+          cover_url: thumbnailUrl,
+          visibility,
+          category_id: categoryId,
+          status: "published",
+        })
+        .eq("id", fileId)
+
+      if (updateFileError) {
+        return NextResponse.json(
+          { error: updateFileError.message || "Failed to update file record." },
+          { status: 500 }
+        )
+      }
+
+      if (storageKey) {
+        const { error: clearCurrentError } = await supabase
+          .from("file_versions")
+          .update({ is_current: false })
+          .eq("file_id", fileId)
+          .eq("is_current", true)
+
+        if (clearCurrentError) {
+          return NextResponse.json(
+            { error: clearCurrentError.message || "Failed to update file version state." },
+            { status: 500 }
+          )
+        }
+
+        const { error: insertVersionError } = await supabase
+          .from("file_versions")
+          .insert({
+            file_id: fileId,
+            object_key: storageKey,
+            bucket_name: bucketName,
+            archive_type: fileType,
+            mime_type: null,
+            file_size_bytes: fileSize,
+            is_current: true,
+          })
+
+        if (insertVersionError) {
+          return NextResponse.json(
+            { error: insertVersionError.message || "Failed to create new file version." },
+            { status: 500 }
+          )
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "File updated successfully.",
+        fileId,
+      })
+    }
+
+    return NextResponse.json({ error: "Unsupported action" }, { status: 400 })
   } catch (error) {
-    console.error("Download route error:", error)
+    console.error("Admin upload route error:", error)
 
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error: error instanceof Error ? error.message : "Internal server error",
+      },
       { status: 500 }
     )
   }

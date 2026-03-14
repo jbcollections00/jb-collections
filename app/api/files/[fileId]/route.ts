@@ -6,10 +6,10 @@ export const runtime = "nodejs"
 
 export async function GET(
   req: NextRequest,
-  context: { params: Promise<{ fileId: string }> }
+  context: { params: { fileId: string } }
 ) {
   try {
-    const { fileId } = await context.params
+    const fileId = context.params.fileId
 
     if (!fileId) {
       return NextResponse.json({ error: "Missing file id" }, { status: 400 })
@@ -148,9 +148,7 @@ export async function GET(
     console.error("Download route error:", error)
 
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Internal server error",
-      },
+      { error: "Internal server error" },
       { status: 500 }
     )
   }

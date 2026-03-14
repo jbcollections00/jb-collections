@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3"
+import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
 const accountId = process.env.R2_ACCOUNT_ID
@@ -58,6 +58,28 @@ export async function getSignedDownloadUrl({
           ResponseContentDisposition: `attachment; filename="${safeFilename}"`,
         }
       : {}),
+  })
+
+  return getSignedUrl(r2, command, {
+    expiresIn: expiresInSeconds,
+  })
+}
+
+export async function getSignedUploadUrl({
+  key,
+  contentType,
+  bucket = getR2BucketName(),
+  expiresInSeconds = 900,
+}: {
+  key: string
+  contentType: string
+  bucket?: string
+  expiresInSeconds?: number
+}) {
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ContentType: contentType || "application/octet-stream",
   })
 
   return getSignedUrl(r2, command, {

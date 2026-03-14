@@ -253,10 +253,17 @@ export default function FilesPage() {
       }),
     })
 
-    const result = (await response.json()) as PresignResponse
+    const text = await response.text()
+    let result: PresignResponse = {}
+
+    try {
+      result = text ? (JSON.parse(text) as PresignResponse) : {}
+    } catch {
+      result = { error: text || "Invalid server response." }
+    }
 
     if (!response.ok || !result.uploadUrl || !result.key) {
-      throw new Error(result.error || "Failed to get upload URL.")
+      throw new Error(result.error || `Failed to get upload URL. (${response.status})`)
     }
 
     return {
@@ -321,10 +328,17 @@ export default function FilesPage() {
       }),
     })
 
-    const result = (await response.json()) as FinalizeResponse
+    const text = await response.text()
+    let result: FinalizeResponse = {}
+
+    try {
+      result = text ? (JSON.parse(text) as FinalizeResponse) : {}
+    } catch {
+      result = { error: text || "Invalid server response." }
+    }
 
     if (!response.ok) {
-      throw new Error(result.error || "Failed to save file record.")
+      throw new Error(result.error || `Failed to save file record. (${response.status})`)
     }
 
     return result
