@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
-import { GetObjectCommand } from "@aws-sdk/client-s3"
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
-import { r2 } from "@/lib/r2"
+import { getSignedDownloadUrl } from "@/lib/r2"
 
 export const runtime = "nodejs"
 
@@ -69,6 +67,36 @@ export async function GET(req: Request) {
       }
     }
 
+    let downloadUrl: string | null = null
+
+    if (file.storage_key) {
+      try {
+        downloadUrl = await getSignedDownloadUrl({
+          key: file.storage_key,
+          expiresInSeconds: 60 * 5,
+          downloadFilename: file.title || "download",
+        })
+      } catch (signError) {
+        console.error("R2 signed URL generation failed:", signError)
+        return NextResponse.json(
+          { error: "Could not generate download link." },
+          { status: 500 }
+        )
+      }
+    } else if (file.file_url) {
+      downloadUrl = file.file_url
+    }
+
+    if (!downloadUrl) {
+      return NextResponse.json(
+        {
+          error:
+            "Download URL not available. This file has no storage_key or file_url saved in the database.",
+        },
+        { status: 404 }
+      )
+    }
+
     const currentCount = file.downloads_count ?? 0
 
     await supabase
@@ -76,26 +104,10 @@ export async function GET(req: Request) {
       .update({ downloads_count: currentCount + 1 })
       .eq("id", file.id)
 
-    if (file.storage_key) {
-      const signedUrl = await getSignedUrl(
-        r2,
-        new GetObjectCommand({
-          Bucket: process.env.R2_BUCKET!,
-          Key: file.storage_key,
-          ResponseContentDisposition: `attachment; filename="${(file.title || "download").replace(/"/g, "")}"`,
-        }),
-        { expiresIn: 60 * 5 }
-      )
-
-      return NextResponse.redirect(signedUrl)
-    }
-
-    if (file.file_url) {
-      return NextResponse.redirect(file.file_url)
-    }
-
-    return NextResponse.json({ error: "Download URL not available." }, { status: 404 })
+    return NextResponse.redirect(downloadUrl)
   } catch (error) {
+    console.error("Download route error:", error)
+
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Download failed.",

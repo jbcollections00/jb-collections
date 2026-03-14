@@ -8,6 +8,7 @@ export async function POST(req: Request) {
 
     const subject = String(formData.get("subject") || "").trim()
     const message = String(formData.get("message") || "").trim()
+    const receipt = formData.get("receipt") as File | null
 
     if (!message) {
       return NextResponse.json(
@@ -47,6 +48,37 @@ export async function POST(req: Request) {
       .eq("id", user.id)
       .maybeSingle()
 
+    let receiptUrl: string | null = null
+
+    if (receipt && receipt.size > 0) {
+      const fileExt = receipt.name.split(".").pop() || "jpg"
+      const fileName = `${user.id}/${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}.${fileExt}`
+
+      const { error: uploadError } = await supabase.storage
+        .from("receipts")
+        .upload(fileName, receipt, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: receipt.type || undefined,
+        })
+
+      if (uploadError) {
+        console.error("Receipt upload error:", uploadError)
+        return NextResponse.json(
+          { error: uploadError.message },
+          { status: 500 }
+        )
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from("receipts")
+        .getPublicUrl(fileName)
+
+      receiptUrl = publicUrlData.publicUrl
+    }
+
     const { error: insertError } = await supabase.from("upgrades").insert({
       sender_id: user.id,
       name: profile?.full_name || null,
@@ -55,6 +87,7 @@ export async function POST(req: Request) {
       subject: subject || "Premium upgrade request",
       body: message,
       status: "pending",
+      receipt_url: receiptUrl,
     })
 
     if (insertError) {

@@ -2,15 +2,19 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase-server"
 import { getSignedDownloadUrl } from "@/lib/r2"
 
-type RouteContext = {
-  params: {
-    fileId: string
-  }
-}
+export const runtime = "nodejs"
 
-export async function GET(req: NextRequest, context: RouteContext) {
+export async function GET(
+  req: NextRequest,
+  { params }: RouteContext<"/api/download/[fileId]">
+) {
   try {
-    const { fileId } = context.params
+    const { fileId } = await params
+
+    if (!fileId) {
+      return NextResponse.json({ error: "Missing file id" }, { status: 400 })
+    }
+
     const supabase = await createClient()
 
     const {
@@ -21,6 +25,14 @@ export async function GET(req: NextRequest, context: RouteContext) {
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    const isAdmin = profile?.role === "admin"
 
     const { data: fileRow, error: fileError } = await supabase
       .from("files")
@@ -49,11 +61,12 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "File not found" }, { status: 404 })
     }
 
-    const currentVersion = Array.isArray(fileRow.file_versions)
-      ? fileRow.file_versions[0]
-      : null
+    const currentVersion =
+      Array.isArray(fileRow.file_versions) && fileRow.file_versions.length > 0
+        ? fileRow.file_versions[0]
+        : null
 
-    if (!currentVersion) {
+    if (!currentVersion?.object_key) {
       return NextResponse.json(
         { error: "No active file version found" },
         { status: 404 }
@@ -61,10 +74,13 @@ export async function GET(req: NextRequest, context: RouteContext) {
     }
 
     let allowed = false
+    const visibility = (fileRow.visibility || "free").toLowerCase()
 
-    if (fileRow.visibility === "free") {
+    if (isAdmin) {
       allowed = true
-    } else {
+    } else if (visibility === "free") {
+      allowed = true
+    } else if (visibility === "premium") {
       const { data: subscription, error: subError } = await supabase
         .from("subscriptions")
         .select("id, status, current_period_end")
@@ -82,6 +98,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
           allowed = true
         }
       }
+    } else if (visibility === "private") {
+      allowed = false
     }
 
     if (!allowed) {
@@ -94,7 +112,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       })
 
       return NextResponse.json(
-        { error: "Subscription required" },
+        { error: "You do not have access to this file" },
         { status: 403 }
       )
     }
@@ -102,11 +120,13 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const extension =
       currentVersion.archive_type?.trim()?.toLowerCase() || "zip"
 
-    const baseName = (fileRow.slug || fileRow.id)
+    const baseName = (fileRow.slug || fileRow.title || fileRow.id)
       .toString()
       .replace(/[^a-zA-Z0-9-_]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "")
 
-    const safeFilename = `${baseName}.${extension}`
+    const safeFilename = `${baseName || "download"}.${extension}`
 
     const signedUrl = await getSignedDownloadUrl({
       key: currentVersion.object_key,
@@ -126,6 +146,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     return NextResponse.redirect(signedUrl, { status: 302 })
   } catch (error) {
     console.error("Download route error:", error)
+
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
