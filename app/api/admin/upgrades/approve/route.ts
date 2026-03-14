@@ -52,12 +52,15 @@ export async function POST(req: Request) {
 
     const { data: upgradeRow, error: upgradeLookupError } = await supabase
       .from("upgrades")
-      .select("id, sender_id, status")
+      .select("id, sender_id")
       .eq("id", upgradeId)
       .maybeSingle()
 
     if (upgradeLookupError || !upgradeRow) {
-      return NextResponse.json({ error: "Upgrade request not found" }, { status: 404 })
+      return NextResponse.json(
+        { error: "Upgrade request not found" },
+        { status: 404 }
+      )
     }
 
     if (upgradeRow.sender_id !== userId) {
@@ -82,7 +85,6 @@ export async function POST(req: Request) {
     const { error: profileError } = await supabase
       .from("profiles")
       .update({
-        membership: "premium",
         is_premium: true,
       })
       .eq("id", userId)
