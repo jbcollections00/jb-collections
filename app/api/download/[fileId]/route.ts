@@ -1,4 +1,3 @@
-// deploy-refresh-1
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase-server"
 import { getSignedDownloadUrl } from "@/lib/r2"
@@ -29,11 +28,13 @@ export async function GET(
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, membership, is_premium")
       .eq("id", user.id)
       .maybeSingle()
 
     const isAdmin = profile?.role === "admin"
+    const isPremiumUser =
+      profile?.is_premium === true || profile?.membership === "premium"
 
     const { data: fileRow, error: fileError } = await supabase
       .from("files")
@@ -82,23 +83,7 @@ export async function GET(
     } else if (visibility === "free") {
       allowed = true
     } else if (visibility === "premium") {
-      const { data: subscription, error: subError } = await supabase
-        .from("subscriptions")
-        .select("id, status, current_period_end")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .order("current_period_end", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (!subError && subscription) {
-        if (
-          !subscription.current_period_end ||
-          new Date(subscription.current_period_end).getTime() > Date.now()
-        ) {
-          allowed = true
-        }
-      }
+      allowed = isPremiumUser
     } else if (visibility === "private") {
       allowed = false
     }
