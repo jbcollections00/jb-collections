@@ -32,6 +32,9 @@ export const r2 = new S3Client({
 })
 
 export function getR2BucketName(): string {
+  if (!defaultBucket) {
+    throw new Error("R2_BUCKET is not set")
+  }
   return defaultBucket
 }
 
