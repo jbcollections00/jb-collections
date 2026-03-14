@@ -4,16 +4,27 @@ import { cookies } from "next/headers"
 
 export const runtime = "nodejs"
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024
+const ALLOWED_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+]
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData()
 
     const subject = String(formData.get("subject") || "").trim()
     const message = String(formData.get("message") || "").trim()
-    const receipt = formData.get("receipt") as File | null
+    const receipt = formData.get("receipt")
 
     if (!message) {
-      return NextResponse.redirect(new URL("/upgrade?error=missing-message", req.url))
+      return NextResponse.redirect(
+        new URL("/profile?error=missing-message", req.url),
+        { status: 303 }
+      )
     }
 
     const cookieStore = await cookies()
@@ -38,35 +49,65 @@ export async function POST(req: Request) {
     } = await supabase.auth.getUser()
 
     if (userError || !user) {
-      return NextResponse.redirect(new URL("/login", req.url))
+      return NextResponse.redirect(new URL("/login", req.url), {
+        status: 303,
+      })
     }
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("full_name, email")
       .eq("id", user.id)
       .maybeSingle()
 
+    if (profileError) {
+      console.error("Profile fetch error:", profileError)
+    }
+
     let receiptUrl: string | null = null
     let receiptPath: string | null = null
 
-    if (receipt && receipt.size > 0) {
-      const fileExt = receipt.name.split(".").pop() || "jpg"
-      const fileName = `${user.id}/${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}.${fileExt}`
+    if (receipt instanceof File && receipt.size > 0) {
+      if (receipt.size > MAX_FILE_SIZE) {
+        return NextResponse.redirect(
+          new URL("/profile?error=file-too-large", req.url),
+          { status: 303 }
+        )
+      }
+
+      const mimeType = receipt.type || "application/octet-stream"
+
+      if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
+        return NextResponse.redirect(
+          new URL("/profile?error=invalid-file-type", req.url),
+          { status: 303 }
+        )
+      }
+
+      const rawExt = receipt.name.split(".").pop()?.toLowerCase() || ""
+      const safeExt =
+        rawExt && /^[a-z0-9]+$/.test(rawExt)
+          ? rawExt
+          : mimeType === "application/pdf"
+            ? "pdf"
+            : "jpg"
+
+      const fileName = `${user.id}/${Date.now()}-${crypto.randomUUID()}.${safeExt}`
 
       const { error: uploadError } = await supabase.storage
         .from("receipts")
         .upload(fileName, receipt, {
           cacheControl: "3600",
           upsert: false,
-          contentType: receipt.type || "application/octet-stream",
+          contentType: mimeType,
         })
 
       if (uploadError) {
         console.error("Receipt upload error:", uploadError)
-        return NextResponse.redirect(new URL("/upgrade?error=upload-failed", req.url))
+        return NextResponse.redirect(
+          new URL("/profile?error=upload-failed", req.url),
+          { status: 303 }
+        )
       }
 
       const { data: publicUrlData } = supabase.storage
@@ -90,16 +131,27 @@ export async function POST(req: Request) {
       receipt_path: receiptPath,
     }
 
-    const { error: insertError } = await supabase.from("upgrades").insert(payload)
+    const { error: insertError } = await supabase
+      .from("upgrades")
+      .insert(payload)
 
     if (insertError) {
       console.error("Insert upgrade error:", insertError)
-      return NextResponse.redirect(new URL("/upgrade?error=insert-failed", req.url))
+      return NextResponse.redirect(
+        new URL("/profile?error=insert-failed", req.url),
+        { status: 303 }
+      )
     }
 
-    return NextResponse.redirect(new URL("/upgrade?success=1", req.url))
+    return NextResponse.redirect(new URL("/profile?success=upgrade-requested", req.url), {
+      status: 303,
+    })
   } catch (error) {
     console.error("Upgrade request error:", error)
-    return NextResponse.redirect(new URL("/upgrade?error=unexpected", req.url))
+
+    return NextResponse.redirect(
+      new URL("/profile?error=unexpected", req.url),
+      { status: 303 }
+    )
   }
 }

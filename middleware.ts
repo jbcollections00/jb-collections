@@ -2,12 +2,32 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 
+const ADMIN_LOGIN_PATH = "/admin/secure-admin-portal-7X9"
+const ENTER_PATH = "/enter"
+
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next()
   const pathname = request.nextUrl.pathname
 
-  const isAdminLoginPage = pathname === "/secure-admin-portal-7X9"
-  const isProtectedAdminRoute = pathname.startsWith("/admin") && !isAdminLoginPage
+  const isStaticFile =
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/api") ||
+    pathname === "/favicon.ico" ||
+    pathname.includes(".")
+
+  const isEnterPage = pathname === ENTER_PATH
+
+  if (!isStaticFile && !isEnterPage) {
+    const hasEntered = request.cookies.get("site_entered")?.value
+
+    if (!hasEntered) {
+      return NextResponse.redirect(new URL(ENTER_PATH, request.url))
+    }
+  }
+
+  const isAdminLoginPage = pathname === ADMIN_LOGIN_PATH
+  const isProtectedAdminRoute =
+    pathname.startsWith("/admin") && !isAdminLoginPage
 
   const protectedUserRoutes = [
     "/dashboard",
@@ -22,6 +42,10 @@ export async function middleware(request: NextRequest) {
     (route) => pathname === route || pathname.startsWith(`${route}/`)
   )
 
+  if (!isProtectedAdminRoute && !isProtectedUserRoute) {
+    return response
+  }
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -30,14 +54,14 @@ export async function middleware(request: NextRequest) {
         get(name: string) {
           return request.cookies.get(name)?.value
         },
-        set(name: string, value: string, options: any) {
+        set(name: string, value: string, options: Record<string, any>) {
           response.cookies.set({
             name,
             value,
             ...options,
           })
         },
-        remove(name: string, options: any) {
+        remove(name: string, options: Record<string, any>) {
           response.cookies.set({
             name,
             value: "",
@@ -59,7 +83,7 @@ export async function middleware(request: NextRequest) {
 
   if (isProtectedAdminRoute) {
     if (!user) {
-      return NextResponse.redirect(new URL("/secure-admin-portal-7X9", request.url))
+      return NextResponse.redirect(new URL(ADMIN_LOGIN_PATH, request.url))
     }
 
     const { data: profile, error: profileError } = await supabase
@@ -69,7 +93,7 @@ export async function middleware(request: NextRequest) {
       .single()
 
     if (profileError || profile?.role !== "admin") {
-      return NextResponse.redirect(new URL("/secure-admin-portal-7X9", request.url))
+      return NextResponse.redirect(new URL(ADMIN_LOGIN_PATH, request.url))
     }
   }
 
@@ -77,20 +101,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/admin",
-    "/admin/:path*",
-    "/dashboard",
-    "/dashboard/:path*",
-    "/profile",
-    "/profile/:path*",
-    "/messages",
-    "/messages/:path*",
-    "/upgrade",
-    "/upgrade/:path*",
-    "/contact",
-    "/contact/:path*",
-    "/categories",
-    "/categories/:path*",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 }

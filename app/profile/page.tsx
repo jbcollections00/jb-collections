@@ -3,7 +3,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 
 type UserProfile = {
@@ -21,6 +21,7 @@ type UserProfile = {
 export default function ProfilePage() {
   const supabase = createClient()
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const [loggingOut, setLoggingOut] = useState(false)
   const [showPaymentDetails, setShowPaymentDetails] = useState(false)
@@ -31,54 +32,71 @@ export default function ProfilePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
-    fetchProfile()
-  }, [])
+    let active = true
 
-  async function fetchProfile() {
-    setLoading(true)
+    async function fetchProfile() {
+      setLoading(true)
 
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
 
-      if (!user) {
-        router.push("/login")
-        return
-      }
-
-      setAuthEmail(user.email || "")
-
-      const { data } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .maybeSingle()
-
-      setProfile(
-        data || {
-          id: user.id,
-          email: user.email || "",
-          full_name:
-            (user.user_metadata?.full_name as string | undefined) ||
-            (user.user_metadata?.name as string | undefined) ||
-            "",
-          account_status: "Active",
-          is_premium: false,
+        if (!user) {
+          router.replace("/login")
+          return
         }
-      )
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setLoading(false)
+
+        if (!active) return
+        setAuthEmail(user.email || "")
+
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .maybeSingle()
+
+        if (!active) return
+
+        if (error) {
+          console.error("Failed to load profile:", error)
+        }
+
+        setProfile(
+          data || {
+            id: user.id,
+            email: user.email || "",
+            full_name:
+              (user.user_metadata?.full_name as string | undefined) ||
+              (user.user_metadata?.name as string | undefined) ||
+              "",
+            membership: "standard",
+            account_status: "Active",
+            is_premium: false,
+          }
+        )
+      } catch (error) {
+        console.error(error)
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
+      }
     }
-  }
+
+    fetchProfile()
+
+    return () => {
+      active = false
+    }
+  }, [router, supabase])
 
   async function handleLogout() {
     try {
       setLoggingOut(true)
+      setMobileMenuOpen(false)
       await supabase.auth.signOut()
-      router.push("/login")
+      router.replace("/login")
       router.refresh()
     } catch (error) {
       console.error(error)
@@ -86,6 +104,45 @@ export default function ProfilePage() {
       setLoggingOut(false)
     }
   }
+
+  const successParam = searchParams.get("success")
+  const errorParam = searchParams.get("error")
+
+  const successMessage = useMemo(() => {
+    if (successParam === "upgrade-requested") {
+      return "Your premium upgrade request was sent successfully. Please wait for admin review."
+    }
+
+    return ""
+  }, [successParam])
+
+  const errorMessage = useMemo(() => {
+    if (errorParam === "missing-message") {
+      return "Please enter a message before sending your upgrade request."
+    }
+
+    if (errorParam === "file-too-large") {
+      return "The receipt file is too large. Please upload a file smaller than 10MB."
+    }
+
+    if (errorParam === "invalid-file-type") {
+      return "Invalid receipt file type. Please upload JPG, PNG, WEBP, or PDF."
+    }
+
+    if (errorParam === "upload-failed") {
+      return "Receipt upload failed. Please try again."
+    }
+
+    if (errorParam === "insert-failed") {
+      return "Failed to save your upgrade request. Please try again."
+    }
+
+    if (errorParam === "unexpected") {
+      return "Something went wrong while sending your request. Please try again."
+    }
+
+    return ""
+  }, [errorParam])
 
   const displayName = useMemo(() => {
     return (
@@ -102,6 +159,13 @@ export default function ProfilePage() {
   }, [profile, authEmail])
 
   const displayMembership = useMemo(() => {
+    if (profile?.membership) {
+      const value = String(profile.membership).toLowerCase()
+      if (value === "premium") return "Premium User"
+      if (value === "standard") return "Standard User"
+      return profile.membership
+    }
+
     return profile?.is_premium ? "Premium User" : "Standard User"
   }, [profile])
 
@@ -109,7 +173,15 @@ export default function ProfilePage() {
     return profile?.account_status || profile?.status || "Active"
   }, [profile])
 
-  const membershipBadgeClasses = profile?.is_premium
+  const isPremiumUser = useMemo(() => {
+    if (typeof profile?.is_premium === "boolean") {
+      return profile.is_premium
+    }
+
+    return String(profile?.membership || "").toLowerCase() === "premium"
+  }, [profile])
+
+  const membershipBadgeClasses = isPremiumUser
     ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
     : "bg-slate-100 text-slate-700 border border-slate-200"
 
@@ -117,7 +189,7 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-slate-50">
       <div className="mx-auto w-full max-w-[1800px] px-4 py-6 lg:px-8">
         <div className="mb-8 rounded-3xl bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 p-8 text-white">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <h1 className="text-3xl font-black">Profile</h1>
 
             <div className="hidden gap-3 lg:flex">
@@ -129,7 +201,7 @@ export default function ProfilePage() {
               </Link>
 
               <Link
-                href="/dashboard/inbox"
+                href="/messages"
                 className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
               >
                 My Inbox
@@ -172,7 +244,7 @@ export default function ProfilePage() {
               </Link>
 
               <Link
-                href="/dashboard/inbox"
+                href="/messages"
                 onClick={() => setMobileMenuOpen(false)}
                 className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
               >
@@ -198,6 +270,18 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
+
+        {successMessage ? (
+          <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+            {successMessage}
+          </div>
+        ) : null}
+
+        {errorMessage ? (
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {errorMessage}
+          </div>
+        ) : null}
 
         <div className="rounded-3xl border border-blue-100 bg-white p-6 shadow-sm">
           <button
@@ -329,7 +413,7 @@ export default function ProfilePage() {
 
               <div className="rounded-xl border p-4">
                 <p className="text-xs text-slate-400">Email</p>
-                <p className="text-lg font-semibold">{displayEmail}</p>
+                <p className="text-lg font-semibold break-all">{displayEmail}</p>
               </div>
 
               <div className="rounded-xl border p-4">

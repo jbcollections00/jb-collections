@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
+const ADMIN_LOGIN_PATH = "/admin/secure-admin-portal-7X9"
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData()
@@ -10,9 +12,10 @@ export async function POST(req: Request) {
     const password = String(formData.get("password") || "")
 
     if (!email || !password) {
-      return NextResponse.redirect(new URL("/admin/login?error=invalid", req.url), {
-        status: 303,
-      })
+      return NextResponse.redirect(
+        new URL(`${ADMIN_LOGIN_PATH}?error=invalid`, req.url),
+        { status: 303 }
+      )
     }
 
     const cookieStore = await cookies()
@@ -27,14 +30,14 @@ export async function POST(req: Request) {
           get(name: string) {
             return cookieStore.get(name)?.value
           },
-          set(name: string, value: string, options: any) {
+          set(name: string, value: string, options: Record<string, any>) {
             response.cookies.set({
               name,
               value,
               ...options,
             })
           },
-          remove(name: string, options: any) {
+          remove(name: string, options: Record<string, any>) {
             response.cookies.set({
               name,
               value: "",
@@ -52,9 +55,10 @@ export async function POST(req: Request) {
     })
 
     if (error || !data.user) {
-      return NextResponse.redirect(new URL("/admin/login?error=invalid", req.url), {
-        status: 303,
-      })
+      return NextResponse.redirect(
+        new URL(`${ADMIN_LOGIN_PATH}?error=invalid`, req.url),
+        { status: 303 }
+      )
     }
 
     const { data: profile, error: profileError } = await supabase
@@ -66,15 +70,17 @@ export async function POST(req: Request) {
     if (profileError || profile?.role !== "admin") {
       await supabase.auth.signOut()
 
-      return NextResponse.redirect(new URL("/admin/login?error=not-admin", req.url), {
-        status: 303,
-      })
+      return NextResponse.redirect(
+        new URL(`${ADMIN_LOGIN_PATH}?error=not-admin`, req.url),
+        { status: 303 }
+      )
     }
 
     return response
   } catch {
-    return NextResponse.redirect(new URL("/admin/login?error=failed", req.url), {
-      status: 303,
-    })
+    return NextResponse.redirect(
+      new URL(`${ADMIN_LOGIN_PATH}?error=failed`, req.url),
+      { status: 303 }
+    )
   }
 }

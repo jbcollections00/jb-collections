@@ -6,19 +6,19 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData()
 
-    const email = String(formData.get("email") || "")
+    const email = String(formData.get("email") || "").trim()
     const password = String(formData.get("password") || "")
 
     if (!email || !password) {
-      return NextResponse.json(
-        { error: "Email and password are required." },
-        { status: 400 }
-      )
+      return NextResponse.redirect(new URL("/login?error=invalid", req.url), {
+        status: 303,
+      })
     }
 
     const cookieStore = await cookies()
-
-    const response = NextResponse.redirect(new URL("/dashboard", req.url), 303)
+    const response = NextResponse.redirect(new URL("/dashboard", req.url), {
+      status: 303,
+    })
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,14 +28,14 @@ export async function POST(req: Request) {
           get(name: string) {
             return cookieStore.get(name)?.value
           },
-          set(name: string, value: string, options: any) {
+          set(name: string, value: string, options: Record<string, any>) {
             response.cookies.set({
               name,
               value,
               ...options,
             })
           },
-          remove(name: string, options: any) {
+          remove(name: string, options: Record<string, any>) {
             response.cookies.set({
               name,
               value: "",
@@ -47,17 +47,21 @@ export async function POST(req: Request) {
       }
     )
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 401 })
+    if (error || !data.user) {
+      return NextResponse.redirect(new URL("/login?error=invalid", req.url), {
+        status: 303,
+      })
     }
 
     return response
   } catch {
-    return NextResponse.json({ error: "Login failed." }, { status: 500 })
+    return NextResponse.redirect(new URL("/login?error=failed", req.url), {
+      status: 303,
+    })
   }
 }
