@@ -3,13 +3,11 @@
 import Image from "next/image"
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import type { CSSProperties, FormEvent } from "react"
 
 export default function LoginPage() {
   const supabase = createClient()
-  const searchParams = useSearchParams()
   const emailRef = useRef<HTMLInputElement | null>(null)
 
   const [email, setEmail] = useState("")
@@ -19,6 +17,7 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [rememberMe, setRememberMe] = useState(true)
   const [googleError, setGoogleError] = useState("")
+  const [urlError, setUrlError] = useState("")
 
   useEffect(() => {
     emailRef.current?.focus()
@@ -28,17 +27,19 @@ export default function LoginPage() {
       setEmail(savedEmail)
       setRememberMe(true)
     }
+
+    const params = new URLSearchParams(window.location.search)
+    const error = params.get("error") ?? ""
+    setUrlError(error)
   }, [])
 
   const errorMessage = useMemo(() => {
-    const error = searchParams?.get("error") ?? ""
-
-    if (error === "invalid") return "Invalid email or password."
-    if (error === "failed") return "Login failed. Please try again."
-    if (error === "not-admin") return "You do not have admin access."
+    if (urlError === "invalid") return "Invalid email or password."
+    if (urlError === "failed") return "Login failed. Please try again."
+    if (urlError === "not-admin") return "You do not have admin access."
 
     return ""
-  }, [searchParams])
+  }, [urlError])
 
   const emailLooksValid = useMemo(() => {
     if (!email) return true
