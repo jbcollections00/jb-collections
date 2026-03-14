@@ -41,15 +41,45 @@ export async function GET(req: Request) {
 
     const { data: file, error: fileError } = await supabase
       .from("files")
-      .select("id, title, file_url, storage_key, is_premium, downloads_count")
+      .select(`
+        id,
+        title,
+        visibility,
+        status,
+        downloads_count,
+        file_versions!inner (
+          id,
+          object_key,
+          bucket_name,
+          archive_type,
+          mime_type,
+          file_size_bytes,
+          is_current
+        )
+      `)
       .eq("id", fileId)
+      .eq("status", "published")
+      .eq("file_versions.is_current", true)
       .single()
 
     if (fileError || !file) {
       return NextResponse.json({ error: "File not found." }, { status: 404 })
     }
 
-    if (file.is_premium) {
+    const currentVersion = Array.isArray(file.file_versions)
+      ? file.file_versions[0]
+      : file.file_versions
+
+    if (!currentVersion?.object_key) {
+      return NextResponse.json(
+        { error: "No active file version found for download." },
+        { status: 404 }
+      )
+    }
+
+    const isPremiumFile = file.visibility === "premium"
+
+    if (isPremiumFile) {
       if (!user) {
         return NextResponse.redirect(new URL("/login", req.url))
       }
@@ -67,33 +97,21 @@ export async function GET(req: Request) {
       }
     }
 
-    let downloadUrl: string | null = null
+    let signedUrl: string
 
-    if (file.storage_key) {
-      try {
-        downloadUrl = await getSignedDownloadUrl({
-          key: file.storage_key,
-          expiresInSeconds: 60 * 5,
-          downloadFilename: file.title || "download",
-        })
-      } catch (signError) {
-        console.error("R2 signed URL generation failed:", signError)
-        return NextResponse.json(
-          { error: "Could not generate download link." },
-          { status: 500 }
-        )
-      }
-    } else if (file.file_url) {
-      downloadUrl = file.file_url
-    }
+    try {
+      signedUrl = await getSignedDownloadUrl({
+        key: currentVersion.object_key,
+        bucket: currentVersion.bucket_name || undefined,
+        expiresInSeconds: 60 * 5,
+        downloadFilename: file.title || "download",
+      })
+    } catch (signError) {
+      console.error("SIGNED URL ERROR:", signError)
 
-    if (!downloadUrl) {
       return NextResponse.json(
-        {
-          error:
-            "Download URL not available. This file has no storage_key or file_url saved in the database.",
-        },
-        { status: 404 }
+        { error: "Could not generate download URL." },
+        { status: 500 }
       )
     }
 
@@ -104,9 +122,9 @@ export async function GET(req: Request) {
       .update({ downloads_count: currentCount + 1 })
       .eq("id", file.id)
 
-    return NextResponse.redirect(downloadUrl)
+    return NextResponse.redirect(signedUrl)
   } catch (error) {
-    console.error("Download route error:", error)
+    console.error("DOWNLOAD ROUTE ERROR:", error)
 
     return NextResponse.json(
       {
