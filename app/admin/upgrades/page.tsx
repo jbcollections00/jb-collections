@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import AdminHeader from "@/app/components/AdminHeader"
+import AdminToast from "@/app/components/AdminToast"
 import { createClient } from "@/lib/supabase/client"
 
 type UpgradeRequest = {
@@ -21,6 +22,13 @@ type UpgradeRequest = {
 }
 
 type FilterType = "all" | "pending" | "approved" | "rejected"
+
+type ToastState = {
+  open: boolean
+  type: "success" | "error" | "info" | "warning"
+  title: string
+  message: string
+}
 
 export default function UpgradesPage() {
   const supabase = createClient()
@@ -50,6 +58,35 @@ export default function UpgradesPage() {
 
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [deletingRequest, setDeletingRequest] = useState(false)
+
+  const [toast, setToast] = useState<ToastState>({
+    open: false,
+    type: "success",
+    title: "",
+    message: "",
+  })
+
+  function showToast(
+    type: "success" | "error" | "info" | "warning",
+    title: string,
+    message: string
+  ) {
+    setToast({
+      open: false,
+      type,
+      title,
+      message,
+    })
+
+    window.setTimeout(() => {
+      setToast({
+        open: true,
+        type,
+        title,
+        message,
+      })
+    }, 10)
+  }
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null
@@ -137,6 +174,7 @@ export default function UpgradesPage() {
     if (error) {
       console.error("Load upgrades error:", error)
       if (showLoader) setLoading(false)
+      showToast("error", "Load Failed", error.message || "Could not load upgrade requests.")
       return
     }
 
@@ -163,12 +201,12 @@ export default function UpgradesPage() {
 
       if (error) {
         console.error("Set pending error:", error)
-        alert(`Update failed: ${error.message}`)
+        showToast("error", "Update Failed", error.message)
         return
       }
 
       await loadRequests(false)
-      alert("Request set to pending.")
+      showToast("info", "Request Updated", "Request set to pending.")
     } finally {
       setUpdatingStatus(false)
     }
@@ -176,7 +214,11 @@ export default function UpgradesPage() {
 
   async function approveRequest(request: UpgradeRequest) {
     if (!request.sender_id) {
-      alert("This request has no sender_id, so it cannot be approved.")
+      showToast(
+        "warning",
+        "Cannot Approve",
+        "This request has no sender_id, so it cannot be approved."
+      )
       return
     }
 
@@ -204,15 +246,15 @@ export default function UpgradesPage() {
       }
 
       if (!response.ok) {
-        alert(result.error || "Approve failed.")
+        showToast("error", "Approval Failed", result.error || "Approve failed.")
         return
       }
 
       await loadRequests(false)
-      alert("Request approved. User is now premium.")
+      showToast("success", "Upgrade Approved", "Request approved. User is now premium.")
     } catch (error) {
       console.error("Approve request error:", error)
-      alert("Approve failed.")
+      showToast("error", "Approval Failed", "Approve failed.")
     } finally {
       setUpdatingStatus(false)
     }
@@ -242,15 +284,15 @@ export default function UpgradesPage() {
       }
 
       if (!response.ok) {
-        alert(result.error || "Reject failed.")
+        showToast("error", "Reject Failed", result.error || "Reject failed.")
         return
       }
 
       await loadRequests(false)
-      alert("Request rejected.")
+      showToast("warning", "Request Rejected", "Request rejected.")
     } catch (error) {
       console.error("Reject request error:", error)
-      alert("Reject failed.")
+      showToast("error", "Reject Failed", "Reject failed.")
     } finally {
       setUpdatingStatus(false)
     }
@@ -267,13 +309,13 @@ export default function UpgradesPage() {
 
       if (error) {
         console.error("Delete upgrade request error:", error)
-        alert(`Delete failed: ${error.message}`)
+        showToast("error", "Delete Failed", error.message)
         return
       }
 
       setSelectedRequest(null)
       await loadRequests(false)
-      alert("Request deleted.")
+      showToast("success", "Request Deleted", "The upgrade request was deleted.")
     } finally {
       setDeletingRequest(false)
     }
@@ -301,13 +343,13 @@ export default function UpgradesPage() {
 
       if (error) {
         console.error("Send admin reply error:", error)
-        alert(`Reply failed: ${error.message}`)
+        showToast("error", "Reply Failed", error.message)
         return
       }
 
       setReplyBody("")
       await loadRequests(false)
-      alert("Reply saved.")
+      showToast("success", "Reply Saved", "Your admin reply has been saved.")
     } finally {
       setSavingReply(false)
     }
@@ -332,13 +374,13 @@ export default function UpgradesPage() {
 
       if (error) {
         console.error("Edit request error:", error)
-        alert(`Save failed: ${error.message}`)
+        showToast("error", "Save Failed", error.message)
         return
       }
 
       setIsEditingRequest(false)
       await loadRequests(false)
-      alert("Request updated.")
+      showToast("success", "Request Updated", "The upgrade request was updated.")
     } finally {
       setSavingRequestEdit(false)
     }
@@ -359,13 +401,13 @@ export default function UpgradesPage() {
 
       if (error) {
         console.error("Edit reply error:", error)
-        alert(`Save failed: ${error.message}`)
+        showToast("error", "Save Failed", error.message)
         return
       }
 
       setIsEditingReply(false)
       await loadRequests(false)
-      alert("Reply updated.")
+      showToast("success", "Reply Updated", "The admin reply was updated.")
     } finally {
       setSavingReplyEdit(false)
     }
@@ -384,14 +426,14 @@ export default function UpgradesPage() {
 
     if (error) {
       console.error("Delete admin reply error:", error)
-      alert(`Delete failed: ${error.message}`)
+      showToast("error", "Delete Failed", error.message)
       return
     }
 
     setIsEditingReply(false)
     setEditReplyText("")
     await loadRequests(false)
-    alert("Admin reply deleted.")
+    showToast("success", "Reply Deleted", "The admin reply was deleted.")
   }
 
   function getStatusLabel(req: UpgradeRequest) {
@@ -877,6 +919,19 @@ export default function UpgradesPage() {
           </div>
         </div>
       </div>
+
+      <AdminToast
+        open={toast.open}
+        type={toast.type}
+        title={toast.title}
+        message={toast.message}
+        onClose={() =>
+          setToast((prev) => ({
+            ...prev,
+            open: false,
+          }))
+        }
+      />
     </div>
   )
 }
