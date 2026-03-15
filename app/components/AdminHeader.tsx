@@ -13,6 +13,7 @@ const navItems = [
   { label: "Files", href: "/admin/files", icon: "📁" },
   { label: "Messages", href: "/admin/messages", icon: "💬" },
   { label: "Upgrades", href: "/admin/upgrades", icon: "⬆️" },
+  { label: "Users", href: "/admin/users", icon: "👥" },
 ]
 
 export default function AdminHeader() {

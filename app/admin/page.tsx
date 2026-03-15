@@ -42,6 +42,12 @@ const cards = [
     href: "/admin/upgrades",
     icon: "⬆️",
   },
+  {
+    title: "Users",
+    description: "View registered users and manage profiles.",
+    href: "/admin/users",
+    icon: "👥",
+  },
 ]
 
 export default function AdminPage() {
@@ -54,6 +60,8 @@ export default function AdminPage() {
     { label: "Files", value: "0", icon: "📁", color: "#0f172a" },
     { label: "Messages", value: "0", icon: "💬", color: "#dc2626" },
     { label: "Upgrades", value: "0", icon: "⬆️", color: "#16a34a" },
+    { label: "Total Users", value: "0", icon: "👥", color: "#7c3aed" },
+    { label: "Online Users", value: "0", icon: "🟢", color: "#059669" },
   ])
 
   useEffect(() => {
@@ -103,16 +111,25 @@ export default function AdminPage() {
 
   async function loadStats() {
     try {
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+
       const [
         { count: categoriesCount, error: categoriesError },
         { count: filesCount, error: filesError },
         { count: messagesCount, error: messagesError },
         { count: upgradesCount, error: upgradesError },
+        { count: usersCount, error: usersError },
+        onlineUsersResult,
       ] = await Promise.all([
         supabase.from("categories").select("*", { count: "exact", head: true }),
         supabase.from("files").select("*", { count: "exact", head: true }),
         supabase.from("messages").select("*", { count: "exact", head: true }),
         supabase.from("upgrades").select("*", { count: "exact", head: true }),
+        supabase.from("profiles").select("*", { count: "exact", head: true }),
+        supabase
+          .from("profiles")
+          .select("*", { count: "exact", head: true })
+          .gte("last_seen", fiveMinutesAgo),
       ])
 
       if (categoriesError) {
@@ -126,6 +143,18 @@ export default function AdminPage() {
       }
       if (upgradesError) {
         console.error("Upgrades count error:", upgradesError.message)
+      }
+      if (usersError) {
+        console.error("Users count error:", usersError.message)
+      }
+
+      let onlineUsersCount = 0
+
+      if (onlineUsersResult.error) {
+        console.error("Online users count error:", onlineUsersResult.error.message)
+        onlineUsersCount = 0
+      } else {
+        onlineUsersCount = onlineUsersResult.count ?? 0
       }
 
       setStats([
@@ -152,6 +181,18 @@ export default function AdminPage() {
           value: String(upgradesCount ?? 0),
           icon: "⬆️",
           color: "#16a34a",
+        },
+        {
+          label: "Total Users",
+          value: String(usersCount ?? 0),
+          icon: "👥",
+          color: "#7c3aed",
+        },
+        {
+          label: "Online Users",
+          value: String(onlineUsersCount),
+          icon: "🟢",
+          color: "#059669",
         },
       ])
     } catch (error) {
@@ -187,12 +228,12 @@ export default function AdminPage() {
           </h1>
 
           <p className="mt-3 max-w-3xl text-sm leading-7 text-blue-100 sm:text-base lg:text-lg">
-            Manage categories, files, messages, and upgrade requests from one
+            Manage categories, files, messages, users, and upgrade requests from one
             clean dashboard.
           </p>
         </div>
 
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-5">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 lg:gap-5">
           {stats.map((item) => (
             <div
               key={item.label}
@@ -219,7 +260,7 @@ export default function AdminPage() {
           ))}
         </div>
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4 xl:gap-6">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-5 xl:gap-6">
           {cards.map((card) => (
             <Link
               key={card.title}
