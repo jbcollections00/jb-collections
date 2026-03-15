@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 
@@ -32,11 +32,11 @@ export default function ProfilePageClient() {
   const [message, setMessage] = useState("")
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  useEffect(() => {
-    let active = true
-
-    async function fetchProfile() {
-      setLoading(true)
+  const loadProfile = useCallback(
+    async (showLoader = true) => {
+      if (showLoader) {
+        setLoading(true)
+      }
 
       try {
         const {
@@ -55,8 +55,6 @@ export default function ProfilePageClient() {
           return
         }
 
-        if (!active) return
-
         const userEmail = user.email || ""
         setAuthEmail(userEmail)
 
@@ -67,8 +65,6 @@ export default function ProfilePageClient() {
           )
           .eq("id", user.id)
           .maybeSingle()
-
-        if (!active) return
 
         if (error) {
           console.error("Failed to load profile:", error)
@@ -94,18 +90,42 @@ export default function ProfilePageClient() {
       } catch (error) {
         console.error("Unexpected profile error:", error)
       } finally {
-        if (active) {
+        if (showLoader) {
           setLoading(false)
         }
       }
+    },
+    [router, supabase]
+  )
+
+  useEffect(() => {
+    loadProfile(true)
+  }, [loadProfile])
+
+  useEffect(() => {
+    function handleFocusRefresh() {
+      loadProfile(false)
     }
 
-    fetchProfile()
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        loadProfile(false)
+      }
+    }
+
+    window.addEventListener("focus", handleFocusRefresh)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
+    const interval = window.setInterval(() => {
+      loadProfile(false)
+    }, 30000)
 
     return () => {
-      active = false
+      window.removeEventListener("focus", handleFocusRefresh)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+      window.clearInterval(interval)
     }
-  }, [router, supabase])
+  }, [loadProfile])
 
   async function handleLogout() {
     try {
