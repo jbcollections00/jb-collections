@@ -11,6 +11,7 @@ type FileItem = {
   slug?: string | null
   description: string | null
   cover_url?: string | null
+  thumbnail_url?: string | null
   visibility?: "free" | "premium" | "private" | null
   status?: "draft" | "review" | "published" | "flagged" | "removed" | null
   category_id: string | null
@@ -119,7 +120,7 @@ export default function FilesPage() {
       supabase
         .from("files")
         .select(
-          "id, title, slug, description, cover_url, visibility, status, category_id, created_at"
+          "id, title, slug, description, cover_url, thumbnail_url, visibility, status, category_id, created_at"
         )
         .order("created_at", { ascending: false }),
       supabase.from("categories").select("id,name").order("name", { ascending: true }),
@@ -179,6 +180,10 @@ export default function FilesPage() {
 
   function getFileType(name: string) {
     return name.includes(".") ? name.split(".").pop()?.toUpperCase() || null : null
+  }
+
+  function getDisplayThumbnail(file: FileItem) {
+    return file.thumbnail_url || file.cover_url || null
   }
 
   function handleFileChange(file: File | null) {
@@ -241,7 +246,7 @@ export default function FilesPage() {
     setSelectedFile(null)
     setSelectedThumbnail(null)
     setEditingId(file.id)
-    setExistingThumbnailUrl(file.cover_url || null)
+    setExistingThumbnailUrl(getDisplayThumbnail(file))
     setExistingStorageKey(null)
     setExistingFileSize(null)
     setExistingFileType(null)
@@ -460,8 +465,9 @@ export default function FilesPage() {
         fileType: finalFileType,
       })
 
+      const wasEditing = Boolean(editingId)
       clearForm()
-      setSuccessMessage(editingId ? "File updated successfully." : "File uploaded successfully.")
+      setSuccessMessage(wasEditing ? "File updated successfully." : "File uploaded successfully.")
       await loadData()
     } catch (error) {
       setStatusText("")
@@ -670,6 +676,9 @@ export default function FilesPage() {
                     src={existingThumbnailUrl}
                     alt="Current thumbnail"
                     className="mt-3 h-24 w-24 rounded-xl border border-slate-300 object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none"
+                    }}
                   />
                 )}
               </div>
@@ -708,64 +717,79 @@ export default function FilesPage() {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-              {files.map((file) => (
-                <div
-                  key={file.id}
-                  className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-                >
-                  <div className="flex aspect-square items-center justify-center bg-slate-100">
-                    {file.cover_url ? (
-                      <img
-                        src={file.cover_url}
-                        alt={file.title}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-xs font-bold text-slate-400">
-                        No Thumbnail
-                      </span>
-                    )}
-                  </div>
+              {files.map((file) => {
+                const displayThumbnail = getDisplayThumbnail(file)
 
-                  <div className="p-3">
-                    <div
-                      className="mb-2 line-clamp-2 min-h-[38px] text-sm font-extrabold leading-5 text-slate-900"
-                      title={file.title}
-                    >
-                      {file.title}
-                    </div>
-
-                    <div className="mb-3 flex flex-wrap gap-2">
-                      {file.visibility === "premium" && (
-                        <span className="rounded-full bg-slate-900 px-2 py-1 text-[10px] font-bold text-white">
-                          Premium
+                return (
+                  <div
+                    key={file.id}
+                    className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                  >
+                    <div className="flex aspect-square items-center justify-center bg-slate-100">
+                      {displayThumbnail ? (
+                        <img
+                          src={displayThumbnail}
+                          alt={file.title}
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none"
+                            const parent = e.currentTarget.parentElement
+                            if (parent && !parent.querySelector("[data-no-thumb]")) {
+                              const fallback = document.createElement("span")
+                              fallback.setAttribute("data-no-thumb", "true")
+                              fallback.className = "text-xs font-bold text-slate-400"
+                              fallback.textContent = "No Thumbnail"
+                              parent.appendChild(fallback)
+                            }
+                          }}
+                        />
+                      ) : (
+                        <span className="text-xs font-bold text-slate-400">
+                          No Thumbnail
                         </span>
                       )}
-
-                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-700">
-                        {file.status || "draft"}
-                      </span>
                     </div>
 
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => editFile(file)}
-                        className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                    <div className="p-3">
+                      <div
+                        className="mb-2 line-clamp-2 min-h-[38px] text-sm font-extrabold leading-5 text-slate-900"
+                        title={file.title}
                       >
-                        Edit
-                      </button>
+                        {file.title}
+                      </div>
 
-                      <button
-                        onClick={() => deleteFile(file.id)}
-                        disabled={deletingId === file.id}
-                        className="flex-1 rounded-lg bg-red-500 px-3 py-2 text-xs font-bold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
-                      >
-                        {deletingId === file.id ? "..." : "Delete"}
-                      </button>
+                      <div className="mb-3 flex flex-wrap gap-2">
+                        {file.visibility === "premium" && (
+                          <span className="rounded-full bg-slate-900 px-2 py-1 text-[10px] font-bold text-white">
+                            Premium
+                          </span>
+                        )}
+
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-700">
+                          {file.status || "draft"}
+                        </span>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => editFile(file)}
+                          className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          onClick={() => deleteFile(file.id)}
+                          disabled={deletingId === file.id}
+                          className="flex-1 rounded-lg bg-red-500 px-3 py-2 text-xs font-bold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
+                        >
+                          {deletingId === file.id ? "..." : "Delete"}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
