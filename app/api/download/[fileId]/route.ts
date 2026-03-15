@@ -15,6 +15,17 @@ export async function GET(
       return NextResponse.json({ error: "Missing file id" }, { status: 400 })
     }
 
+    // 🔒 Anti-leech referer check
+    const referer = req.headers.get("referer") || ""
+    const allowedHost = process.env.NEXT_PUBLIC_SITE_URL || ""
+
+    if (allowedHost && !referer.startsWith(allowedHost)) {
+      return NextResponse.json(
+        { error: "Direct download not allowed" },
+        { status: 403 }
+      )
+    }
+
     const supabase = await createClient()
 
     const {
@@ -78,15 +89,10 @@ export async function GET(
     let allowed = false
     const visibility = (fileRow.visibility || "free").toLowerCase()
 
-    if (isAdmin) {
-      allowed = true
-    } else if (visibility === "free") {
-      allowed = true
-    } else if (visibility === "premium") {
-      allowed = isPremiumUser
-    } else if (visibility === "private") {
-      allowed = false
-    }
+    if (isAdmin) allowed = true
+    else if (visibility === "free") allowed = true
+    else if (visibility === "premium") allowed = isPremiumUser
+    else if (visibility === "private") allowed = false
 
     if (!allowed) {
       await supabase.from("download_logs").insert({
@@ -94,6 +100,7 @@ export async function GET(
         file_id: fileRow.id,
         file_version_id: currentVersion.id,
         result: "denied",
+        ip_address: req.headers.get("x-forwarded-for"),
         user_agent: req.headers.get("user-agent"),
       })
 
@@ -117,7 +124,7 @@ export async function GET(
     const signedUrl = await getSignedDownloadUrl({
       key: currentVersion.object_key,
       bucket: currentVersion.bucket_name || undefined,
-      expiresInSeconds: 120,
+      expiresInSeconds: 60, // 🔒 reduced expiry
       downloadFilename: safeFilename,
     })
 
@@ -126,6 +133,7 @@ export async function GET(
       file_id: fileRow.id,
       file_version_id: currentVersion.id,
       result: "success",
+      ip_address: req.headers.get("x-forwarded-for"),
       user_agent: req.headers.get("user-agent"),
     })
 

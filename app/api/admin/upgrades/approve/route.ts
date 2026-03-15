@@ -52,7 +52,7 @@ export async function POST(req: Request) {
 
     const { data: upgradeRow, error: upgradeLookupError } = await supabase
       .from("upgrades")
-      .select("id, sender_id")
+      .select("id, sender_id, status")
       .eq("id", upgradeId)
       .maybeSingle()
 
@@ -72,7 +72,9 @@ export async function POST(req: Request) {
 
     const { error: upgradeError } = await supabase
       .from("upgrades")
-      .update({ status: "approved" })
+      .update({
+        status: "approved",
+      })
       .eq("id", upgradeId)
 
     if (upgradeError) {
@@ -85,7 +87,10 @@ export async function POST(req: Request) {
     const { error: profileError } = await supabase
       .from("profiles")
       .update({
+        membership: "premium",
         is_premium: true,
+        account_status: "Active",
+        status: "Active",
       })
       .eq("id", userId)
 
@@ -102,7 +107,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Failed to approve upgrade",
+        error:
+          error instanceof Error ? error.message : "Failed to approve upgrade",
       },
       { status: 500 }
     )

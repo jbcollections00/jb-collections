@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import AdminHeader from "@/app/components/AdminHeader"
 import { createClient } from "@/lib/supabase/client"
@@ -39,6 +39,7 @@ type FinalizeResponse = {
 export default function FilesPage() {
   const supabase = createClient()
   const router = useRouter()
+  const lastProgressRef = useRef(0)
 
   const [checkingAdmin, setCheckingAdmin] = useState(true)
   const [files, setFiles] = useState<FileItem[]>([])
@@ -91,7 +92,7 @@ export default function FilesPage() {
         .from("profiles")
         .select("role")
         .eq("id", user.id)
-        .single()
+        .maybeSingle()
 
       if (profileError || profile?.role !== "admin") {
         router.replace("/secure-admin-portal-7X9")
@@ -111,17 +112,23 @@ export default function FilesPage() {
     setLoading(true)
     setErrorMessage("")
 
-    const [{ data: filesData, error: filesError }, { data: categoriesData, error: categoriesError }] =
-      await Promise.all([
-        supabase
-          .from("files")
-          .select("id, title, slug, description, cover_url, visibility, status, category_id, created_at")
-          .order("created_at", { ascending: false }),
-        supabase.from("categories").select("id,name").order("name", { ascending: true }),
-      ])
+    const [
+      { data: filesData, error: filesError },
+      { data: categoriesData, error: categoriesError },
+    ] = await Promise.all([
+      supabase
+        .from("files")
+        .select(
+          "id, title, slug, description, cover_url, visibility, status, category_id, created_at"
+        )
+        .order("created_at", { ascending: false }),
+      supabase.from("categories").select("id,name").order("name", { ascending: true }),
+    ])
 
     if (filesError || categoriesError) {
-      setErrorMessage(filesError?.message || categoriesError?.message || "Failed to load data.")
+      setErrorMessage(
+        filesError?.message || categoriesError?.message || "Failed to load data."
+      )
     }
 
     setFiles((filesData as FileItem[]) || [])
@@ -134,11 +141,14 @@ export default function FilesPage() {
     setSuccessMessage("")
     setStatusText("")
     setUploadProgress(0)
+    lastProgressRef.current = 0
   }
 
   function resetFileInputs() {
     const fileInput = document.getElementById("file-upload-input") as HTMLInputElement | null
-    const thumbnailInput = document.getElementById("thumbnail-upload-input") as HTMLInputElement | null
+    const thumbnailInput = document.getElementById(
+      "thumbnail-upload-input"
+    ) as HTMLInputElement | null
 
     if (fileInput) fileInput.value = ""
     if (thumbnailInput) thumbnailInput.value = ""
@@ -200,7 +210,9 @@ export default function FilesPage() {
 
     if (!file.type.startsWith("image/")) {
       setSelectedThumbnail(null)
-      const thumbnailInput = document.getElementById("thumbnail-upload-input") as HTMLInputElement | null
+      const thumbnailInput = document.getElementById(
+        "thumbnail-upload-input"
+      ) as HTMLInputElement | null
       if (thumbnailInput) thumbnailInput.value = ""
       setErrorMessage("Thumbnail must be an image file.")
       return
@@ -209,7 +221,9 @@ export default function FilesPage() {
     const maxSizeInBytes = 10 * 1024 * 1024
     if (file.size > maxSizeInBytes) {
       setSelectedThumbnail(null)
-      const thumbnailInput = document.getElementById("thumbnail-upload-input") as HTMLInputElement | null
+      const thumbnailInput = document.getElementById(
+        "thumbnail-upload-input"
+      ) as HTMLInputElement | null
       if (thumbnailInput) thumbnailInput.value = ""
       setErrorMessage("Thumbnail is too large. Maximum allowed size is 10MB.")
       return
@@ -344,6 +358,21 @@ export default function FilesPage() {
     return result
   }
 
+  function updateProgress(percent: number, label: string) {
+    const previous = lastProgressRef.current
+
+    if (
+      percent === 100 ||
+      percent === 0 ||
+      percent >= previous + 2 ||
+      percent < previous
+    ) {
+      lastProgressRef.current = percent
+      setUploadProgress(percent)
+      setStatusText(`${label} ${percent}%`)
+    }
+  }
+
   async function saveFile() {
     clearMessages()
 
@@ -382,10 +411,10 @@ export default function FilesPage() {
 
         setStatusText("Uploading main file...")
         setUploadProgress(0)
+        lastProgressRef.current = 0
 
         await uploadFileDirect(selectedFile, presignedMain.uploadUrl, (percent) => {
-          setUploadProgress(percent)
-          setStatusText(`Uploading main file... ${percent}%`)
+          updateProgress(percent, "Uploading main file...")
         })
 
         finalStorageKey = presignedMain.key
@@ -404,13 +433,15 @@ export default function FilesPage() {
 
         setUploadProgress(0)
         setStatusText("Uploading thumbnail...")
+        lastProgressRef.current = 0
 
         await uploadFileDirect(selectedThumbnail, presignedThumb.uploadUrl, (percent) => {
-          setUploadProgress(percent)
-          setStatusText(`Uploading thumbnail... ${percent}%`)
+          updateProgress(percent, "Uploading thumbnail...")
         })
 
-        finalThumbnailUrl = `${process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL?.replace(/\/$/, "") || ""}/${presignedThumb.key}`
+        finalThumbnailUrl = `${
+          process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL?.replace(/\/$/, "") || ""
+        }/${presignedThumb.key}`
       }
 
       setUploadProgress(0)
@@ -429,9 +460,8 @@ export default function FilesPage() {
         fileType: finalFileType,
       })
 
-      setStatusText("")
-      setSuccessMessage(editingId ? "File updated successfully." : "File uploaded successfully.")
       clearForm()
+      setSuccessMessage(editingId ? "File updated successfully." : "File uploaded successfully.")
       await loadData()
     } catch (error) {
       setStatusText("")

@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto"
 import { NextRequest, NextResponse } from "next/server"
+import { createClient as createSupabaseAdmin } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase-server"
 import { getR2BucketName, getSignedUploadUrl } from "@/lib/r2"
 
@@ -72,6 +73,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!serviceRoleKey) {
+      return NextResponse.json(
+        { error: "Missing SUPABASE_SERVICE_ROLE_KEY" },
+        { status: 500 }
+      )
+    }
+
+    const adminDb = createSupabaseAdmin(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      serviceRoleKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    )
+
     const body = (await req.json()) as RequestBody
 
     if (!body?.action) {
@@ -80,7 +100,9 @@ export async function POST(req: NextRequest) {
 
     if (body.action === "presign") {
       const fileName = String(body.fileName || "").trim()
-      const contentType = String(body.contentType || "application/octet-stream").trim()
+      const contentType = String(
+        body.contentType || "application/octet-stream"
+      ).trim()
       const folder = String(body.folder || "").trim()
       const title = String(body.title || "").trim()
 
@@ -154,7 +176,7 @@ export async function POST(req: NextRequest) {
           )
         }
 
-        const { data: insertedFile, error: insertFileError } = await supabase
+        const { data: insertedFile, error: insertFileError } = await adminDb
           .from("files")
           .insert({
             title,
@@ -175,25 +197,26 @@ export async function POST(req: NextRequest) {
           )
         }
 
-        const versionPayload = {
-          file_id: insertedFile.id,
-          object_key: storageKey,
-          bucket_name: bucketName,
-          archive_type: fileType,
-          mime_type: null,
-          file_size_bytes: fileSize,
-          is_current: true,
-        }
-
-        const { error: insertVersionError } = await supabase
+        const { error: insertVersionError } = await adminDb
           .from("file_versions")
-          .insert(versionPayload)
+          .insert({
+            file_id: insertedFile.id,
+            object_key: storageKey,
+            bucket_name: bucketName,
+            archive_type: fileType,
+            mime_type: null,
+            file_size_bytes: fileSize,
+            is_current: true,
+          })
 
         if (insertVersionError) {
-          await supabase.from("files").delete().eq("id", insertedFile.id)
+          await adminDb.from("files").delete().eq("id", insertedFile.id)
 
           return NextResponse.json(
-            { error: insertVersionError.message || "Failed to create file version." },
+            {
+              error:
+                insertVersionError.message || "Failed to create file version.",
+            },
             { status: 500 }
           )
         }
@@ -208,20 +231,23 @@ export async function POST(req: NextRequest) {
       const fileId = String(body.id || "").trim()
 
       if (!fileId) {
-        return NextResponse.json({ error: "Missing file id for update." }, { status: 400 })
+        return NextResponse.json(
+          { error: "Missing file id for update." },
+          { status: 400 }
+        )
       }
 
-      const { data: existingFile, error: existingFileError } = await supabase
+      const { data: existingFile, error: existingFileError } = await adminDb
         .from("files")
         .select("id")
         .eq("id", fileId)
-        .single()
+        .maybeSingle()
 
       if (existingFileError || !existingFile) {
         return NextResponse.json({ error: "File not found." }, { status: 404 })
       }
 
-      const { error: updateFileError } = await supabase
+      const { error: updateFileError } = await adminDb
         .from("files")
         .update({
           title,
@@ -242,7 +268,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (storageKey) {
-        const { error: clearCurrentError } = await supabase
+        const { error: clearCurrentError } = await adminDb
           .from("file_versions")
           .update({ is_current: false })
           .eq("file_id", fileId)
@@ -250,12 +276,16 @@ export async function POST(req: NextRequest) {
 
         if (clearCurrentError) {
           return NextResponse.json(
-            { error: clearCurrentError.message || "Failed to update file version state." },
+            {
+              error:
+                clearCurrentError.message ||
+                "Failed to update file version state.",
+            },
             { status: 500 }
           )
         }
 
-        const { error: insertVersionError } = await supabase
+        const { error: insertVersionError } = await adminDb
           .from("file_versions")
           .insert({
             file_id: fileId,
@@ -269,7 +299,11 @@ export async function POST(req: NextRequest) {
 
         if (insertVersionError) {
           return NextResponse.json(
-            { error: insertVersionError.message || "Failed to create new file version." },
+            {
+              error:
+                insertVersionError.message ||
+                "Failed to create new file version.",
+            },
             { status: 500 }
           )
         }

@@ -13,6 +13,10 @@ type StatItem = {
   color: string
 }
 
+type AdminProfile = {
+  role?: string | null
+}
+
 const cards = [
   {
     title: "Categories",
@@ -54,6 +58,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     checkAdminAndLoad()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function checkAdminAndLoad() {
@@ -66,7 +71,7 @@ export default function AdminPage() {
       } = await supabase.auth.getUser()
 
       if (userError || !user) {
-        router.replace("/secure-admin-portal-7X9")
+        router.replace("/admin/login")
         return
       }
 
@@ -74,17 +79,23 @@ export default function AdminPage() {
         .from("profiles")
         .select("role")
         .eq("id", user.id)
-        .single()
+        .maybeSingle<AdminProfile>()
 
-      if (profileError || profile?.role !== "admin") {
-        router.replace("/secure-admin-portal-7X9")
+      if (profileError) {
+        console.error("Failed to load admin profile:", profileError)
+        router.replace("/admin/login?error=failed")
+        return
+      }
+
+      if (!profile || profile.role !== "admin") {
+        router.replace("/admin/login?error=not-admin")
         return
       }
 
       await loadStats()
     } catch (error) {
       console.error("Admin auth check failed:", error)
-      router.replace("/secure-admin-portal-7X9")
+      router.replace("/admin/login?error=failed")
     } finally {
       setCheckingAdmin(false)
     }
@@ -104,10 +115,18 @@ export default function AdminPage() {
         supabase.from("upgrades").select("*", { count: "exact", head: true }),
       ])
 
-      if (categoriesError) console.error("Categories count error:", categoriesError.message)
-      if (filesError) console.error("Files count error:", filesError.message)
-      if (messagesError) console.error("Messages count error:", messagesError.message)
-      if (upgradesError) console.error("Upgrades count error:", upgradesError.message)
+      if (categoriesError) {
+        console.error("Categories count error:", categoriesError.message)
+      }
+      if (filesError) {
+        console.error("Files count error:", filesError.message)
+      }
+      if (messagesError) {
+        console.error("Messages count error:", messagesError.message)
+      }
+      if (upgradesError) {
+        console.error("Upgrades count error:", upgradesError.message)
+      }
 
       setStats([
         {
@@ -144,7 +163,9 @@ export default function AdminPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-[#eef4ff] via-[#f8fbff] to-white px-4">
         <div className="rounded-[24px] border border-slate-200 bg-white px-8 py-6 text-center shadow-[0_12px_28px_rgba(0,0,0,0.05)]">
-          <p className="text-lg font-bold text-slate-800">Checking admin access...</p>
+          <p className="text-lg font-bold text-slate-800">
+            Checking admin access...
+          </p>
           <p className="mt-2 text-sm text-slate-500">Please wait.</p>
         </div>
       </div>
@@ -166,7 +187,8 @@ export default function AdminPage() {
           </h1>
 
           <p className="mt-3 max-w-3xl text-sm leading-7 text-blue-100 sm:text-base lg:text-lg">
-            Manage categories, files, messages, and upgrade requests from one clean dashboard.
+            Manage categories, files, messages, and upgrade requests from one
+            clean dashboard.
           </p>
         </div>
 
@@ -178,7 +200,9 @@ export default function AdminPage() {
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-sm font-bold text-slate-500">{item.label}</div>
+                  <div className="text-sm font-bold text-slate-500">
+                    {item.label}
+                  </div>
                   <div
                     className="mt-2 text-3xl font-extrabold sm:text-4xl lg:text-[42px]"
                     style={{ color: item.color }}
@@ -206,7 +230,9 @@ export default function AdminPage() {
                 {card.icon}
               </div>
 
-              <h2 className="text-2xl font-extrabold sm:text-[30px]">{card.title}</h2>
+              <h2 className="text-2xl font-extrabold sm:text-[30px]">
+                {card.title}
+              </h2>
 
               <p className="mt-3 text-sm leading-7 text-slate-500 sm:text-base">
                 {card.description}

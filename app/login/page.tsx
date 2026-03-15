@@ -37,7 +37,6 @@ export default function LoginPage() {
     if (urlError === "invalid") return "Invalid email or password."
     if (urlError === "failed") return "Login failed. Please try again."
     if (urlError === "not-admin") return "You do not have admin access."
-
     return ""
   }, [urlError])
 
@@ -73,15 +72,17 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${origin}`,
+          redirectTo: origin,
         },
       })
 
       if (error) {
         throw error
       }
-    } catch (err: any) {
-      setGoogleError(err?.message || "Google sign-in failed.")
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Google sign-in failed."
+      setGoogleError(message)
       setGoogleLoading(false)
     }
   }
