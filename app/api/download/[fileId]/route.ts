@@ -16,13 +16,19 @@ export async function GET(
     }
 
     const referer = req.headers.get("referer") || ""
-    const allowedHost = process.env.NEXT_PUBLIC_SITE_URL || ""
+    const allowedHost = String(process.env.NEXT_PUBLIC_SITE_URL || "")
+      .trim()
+      .replace(/\/$/, "")
 
-    if (allowedHost && referer && !referer.startsWith(allowedHost)) {
-      return NextResponse.json(
-        { error: "Direct download not allowed" },
-        { status: 403 }
-      )
+    if (allowedHost && referer) {
+      const normalizedReferer = referer.replace(/\/$/, "")
+
+      if (!normalizedReferer.startsWith(allowedHost)) {
+        return NextResponse.json(
+          { error: "Direct download not allowed" },
+          { status: 403 }
+        )
+      }
     }
 
     const supabase = await createClient()
