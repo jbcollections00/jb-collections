@@ -495,9 +495,26 @@ export default function FilesPage() {
     setDeletingId(id)
 
     try {
-      const { error } = await supabase.from("files").delete().eq("id", id)
+      const response = await fetch("/api/admin/files/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ fileId: id }),
+      })
 
-      if (error) throw new Error(error.message || "Failed to delete file.")
+      const text = await response.text()
+      let result: { success?: boolean; error?: string } = {}
+
+      try {
+        result = text ? JSON.parse(text) : {}
+      } catch {
+        result = { error: text || "Invalid server response." }
+      }
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to delete file.")
+      }
 
       if (editingId === id) {
         clearForm()

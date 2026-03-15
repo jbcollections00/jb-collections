@@ -15,11 +15,10 @@ export async function GET(
       return NextResponse.json({ error: "Missing file id" }, { status: 400 })
     }
 
-    // 🔒 Anti-leech referer check
     const referer = req.headers.get("referer") || ""
     const allowedHost = process.env.NEXT_PUBLIC_SITE_URL || ""
 
-    if (allowedHost && !referer.startsWith(allowedHost)) {
+    if (allowedHost && referer && !referer.startsWith(allowedHost)) {
       return NextResponse.json(
         { error: "Direct download not allowed" },
         { status: 403 }
@@ -49,12 +48,14 @@ export async function GET(
 
     const { data: fileRow, error: fileError } = await supabase
       .from("files")
-      .select(`
+      .select(
+        `
         id,
         title,
         slug,
         visibility,
         status,
+        downloads_count,
         file_versions!inner (
           id,
           object_key,
@@ -64,7 +65,8 @@ export async function GET(
           file_size_bytes,
           is_current
         )
-      `)
+      `
+      )
       .eq("id", fileId)
       .eq("status", "published")
       .eq("file_versions.is_current", true)
@@ -89,10 +91,15 @@ export async function GET(
     let allowed = false
     const visibility = (fileRow.visibility || "free").toLowerCase()
 
-    if (isAdmin) allowed = true
-    else if (visibility === "free") allowed = true
-    else if (visibility === "premium") allowed = isPremiumUser
-    else if (visibility === "private") allowed = false
+    if (isAdmin) {
+      allowed = true
+    } else if (visibility === "free") {
+      allowed = true
+    } else if (visibility === "premium") {
+      allowed = isPremiumUser
+    } else if (visibility === "private") {
+      allowed = false
+    }
 
     if (!allowed) {
       await supabase.from("download_logs").insert({
@@ -124,7 +131,7 @@ export async function GET(
     const signedUrl = await getSignedDownloadUrl({
       key: currentVersion.object_key,
       bucket: currentVersion.bucket_name || undefined,
-      expiresInSeconds: 60, // 🔒 reduced expiry
+      expiresInSeconds: 60,
       downloadFilename: safeFilename,
     })
 
@@ -136,6 +143,13 @@ export async function GET(
       ip_address: req.headers.get("x-forwarded-for"),
       user_agent: req.headers.get("user-agent"),
     })
+
+    await supabase
+      .from("files")
+      .update({
+        downloads_count: (fileRow.downloads_count || 0) + 1,
+      })
+      .eq("id", fileRow.id)
 
     return NextResponse.redirect(signedUrl, { status: 302 })
   } catch (error) {
