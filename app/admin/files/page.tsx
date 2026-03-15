@@ -183,7 +183,15 @@ export default function FilesPage() {
   }
 
   function getDisplayThumbnail(file: FileItem) {
-    return file.thumbnail_url || file.cover_url || null
+    if (file.thumbnail_url && /^https?:\/\//i.test(file.thumbnail_url)) {
+      return file.thumbnail_url
+    }
+
+    if (file.cover_url && /^https?:\/\//i.test(file.cover_url)) {
+      return file.cover_url
+    }
+
+    return null
   }
 
   function handleFileChange(file: File | null) {
