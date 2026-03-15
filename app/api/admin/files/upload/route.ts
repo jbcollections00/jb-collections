@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
         typeof body.storageKey === "string" && body.storageKey.trim()
           ? body.storageKey.trim()
           : null
-      const thumbnailUrl =
+      const incomingThumbnailUrl =
         typeof body.thumbnailUrl === "string" && body.thumbnailUrl.trim()
           ? body.thumbnailUrl.trim()
           : null
@@ -182,7 +182,8 @@ export async function POST(req: NextRequest) {
             title,
             slug,
             description: description || null,
-            cover_url: thumbnailUrl,
+            cover_url: incomingThumbnailUrl,
+            thumbnail_url: incomingThumbnailUrl,
             visibility,
             status: "published",
             category_id: categoryId,
@@ -239,7 +240,7 @@ export async function POST(req: NextRequest) {
 
       const { data: existingFile, error: existingFileError } = await adminDb
         .from("files")
-        .select("id")
+        .select("id, cover_url, thumbnail_url")
         .eq("id", fileId)
         .maybeSingle()
 
@@ -247,13 +248,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "File not found." }, { status: 404 })
       }
 
+      const finalThumbnailUrl =
+        incomingThumbnailUrl || existingFile.thumbnail_url || existingFile.cover_url || null
+
       const { error: updateFileError } = await adminDb
         .from("files")
         .update({
           title,
           slug,
           description: description || null,
-          cover_url: thumbnailUrl,
+          cover_url: finalThumbnailUrl,
+          thumbnail_url: finalThumbnailUrl,
           visibility,
           category_id: categoryId,
           status: "published",
