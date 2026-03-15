@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
-import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
+import { createServerClient } from "@supabase/ssr"
+import { createClient as createSupabaseAdmin } from "@supabase/supabase-js"
 
 export const runtime = "nodejs"
 
@@ -50,7 +51,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const { data: upgradeRow, error: upgradeLookupError } = await supabase
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!serviceRoleKey) {
+      return NextResponse.json(
+        { error: "Missing SUPABASE_SERVICE_ROLE_KEY" },
+        { status: 500 }
+      )
+    }
+
+    const adminDb = createSupabaseAdmin(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      serviceRoleKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    )
+
+    const { data: upgradeRow, error: upgradeLookupError } = await adminDb
       .from("upgrades")
       .select("id, sender_id, status")
       .eq("id", upgradeId)
@@ -70,7 +91,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const { error: upgradeError } = await supabase
+    const { error: upgradeError } = await adminDb
       .from("upgrades")
       .update({
         status: "approved",
@@ -84,7 +105,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const { error: profileError } = await supabase
+    const { error: profileError } = await adminDb
       .from("profiles")
       .update({
         membership: "premium",
