@@ -16,6 +16,7 @@ export async function POST(req: Request) {
     }
 
     const cookieStore = await cookies()
+
     const response = NextResponse.redirect(new URL("/dashboard", req.url), {
       status: 303,
     })
@@ -59,7 +60,9 @@ export async function POST(req: Request) {
     }
 
     return response
-  } catch {
+  } catch (error) {
+    console.error("Login route error:", error)
+
     return NextResponse.redirect(new URL("/login?error=failed", req.url), {
       status: 303,
     })

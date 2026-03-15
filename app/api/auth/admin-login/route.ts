@@ -30,18 +30,12 @@ export async function POST(req: Request) {
             return cookieStore.get(name)?.value
           },
           set(name: string, value: string, options: Record<string, unknown>) {
-            response.cookies.set({
-              name,
-              value,
-              ...(options as Parameters<typeof response.cookies.set>[0]),
-            })
+            response.cookies.set(name, value, options)
           },
           remove(name: string, options: Record<string, unknown>) {
-            response.cookies.set({
-              name,
-              value: "",
+            response.cookies.set(name, "", {
+              ...options,
               maxAge: 0,
-              ...(options as Parameters<typeof response.cookies.set>[0]),
             })
           },
         },
