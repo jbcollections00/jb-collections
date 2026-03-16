@@ -69,6 +69,8 @@ export default function AdminUsersPage() {
   async function checkAdminAndLoad() {
     try {
       setCheckingAdmin(true)
+      setErrorMessage("")
+      setSuccessMessage("")
 
       const {
         data: { user },
@@ -106,19 +108,20 @@ export default function AdminUsersPage() {
       setErrorMessage("")
       setSuccessMessage("")
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select(
-          "id, email, full_name, name, username, membership, account_status, status, is_premium, role, last_seen, created_at"
-        )
-        .order("created_at", { ascending: false })
+      const res = await fetch("/api/admin/users", {
+        method: "GET",
+        cache: "no-store",
+      })
 
-      if (error) {
-        setErrorMessage(error.message || "Failed to load users.")
+      const result = await res.json()
+
+      if (!res.ok) {
+        setErrorMessage(result?.error || "Failed to load users.")
         return
       }
 
-      const nextUsers = (data as UserRow[]) || []
+      const nextUsers = (result?.users as UserRow[]) || []
+
       setUsers(nextUsers)
       setSelectedUser((current) => {
         if (!current) return nextUsers[0] || null
@@ -190,9 +193,13 @@ export default function AdminUsersPage() {
       const normalizedRole = editRole.trim() || "user"
       const normalizedStatus = editAccountStatus.trim() || "Active"
 
-      const { error } = await supabase
-        .from("profiles")
-        .update({
+      const res = await fetch("/api/admin/users/update", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: selectedUser.id,
           full_name: editFullName.trim() || null,
           username: editUsername.trim() || null,
           membership: normalizedMembership,
@@ -200,11 +207,13 @@ export default function AdminUsersPage() {
           account_status: normalizedStatus,
           status: normalizedStatus,
           role: normalizedRole,
-        })
-        .eq("id", selectedUser.id)
+        }),
+      })
 
-      if (error) {
-        setErrorMessage(error.message || "Failed to update user.")
+      const result = await res.json()
+
+      if (!res.ok) {
+        setErrorMessage(result?.error || "Failed to update user.")
         return
       }
 
