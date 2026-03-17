@@ -203,7 +203,11 @@ export default function CategoryPage() {
       const description = file.description?.toLowerCase() || ""
       const type = getDisplayFileType(file).toLowerCase()
 
-      return name.includes(keyword) || description.includes(keyword) || type.includes(keyword)
+      return (
+        name.includes(keyword) ||
+        description.includes(keyword) ||
+        type.includes(keyword)
+      )
     })
   }, [files, search])
 
@@ -226,7 +230,7 @@ export default function CategoryPage() {
   }
 
   function handleDownload(file: FileItem) {
-  window.location.href = `/download/${file.id}``
+    window.location.href = `/download/${file.id}`
   }
 
   async function handleLogout() {
