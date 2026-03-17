@@ -16,6 +16,8 @@ type FileItem = {
   status?: "draft" | "review" | "published" | "flagged" | "removed" | null
   category_id: string | null
   created_at: string
+  shrinkme_url?: string | null
+  linkvertise_url?: string | null
 }
 
 type Category = {
@@ -50,6 +52,8 @@ export default function FilesPage() {
   const [description, setDescription] = useState("")
   const [categoryId, setCategoryId] = useState("")
   const [isPremium, setIsPremium] = useState(false)
+  const [shrinkmeUrl, setShrinkmeUrl] = useState("")
+  const [linkvertiseUrl, setLinkvertiseUrl] = useState("")
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedThumbnail, setSelectedThumbnail] = useState<File | null>(null)
@@ -120,7 +124,7 @@ export default function FilesPage() {
       supabase
         .from("files")
         .select(
-          "id, title, slug, description, cover_url, thumbnail_url, visibility, status, category_id, created_at"
+          "id, title, slug, description, cover_url, thumbnail_url, visibility, status, category_id, created_at, shrinkme_url, linkvertise_url"
         )
         .order("created_at", { ascending: false }),
       supabase.from("categories").select("id,name").order("name", { ascending: true }),
@@ -160,6 +164,8 @@ export default function FilesPage() {
     setDescription("")
     setCategoryId("")
     setIsPremium(false)
+    setShrinkmeUrl("")
+    setLinkvertiseUrl("")
     setSelectedFile(null)
     setSelectedThumbnail(null)
     setEditingId(null)
@@ -251,6 +257,8 @@ export default function FilesPage() {
     setDescription(file.description || "")
     setCategoryId(file.category_id || "")
     setIsPremium(file.visibility === "premium")
+    setShrinkmeUrl(file.shrinkme_url || "")
+    setLinkvertiseUrl(file.linkvertise_url || "")
     setSelectedFile(null)
     setSelectedThumbnail(null)
     setEditingId(file.id)
@@ -339,6 +347,8 @@ export default function FilesPage() {
     description: string
     categoryId: string
     isPremium: boolean
+    shrinkmeUrl: string | null
+    linkvertiseUrl: string | null
     storageKey: string | null
     thumbnailUrl: string | null
     fileSize: number | null
@@ -467,6 +477,8 @@ export default function FilesPage() {
         description,
         categoryId,
         isPremium,
+        shrinkmeUrl: shrinkmeUrl.trim() || null,
+        linkvertiseUrl: linkvertiseUrl.trim() || null,
         storageKey: finalStorageKey,
         thumbnailUrl: finalThumbnailUrl,
         fileSize: finalFileSize,
@@ -634,6 +646,24 @@ export default function FilesPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
+              <input
+                placeholder="ShrinkMe link (optional)"
+                value={shrinkmeUrl}
+                onChange={(e) => setShrinkmeUrl(e.target.value)}
+                disabled={saving}
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+              />
+
+              <input
+                placeholder="Linkvertise link (optional)"
+                value={linkvertiseUrl}
+                onChange={(e) => setLinkvertiseUrl(e.target.value)}
+                disabled={saving}
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+              />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <label
                   htmlFor="file-upload-input"
@@ -793,6 +823,15 @@ export default function FilesPage() {
                         <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-700">
                           {file.status || "draft"}
                         </span>
+                      </div>
+
+                      <div className="mb-3 space-y-1 text-[10px] font-bold text-slate-500">
+                        {file.shrinkme_url ? <p>ShrinkMe: Added</p> : <p>ShrinkMe: None</p>}
+                        {file.linkvertise_url ? (
+                          <p>Linkvertise: Added</p>
+                        ) : (
+                          <p>Linkvertise: None</p>
+                        )}
                       </div>
 
                       <div className="flex gap-2">

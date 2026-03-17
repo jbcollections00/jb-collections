@@ -4,6 +4,8 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import AdSlot from "@/app/components/AdSlot"
+import { IN_CONTENT_AD } from "@/app/lib/adCodes"
 
 type Category = {
   id: string
@@ -224,7 +226,7 @@ export default function CategoryPage() {
   }
 
   function handleDownload(file: FileItem) {
-    window.location.href = `/api/download/${file.id}`
+  window.location.href = `/download/${file.id}``
   }
 
   async function handleLogout() {
@@ -303,9 +305,9 @@ export default function CategoryPage() {
   const startItem = filteredFiles.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
   const endItem = Math.min(currentPage * PAGE_SIZE, filteredFiles.length)
 
-  const visiblePages = Array.from({ length: totalPages })
-    .map((_, index) => index + 1)
-    .filter((page) => Math.abs(page - currentPage) <= 2)
+  const visiblePages = Array.from({ length: totalPages }, (_, index) => index + 1).filter(
+    (page) => Math.abs(page - currentPage) <= 2
+  )
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -462,6 +464,10 @@ export default function CategoryPage() {
           </div>
         </div>
 
+        <div className="mb-6 flex justify-center">
+          <AdSlot code={IN_CONTENT_AD} className="text-center" />
+        </div>
+
         {filteredFiles.length === 0 ? (
           <div className="rounded-[24px] border border-dashed border-slate-300 bg-white px-6 py-20 text-center shadow-sm sm:rounded-[30px] sm:py-24">
             <div className="mx-auto max-w-md">
@@ -481,66 +487,78 @@ export default function CategoryPage() {
             <div className="mb-5 text-center text-sm text-slate-600">
               Showing <span className="font-bold text-slate-900">{startItem}</span> to{" "}
               <span className="font-bold text-slate-900">{endItem}</span> of{" "}
-              <span className="font-bold text-slate-900">{formatNumber(filteredFiles.length)}</span> files
+              <span className="font-bold text-slate-900">
+                {formatNumber(filteredFiles.length)}
+              </span>{" "}
+              files
             </div>
 
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-              {paginatedFiles.map((file) => {
+              {paginatedFiles.map((file, index) => {
                 const previewImage = getPreviewImage(file)
                 const type = getDisplayFileType(file)
                 const icon = getFileIcon(type)
 
                 return (
-                  <div
-                    key={file.id}
-                    className="group overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
-                  >
-                    <div className="relative overflow-hidden bg-slate-100">
-                      <div className="aspect-[4/5] overflow-hidden">
-                        {previewImage ? (
-                          <img
-                            src={previewImage}
-                            alt={getDisplayName(file)}
-                            loading="lazy"
-                            decoding="async"
-                            className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-slate-100 via-slate-50 to-slate-200">
-                            <div className="mb-3 text-5xl">{icon}</div>
-                            <p className="px-4 text-center text-sm font-semibold text-slate-500">
-                              No preview available
-                            </p>
-                          </div>
-                        )}
-
-                        {file.visibility === "premium" && (
-                          <div className="absolute right-3 top-3 rounded-full bg-black/75 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur-md">
-                            Premium
-                          </div>
-                        )}
+                  <div key={file.id}>
+                    {(index === 3 || index === 9) && (
+                      <div className="col-span-full mb-4 flex justify-center">
+                        <AdSlot code={IN_CONTENT_AD} className="text-center" />
                       </div>
-                    </div>
+                    )}
 
-                    <div className="px-3 pb-3 pt-2">
-                      <h3
-                        className="mb-2 line-clamp-2 min-h-[40px] text-center text-sm font-extrabold leading-tight text-slate-900"
-                        title={getDisplayName(file)}
-                      >
-                        {getDisplayName(file)}
-                      </h3>
+                    <div className="group overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+                      <div className="relative overflow-hidden bg-slate-100">
+                        <div className="aspect-[4/5] overflow-hidden">
+                          {previewImage ? (
+                            <img
+                              src={previewImage}
+                              alt={getDisplayName(file)}
+                              loading="lazy"
+                              decoding="async"
+                              className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-slate-100 via-slate-50 to-slate-200">
+                              <div className="mb-3 text-5xl">{icon}</div>
+                              <p className="px-4 text-center text-sm font-semibold text-slate-500">
+                                No preview available
+                              </p>
+                            </div>
+                          )}
 
-                      <button
-                        type="button"
-                        onClick={() => handleDownload(file)}
-                        className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-3 py-2 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
-                      >
-                        Download Now
-                      </button>
+                          {file.visibility === "premium" && (
+                            <div className="absolute right-3 top-3 rounded-full bg-black/75 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur-md">
+                              Premium
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="px-3 pb-3 pt-2">
+                        <h3
+                          className="mb-2 line-clamp-2 min-h-[40px] text-center text-sm font-extrabold leading-tight text-slate-900"
+                          title={getDisplayName(file)}
+                        >
+                          {getDisplayName(file)}
+                        </h3>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDownload(file)}
+                          className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-3 py-2 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
+                        >
+                          Download Now
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )
               })}
+            </div>
+
+            <div className="mt-8 flex justify-center">
+              <AdSlot code={IN_CONTENT_AD} className="text-center" />
             </div>
 
             <div className="mt-8 flex flex-col items-center gap-4 sm:mt-10">

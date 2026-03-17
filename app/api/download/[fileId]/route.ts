@@ -22,7 +22,6 @@ export async function GET(
 
     if (allowedHost && referer) {
       const normalizedReferer = referer.replace(/\/$/, "")
-
       if (!normalizedReferer.startsWith(allowedHost)) {
         return NextResponse.json(
           { error: "Direct download not allowed" },
@@ -52,57 +51,77 @@ export async function GET(
     const isPremiumUser =
       profile?.is_premium === true || profile?.membership === "premium"
 
-    const { data: fileRow, error: fileError } = await supabase
+    const { data: fileOnly, error: fileOnlyError } = await supabase
       .from("files")
-      .select(
-        `
-        id,
-        title,
-        slug,
-        visibility,
-        status,
-        downloads_count,
-        file_versions!inner (
-          id,
-          object_key,
-          bucket_name,
-          archive_type,
-          mime_type,
-          file_size_bytes,
-          is_current
-        )
-      `
-      )
+      .select("id, title, slug, visibility, status, downloads_count")
       .eq("id", fileId)
-      .eq("status", "published")
-      .eq("file_versions.is_current", true)
-      .single()
+      .maybeSingle()
 
-    if (fileError || !fileRow) {
-      return NextResponse.json({ error: "File not found" }, { status: 404 })
+    if (fileOnlyError) {
+      return NextResponse.json(
+        { error: "Failed to read file record", details: fileOnlyError.message },
+        { status: 500 }
+      )
     }
 
-    const currentVersion =
-      Array.isArray(fileRow.file_versions) && fileRow.file_versions.length > 0
-        ? fileRow.file_versions[0]
-        : null
+    if (!fileOnly) {
+      return NextResponse.json({ error: "File row not found" }, { status: 404 })
+    }
 
-    if (!currentVersion?.object_key) {
+    if (fileOnly.status !== "published") {
       return NextResponse.json(
-        { error: "No active file version found" },
+        { error: `File is not published. Current status: ${fileOnly.status}` },
+        { status: 404 }
+      )
+    }
+
+    const { data: versions, error: versionsError } = await supabase
+      .from("file_versions")
+      .select(
+        "id, file_id, object_key, bucket_name, archive_type, mime_type, file_size_bytes, is_current"
+      )
+      .eq("file_id", fileId)
+      .order("is_current", { ascending: false })
+
+    if (versionsError) {
+      return NextResponse.json(
+        { error: "Failed to read file versions", details: versionsError.message },
+        { status: 500 }
+      )
+    }
+
+    if (!versions || versions.length === 0) {
+      return NextResponse.json(
+        { error: "No file_versions rows found for this file" },
+        { status: 404 }
+      )
+    }
+
+    const currentVersion = versions.find((v) => v.is_current === true)
+
+    if (!currentVersion) {
+      return NextResponse.json(
+        { error: "No current file version found. Set is_current=true on one version." },
+        { status: 404 }
+      )
+    }
+
+    if (!currentVersion.object_key) {
+      return NextResponse.json(
+        { error: "Current version is missing object_key" },
         { status: 404 }
       )
     }
 
     let allowed = false
-    const visibility = (fileRow.visibility || "free").toLowerCase()
+    const visibility = (fileOnly.visibility || "free").toLowerCase()
 
     if (isAdmin) {
       allowed = true
     } else if (visibility === "free") {
       allowed = true
     } else if (visibility === "premium") {
-      allowed = isPremiumUser
+      allowed = true
     } else if (visibility === "private") {
       allowed = false
     }
@@ -110,7 +129,7 @@ export async function GET(
     if (!allowed) {
       await supabase.from("download_logs").insert({
         user_id: user.id,
-        file_id: fileRow.id,
+        file_id: fileOnly.id,
         file_version_id: currentVersion.id,
         result: "denied",
         ip_address: req.headers.get("x-forwarded-for"),
@@ -126,7 +145,7 @@ export async function GET(
     const extension =
       currentVersion.archive_type?.trim()?.toLowerCase() || "zip"
 
-    const baseName = (fileRow.slug || fileRow.title || fileRow.id)
+    const baseName = (fileOnly.slug || fileOnly.title || fileOnly.id)
       .toString()
       .replace(/[^a-zA-Z0-9-_]/g, "_")
       .replace(/_+/g, "_")
@@ -143,7 +162,7 @@ export async function GET(
 
     await supabase.from("download_logs").insert({
       user_id: user.id,
-      file_id: fileRow.id,
+      file_id: fileOnly.id,
       file_version_id: currentVersion.id,
       result: "success",
       ip_address: req.headers.get("x-forwarded-for"),
@@ -153,9 +172,9 @@ export async function GET(
     await supabase
       .from("files")
       .update({
-        downloads_count: (fileRow.downloads_count || 0) + 1,
+        downloads_count: (fileOnly.downloads_count || 0) + 1,
       })
-      .eq("id", fileRow.id)
+      .eq("id", fileOnly.id)
 
     return NextResponse.redirect(signedUrl, { status: 302 })
   } catch (error) {
