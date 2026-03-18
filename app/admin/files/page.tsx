@@ -39,6 +39,29 @@ type FinalizeResponse = {
   fileId?: string
 }
 
+type Visibility = "free" | "premium" | "private"
+type FileStatus = "draft" | "review" | "published" | "flagged" | "removed"
+
+function normalizeExternalUrl(value?: string | null) {
+  if (!value) return null
+
+  let url = value.trim()
+
+  url = url.replace(/^[^a-zA-Z0-9]+/, "")
+
+  if (url.startsWith("Phttp")) {
+    url = url.substring(1)
+  }
+
+  if (/^https?:\/\//i.test(url)) return url
+
+  if (/^[a-z0-9.-]+\.[a-z]{2,}/i.test(url)) {
+    return `https://${url}`
+  }
+
+  return null
+}
+
 export default function FilesPage() {
   const supabase = createClient()
   const router = useRouter()
@@ -51,7 +74,8 @@ export default function FilesPage() {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [categoryId, setCategoryId] = useState("")
-  const [isPremium, setIsPremium] = useState(false)
+  const [visibility, setVisibility] = useState<Visibility>("free")
+  const [status, setStatus] = useState<FileStatus>("published")
   const [shrinkmeUrl, setShrinkmeUrl] = useState("")
   const [linkvertiseUrl, setLinkvertiseUrl] = useState("")
 
@@ -75,7 +99,7 @@ export default function FilesPage() {
   const [uploadProgress, setUploadProgress] = useState<number>(0)
 
   useEffect(() => {
-    checkAdminAndLoad()
+    void checkAdminAndLoad()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -163,7 +187,8 @@ export default function FilesPage() {
     setTitle("")
     setDescription("")
     setCategoryId("")
-    setIsPremium(false)
+    setVisibility("free")
+    setStatus("published")
     setShrinkmeUrl("")
     setLinkvertiseUrl("")
     setSelectedFile(null)
@@ -256,7 +281,8 @@ export default function FilesPage() {
     setTitle(file.title || "")
     setDescription(file.description || "")
     setCategoryId(file.category_id || "")
-    setIsPremium(file.visibility === "premium")
+    setVisibility((file.visibility || "free") as Visibility)
+    setStatus((file.status || "published") as FileStatus)
     setShrinkmeUrl(file.shrinkme_url || "")
     setLinkvertiseUrl(file.linkvertise_url || "")
     setSelectedFile(null)
@@ -346,7 +372,8 @@ export default function FilesPage() {
     title: string
     description: string
     categoryId: string
-    isPremium: boolean
+    visibility: Visibility
+    status: FileStatus
     shrinkmeUrl: string | null
     linkvertiseUrl: string | null
     storageKey: string | null
@@ -384,12 +411,7 @@ export default function FilesPage() {
   function updateProgress(percent: number, label: string) {
     const previous = lastProgressRef.current
 
-    if (
-      percent === 100 ||
-      percent === 0 ||
-      percent >= previous + 2 ||
-      percent < previous
-    ) {
+    if (percent === 100 || percent === 0 || percent >= previous + 2 || percent < previous) {
       lastProgressRef.current = percent
       setUploadProgress(percent)
       setStatusText(`${label} ${percent}%`)
@@ -411,6 +433,23 @@ export default function FilesPage() {
 
     if (!editingId && !selectedFile) {
       setErrorMessage("Please choose a file to upload.")
+      return
+    }
+
+    const cleanedShrinkmeUrl = shrinkmeUrl.trim()
+      ? normalizeExternalUrl(shrinkmeUrl)
+      : null
+    const cleanedLinkvertiseUrl = linkvertiseUrl.trim()
+      ? normalizeExternalUrl(linkvertiseUrl)
+      : null
+
+    if (shrinkmeUrl.trim() && !cleanedShrinkmeUrl) {
+      setErrorMessage("ShrinkMe link is invalid. Please enter a full valid URL.")
+      return
+    }
+
+    if (linkvertiseUrl.trim() && !cleanedLinkvertiseUrl) {
+      setErrorMessage("Linkvertise link is invalid. Please enter a full valid URL.")
       return
     }
 
@@ -476,9 +515,10 @@ export default function FilesPage() {
         title: title.trim(),
         description,
         categoryId,
-        isPremium,
-        shrinkmeUrl: shrinkmeUrl.trim() || null,
-        linkvertiseUrl: linkvertiseUrl.trim() || null,
+        visibility,
+        status,
+        shrinkmeUrl: cleanedShrinkmeUrl,
+        linkvertiseUrl: cleanedLinkvertiseUrl,
         storageKey: finalStorageKey,
         thumbnailUrl: finalThumbnailUrl,
         fileSize: finalFileSize,
@@ -559,9 +599,7 @@ export default function FilesPage() {
 
         <div className="mb-4 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-extrabold text-slate-900 sm:text-3xl">
-              Files
-            </h1>
+            <h1 className="text-2xl font-extrabold text-slate-900 sm:text-3xl">Files</h1>
             <p className="mt-1 text-sm text-slate-500">
               Upload, edit, and organize your file records.
             </p>
@@ -625,24 +663,40 @@ export default function FilesPage() {
               </select>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-[1fr_220px]">
+            <div className="grid gap-4 md:grid-cols-3">
               <textarea
                 placeholder="Description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 disabled={saving}
-                className="min-h-[86px] w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+                className="min-h-[86px] w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 md:col-span-2"
               />
 
-              <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900 md:min-h-[86px]">
-                <input
-                  type="checkbox"
-                  checked={isPremium}
-                  onChange={(e) => setIsPremium(e.target.checked)}
+              <div className="grid gap-4">
+                <select
+                  value={visibility}
+                  onChange={(e) => setVisibility(e.target.value as Visibility)}
                   disabled={saving}
-                />
-                Premium file
-              </label>
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+                >
+                  <option value="free">Free</option>
+                  <option value="premium">Premium</option>
+                  <option value="private">Private</option>
+                </select>
+
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as FileStatus)}
+                  disabled={saving}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+                >
+                  <option value="draft">Draft</option>
+                  <option value="review">Review</option>
+                  <option value="published">Published</option>
+                  <option value="flagged">Flagged</option>
+                  <option value="removed">Removed</option>
+                </select>
+              </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -661,6 +715,11 @@ export default function FilesPage() {
                 disabled={saving}
                 className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
               />
+            </div>
+
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+              Save one monetized link per file. Example:
+              <span className="ml-1 font-semibold">https://direct-link.net/...</span>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -799,9 +858,7 @@ export default function FilesPage() {
                           }}
                         />
                       ) : (
-                        <span className="text-xs font-bold text-slate-400">
-                          No Thumbnail
-                        </span>
+                        <span className="text-xs font-bold text-slate-400">No Thumbnail</span>
                       )}
                     </div>
 
@@ -814,11 +871,17 @@ export default function FilesPage() {
                       </div>
 
                       <div className="mb-3 flex flex-wrap gap-2">
-                        {file.visibility === "premium" && (
-                          <span className="rounded-full bg-slate-900 px-2 py-1 text-[10px] font-bold text-white">
-                            Premium
-                          </span>
-                        )}
+                        <span
+                          className={`rounded-full px-2 py-1 text-[10px] font-bold ${
+                            file.visibility === "premium"
+                              ? "bg-slate-900 text-white"
+                              : file.visibility === "private"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-green-100 text-green-700"
+                          }`}
+                        >
+                          {file.visibility || "free"}
+                        </span>
 
                         <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-700">
                           {file.status || "draft"}
@@ -827,11 +890,7 @@ export default function FilesPage() {
 
                       <div className="mb-3 space-y-1 text-[10px] font-bold text-slate-500">
                         {file.shrinkme_url ? <p>ShrinkMe: Added</p> : <p>ShrinkMe: None</p>}
-                        {file.linkvertise_url ? (
-                          <p>Linkvertise: Added</p>
-                        ) : (
-                          <p>Linkvertise: None</p>
-                        )}
+                        {file.linkvertise_url ? <p>Linkvertise: Added</p> : <p>Linkvertise: None</p>}
                       </div>
 
                       <div className="flex gap-2">

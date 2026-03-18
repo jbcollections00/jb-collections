@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import AdSlot from "@/app/components/AdSlot"
@@ -10,7 +10,6 @@ import { IN_CONTENT_AD } from "@/app/lib/adCodes"
 type FileRow = {
   id: string
   title?: string | null
-  name?: string | null
   description?: string | null
   visibility?: "free" | "premium" | "private" | null
   shrinkme_url?: string | null
@@ -24,23 +23,47 @@ type ProfileRow = {
   is_premium?: boolean | null
 }
 
+type EventType =
+  | "gate_view"
+  | "premium_auto_download"
+  | "sponsored_open"
+  | "download_click"
+
 function getDisplayName(file: FileRow | null) {
   if (!file) return "Download"
-  return file.title || file.name || "Untitled File"
+  return file.title || "Untitled File"
+}
+
+function normalizeExternalUrl(value?: string | null) {
+  if (!value) return null
+
+  let url = value.trim()
+
+  url = url.replace(/^[^a-zA-Z0-9]+/, "")
+
+  if (url.startsWith("Phttp")) {
+    url = url.substring(1)
+  }
+
+  if (/^https?:\/\//i.test(url)) return url
+
+  if (/^[a-z0-9.-]+\.[a-z]{2,}/i.test(url)) {
+    return `https://${url}`
+  }
+
+  return null
 }
 
 function pickMonetizedLink(file: FileRow | null) {
   if (!file) return null
 
-  const links = [file.shrinkme_url, file.linkvertise_url].filter(
-    (value): value is string => Boolean(value && value.trim())
-  )
+  const linkvertise = normalizeExternalUrl(file.linkvertise_url)
+  if (linkvertise) return linkvertise
 
-  if (links.length === 0) return null
-  if (links.length === 1) return links[0]
+  const shrinkme = normalizeExternalUrl(file.shrinkme_url)
+  if (shrinkme) return shrinkme
 
-  const index = Date.now() % links.length
-  return links[index]
+  return null
 }
 
 export default function DownloadGatePage() {
@@ -52,11 +75,18 @@ export default function DownloadGatePage() {
   const [checking, setChecking] = useState(true)
   const [file, setFile] = useState<FileRow | null>(null)
   const [isPremiumUser, setIsPremiumUser] = useState(false)
+  const [error, setError] = useState("")
+
+  const [step, setStep] = useState<"waiting" | "ready" | "premium-only">("waiting")
   const [countdown, setCountdown] = useState(5)
-  const [adStepDone, setAdStepDone] = useState(false)
+  const [sponsoredOpened, setSponsoredOpened] = useState(false)
   const [unlockCountdown, setUnlockCountdown] = useState(5)
   const [downloadReady, setDownloadReady] = useState(false)
-  const [error, setError] = useState("")
+  const [openingSponsored, setOpeningSponsored] = useState(false)
+  const [startingDownload, setStartingDownload] = useState(false)
+
+  const hasLoggedGateViewRef = useRef(false)
+  const selectedShortlink = useMemo(() => pickMonetizedLink(file), [file])
 
   useEffect(() => {
     if (!fileId) return
@@ -66,35 +96,74 @@ export default function DownloadGatePage() {
 
   useEffect(() => {
     if (checking) return
-    if (isPremiumUser) return
     if (!file) return
+    if (isPremiumUser) return
+    if (step !== "waiting") return
+    if (downloadReady) return
     if (countdown <= 0) return
 
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       setCountdown((prev) => prev - 1)
     }, 1000)
 
-    return () => clearTimeout(timer)
-  }, [checking, isPremiumUser, file, countdown])
+    return () => window.clearTimeout(timer)
+  }, [checking, file, isPremiumUser, step, downloadReady, countdown])
 
   useEffect(() => {
-    if (!adStepDone) return
+    if (!sponsoredOpened) return
+    if (downloadReady) return
+
     if (unlockCountdown <= 0) {
       setDownloadReady(true)
+      setStep("ready")
       return
     }
 
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       setUnlockCountdown((prev) => prev - 1)
     }, 1000)
 
-    return () => clearTimeout(timer)
-  }, [adStepDone, unlockCountdown])
+    return () => window.clearTimeout(timer)
+  }, [sponsoredOpened, unlockCountdown, downloadReady])
+
+  async function logEvent(eventType: EventType, meta?: Record<string, unknown>) {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user || !fileId) return
+
+      const { error } = await supabase.from("download_events").insert({
+        user_id: user.id,
+        file_id: fileId,
+        event_type: eventType,
+        meta: meta ?? {},
+      })
+
+      if (error) {
+        console.warn(`Failed to log ${eventType}:`, error.message)
+      }
+    } catch (err) {
+      console.warn(`Failed to log ${eventType}:`, err)
+    }
+  }
 
   async function loadPage() {
     try {
       setChecking(true)
       setError("")
+      setFile(null)
+      setIsPremiumUser(false)
+
+      setStep("waiting")
+      setCountdown(5)
+      setSponsoredOpened(false)
+      setUnlockCountdown(5)
+      setDownloadReady(false)
+      setOpeningSponsored(false)
+      setStartingDownload(false)
+      hasLoggedGateViewRef.current = false
 
       const {
         data: { user },
@@ -106,12 +175,12 @@ export default function DownloadGatePage() {
         return
       }
 
-      const [{ data: fileData, error: fileError }, { data: profileData }] =
+      const [{ data: fileData, error: fileError }, { data: profileData, error: profileError }] =
         await Promise.all([
           supabase
             .from("files")
             .select(
-              "id, title, name, description, visibility, shrinkme_url, linkvertise_url, status"
+              "id, title, description, visibility, shrinkme_url, linkvertise_url, status"
             )
             .eq("id", fileId)
             .eq("status", "published")
@@ -123,10 +192,18 @@ export default function DownloadGatePage() {
             .maybeSingle(),
         ])
 
-      if (fileError || !fileData) {
-        setError("File not found.")
-        setChecking(false)
+      if (fileError) {
+        setError(`Failed to load file: ${fileError.message}`)
         return
+      }
+
+      if (!fileData) {
+        setError(`No file row found for ID: ${fileId}`)
+        return
+      }
+
+      if (profileError) {
+        console.error("Profile fetch error:", profileError)
       }
 
       const profile = profileData as ProfileRow | null
@@ -135,13 +212,36 @@ export default function DownloadGatePage() {
         profile?.is_premium === true ||
         profile?.membership === "premium"
 
-      setFile(fileData as FileRow)
+      const foundFile = fileData as FileRow
+      const visibility = (foundFile.visibility || "free").toLowerCase()
+      const shortlink = pickMonetizedLink(foundFile)
+
+      setFile(foundFile)
       setIsPremiumUser(Boolean(premium))
 
+      if (!hasLoggedGateViewRef.current) {
+        hasLoggedGateViewRef.current = true
+        void logEvent("gate_view", {
+          visibility,
+          has_sponsored_link: Boolean(shortlink),
+        })
+      }
+
       if (premium) {
+        void logEvent("premium_auto_download", {
+          visibility,
+          has_sponsored_link: Boolean(shortlink),
+        })
         window.location.href = `/api/download/${fileId}`
         return
       }
+
+      if (visibility === "premium") {
+        setStep("premium-only")
+        return
+      }
+
+      setStep("waiting")
     } catch (err) {
       console.error("Download gate error:", err)
       setError("Failed to load the download page.")
@@ -150,20 +250,71 @@ export default function DownloadGatePage() {
     }
   }
 
-  const selectedShortlink = useMemo(() => pickMonetizedLink(file), [file])
+  function handleOpenSponsoredLink() {
+    if (openingSponsored) return
 
-  function handleOpenMonetizedLink() {
-    if (!selectedShortlink) {
-      setDownloadReady(true)
+    const safeUrl = selectedShortlink
+
+    if (!safeUrl) {
+      handleUnlockWithoutSponsor()
       return
     }
 
-    window.open(selectedShortlink, "_blank", "noopener,noreferrer")
-    setAdStepDone(true)
+    setOpeningSponsored(true)
+    setError("")
+
+    void logEvent("sponsored_open", {
+      sponsored_url: safeUrl,
+      source: "monetized_link",
+    })
+
+    const newWindow = window.open(safeUrl, "_blank", "noopener,noreferrer")
+
+    if (!newWindow) {
+      setOpeningSponsored(false)
+      setError("Popup blocked. Please allow popups and try again.")
+      return
+    }
+
+    setSponsoredOpened(true)
     setUnlockCountdown(5)
+    setStep("waiting")
+
+    window.setTimeout(() => {
+      setOpeningSponsored(false)
+    }, 800)
+  }
+
+  function handleUnlockWithoutSponsor() {
+    if (openingSponsored) return
+
+    setOpeningSponsored(true)
+    setError("")
+
+    void logEvent("sponsored_open", {
+      sponsored_url: null,
+      source: "unlock_without_sponsor",
+    })
+
+    setSponsoredOpened(true)
+    setUnlockCountdown(1)
+    setStep("waiting")
+
+    window.setTimeout(() => {
+      setOpeningSponsored(false)
+    }, 800)
   }
 
   function handleDirectDownload() {
+    if (startingDownload) return
+
+    setStartingDownload(true)
+
+    void logEvent("download_click", {
+      source: sponsoredOpened ? "gate_after_unlock" : "direct_button",
+      has_sponsored_link: Boolean(selectedShortlink),
+    })
+
     window.location.href = `/api/download/${fileId}`
   }
 
@@ -199,6 +350,7 @@ export default function DownloadGatePage() {
   }
 
   const visibility = (file.visibility || "free").toLowerCase()
+  const hasSponsoredLink = Boolean(selectedShortlink)
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8">
@@ -225,57 +377,70 @@ export default function DownloadGatePage() {
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Access Type
               </p>
+
               <p className="mt-2 text-lg font-bold text-slate-900">
                 {visibility === "premium" ? "Premium File" : "Free File"}
               </p>
 
-              {visibility === "premium" && !isPremiumUser && (
-                <p className="mt-3 text-sm text-red-600">
-                  This file is premium-only. Upgrade your account to download it.
-                </p>
-              )}
+              {step === "premium-only" ? (
+                <>
+                  <p className="mt-3 text-sm text-red-600">
+                    This file is for premium members only.
+                  </p>
 
-              {visibility === "premium" && !isPremiumUser ? (
-                <div className="mt-6">
-                  <Link
-                    href="/upgrade"
-                    className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-3 text-sm font-bold text-white transition hover:opacity-90"
-                  >
-                    Upgrade to Premium
-                  </Link>
-                </div>
+                  <div className="mt-6">
+                    <Link
+                      href="/upgrade"
+                      className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-3 text-sm font-bold text-white transition hover:opacity-90"
+                    >
+                      Upgrade to Premium
+                    </Link>
+                  </div>
+                </>
               ) : (
                 <>
-                  {!adStepDone && !downloadReady ? (
+                  {!sponsoredOpened && !downloadReady ? (
                     <div className="mt-6">
                       <p className="mb-4 text-sm text-slate-600">
-                        {selectedShortlink
-                          ? `Free download unlocks in ${countdown} second${countdown === 1 ? "" : "s"}.`
-                          : "No monetized link found for this file. Direct download will be available."}
+                        {hasSponsoredLink
+                          ? `Your free download unlocks in ${countdown} second${countdown === 1 ? "" : "s"}.`
+                          : `Your download unlocks in ${countdown} second${countdown === 1 ? "" : "s"}.`}
                       </p>
 
                       {countdown > 0 ? (
                         <div className="inline-flex rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-500">
                           Please wait {countdown}s...
                         </div>
+                      ) : hasSponsoredLink ? (
+                        <button
+                          type="button"
+                          onClick={handleOpenSponsoredLink}
+                          disabled={openingSponsored}
+                          className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {openingSponsored ? "Opening..." : "Open Sponsored Link"}
+                        </button>
                       ) : (
                         <button
                           type="button"
-                          onClick={handleOpenMonetizedLink}
-                          className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white transition hover:bg-slate-800"
+                          onClick={handleUnlockWithoutSponsor}
+                          disabled={openingSponsored}
+                          className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {selectedShortlink ? "Open Sponsored Link" : "Unlock Download"}
+                          {openingSponsored ? "Unlocking..." : "Unlock Download"}
                         </button>
                       )}
                     </div>
                   ) : null}
 
-                  {adStepDone && !downloadReady ? (
+                  {sponsoredOpened && !downloadReady ? (
                     <div className="mt-6">
                       <p className="mb-4 text-sm text-slate-600">
-                        Sponsored page opened. Your download unlocks in {unlockCountdown} second
-                        {unlockCountdown === 1 ? "" : "s"}.
+                        {hasSponsoredLink
+                          ? `Sponsored page opened. Download unlocks in ${unlockCountdown} second${unlockCountdown === 1 ? "" : "s"}.`
+                          : `Unlocking your download in ${unlockCountdown} second${unlockCountdown === 1 ? "" : "s"}.`}
                       </p>
+
                       <div className="inline-flex rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-500">
                         Unlocking...
                       </div>
@@ -287,27 +452,29 @@ export default function DownloadGatePage() {
                       <button
                         type="button"
                         onClick={handleDirectDownload}
-                        className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-6 py-3 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
+                        disabled={startingDownload}
+                        className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-6 py-3 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        Download Now
+                        {startingDownload ? "Starting download..." : "Download Now"}
                       </button>
 
-                      {selectedShortlink && (
+                      {hasSponsoredLink ? (
                         <button
                           type="button"
-                          onClick={handleOpenMonetizedLink}
-                          className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                          onClick={handleOpenSponsoredLink}
+                          disabled={openingSponsored}
+                          className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          Open Sponsored Link Again
+                          {openingSponsored ? "Opening..." : "Open Sponsored Link Again"}
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   ) : null}
                 </>
               )}
             </div>
 
-            {!isPremiumUser && visibility !== "premium" && (
+            {!isPremiumUser && visibility !== "premium" ? (
               <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center">
                 <p className="text-sm font-semibold text-amber-800">
                   Want instant downloads with no sponsored step?
@@ -319,7 +486,7 @@ export default function DownloadGatePage() {
                   Go Premium
                 </Link>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

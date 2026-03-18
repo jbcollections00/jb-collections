@@ -4,6 +4,55 @@ import { getSignedDownloadUrl } from "@/lib/r2"
 
 export const runtime = "nodejs"
 
+type ProfileRow = {
+  role?: string | null
+  membership?: string | null
+  is_premium?: boolean | null
+}
+
+type FileRow = {
+  id: string
+  title?: string | null
+  slug?: string | null
+  visibility?: "free" | "premium" | "private" | null
+  status?: string | null
+  downloads_count?: number | null
+}
+
+type FileVersionRow = {
+  id: string
+  file_id: string
+  object_key?: string | null
+  bucket_name?: string | null
+  archive_type?: string | null
+  mime_type?: string | null
+  file_size_bytes?: number | null
+  is_current?: boolean | null
+}
+
+function normalizeSiteUrl(url: string) {
+  return url.trim().replace(/\/$/, "")
+}
+
+function buildSafeFilename(file: FileRow, version: FileVersionRow) {
+  const extension =
+    version.archive_type?.trim()?.toLowerCase() || "zip"
+
+  const baseName = (file.slug || file.title || file.id || "download")
+    .toString()
+    .replace(/[^a-zA-Z0-9-_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+
+  return `${baseName || "download"}.${extension}`
+}
+
+function getClientIp(req: NextRequest) {
+  const forwardedFor = req.headers.get("x-forwarded-for")
+  if (!forwardedFor) return null
+  return forwardedFor.split(",")[0]?.trim() || null
+}
+
 export async function GET(
   req: NextRequest,
   context: { params: Promise<{ fileId: string }> }
@@ -16,9 +65,9 @@ export async function GET(
     }
 
     const referer = req.headers.get("referer") || ""
-    const allowedHost = String(process.env.NEXT_PUBLIC_SITE_URL || "")
-      .trim()
-      .replace(/\/$/, "")
+    const allowedHost = normalizeSiteUrl(
+      String(process.env.NEXT_PUBLIC_SITE_URL || "")
+    )
 
     if (allowedHost && referer) {
       const normalizedReferer = referer.replace(/\/$/, "")
@@ -41,32 +90,41 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile } = await supabase
+    const { data: profileData, error: profileError } = await supabase
       .from("profiles")
       .select("role, membership, is_premium")
       .eq("id", user.id)
       .maybeSingle()
 
+    if (profileError) {
+      console.error("Profile fetch error:", profileError)
+    }
+
+    const profile = profileData as ProfileRow | null
     const isAdmin = profile?.role === "admin"
     const isPremiumUser =
-      profile?.is_premium === true || profile?.membership === "premium"
+      isAdmin ||
+      profile?.is_premium === true ||
+      profile?.membership === "premium"
 
-    const { data: fileOnly, error: fileOnlyError } = await supabase
+    const { data: fileData, error: fileError } = await supabase
       .from("files")
       .select("id, title, slug, visibility, status, downloads_count")
       .eq("id", fileId)
       .maybeSingle()
 
-    if (fileOnlyError) {
+    if (fileError) {
       return NextResponse.json(
-        { error: "Failed to read file record", details: fileOnlyError.message },
+        { error: "Failed to read file record", details: fileError.message },
         { status: 500 }
       )
     }
 
-    if (!fileOnly) {
+    if (!fileData) {
       return NextResponse.json({ error: "File row not found" }, { status: 404 })
     }
+
+    const fileOnly = fileData as FileRow
 
     if (fileOnly.status !== "published") {
       return NextResponse.json(
@@ -75,7 +133,7 @@ export async function GET(
       )
     }
 
-    const { data: versions, error: versionsError } = await supabase
+    const { data: versionsData, error: versionsError } = await supabase
       .from("file_versions")
       .select(
         "id, file_id, object_key, bucket_name, archive_type, mime_type, file_size_bytes, is_current"
@@ -90,38 +148,42 @@ export async function GET(
       )
     }
 
-    if (!versions || versions.length === 0) {
+    if (!versionsData || versionsData.length === 0) {
       return NextResponse.json(
         { error: "No file_versions rows found for this file" },
         { status: 404 }
       )
     }
 
-    const currentVersion = versions.find((v) => v.is_current === true)
+    const versions = versionsData as FileVersionRow[]
+
+    const currentVersion =
+      versions.find((v) => v.is_current === true) || versions[0] || null
 
     if (!currentVersion) {
       return NextResponse.json(
-        { error: "No current file version found. Set is_current=true on one version." },
+        { error: "No current file version found." },
         { status: 404 }
       )
     }
 
-    if (!currentVersion.object_key) {
+    if (!currentVersion.object_key?.trim()) {
       return NextResponse.json(
         { error: "Current version is missing object_key" },
         { status: 404 }
       )
     }
 
-    let allowed = false
     const visibility = (fileOnly.visibility || "free").toLowerCase()
+
+    let allowed = false
 
     if (isAdmin) {
       allowed = true
     } else if (visibility === "free") {
       allowed = true
     } else if (visibility === "premium") {
-      allowed = true
+      allowed = isPremiumUser
     } else if (visibility === "private") {
       allowed = false
     }
@@ -132,30 +194,26 @@ export async function GET(
         file_id: fileOnly.id,
         file_version_id: currentVersion.id,
         result: "denied",
-        ip_address: req.headers.get("x-forwarded-for"),
+        ip_address: getClientIp(req),
         user_agent: req.headers.get("user-agent"),
       })
 
       return NextResponse.json(
-        { error: "You do not have access to this file" },
+        {
+          error:
+            visibility === "premium"
+              ? "Premium membership required"
+              : "You do not have access to this file",
+        },
         { status: 403 }
       )
     }
 
-    const extension =
-      currentVersion.archive_type?.trim()?.toLowerCase() || "zip"
-
-    const baseName = (fileOnly.slug || fileOnly.title || fileOnly.id)
-      .toString()
-      .replace(/[^a-zA-Z0-9-_]/g, "_")
-      .replace(/_+/g, "_")
-      .replace(/^_+|_+$/g, "")
-
-    const safeFilename = `${baseName || "download"}.${extension}`
+    const safeFilename = buildSafeFilename(fileOnly, currentVersion)
 
     const signedUrl = await getSignedDownloadUrl({
-      key: currentVersion.object_key,
-      bucket: currentVersion.bucket_name || undefined,
+      key: currentVersion.object_key.trim(),
+      bucket: currentVersion.bucket_name?.trim() || undefined,
       expiresInSeconds: 60,
       downloadFilename: safeFilename,
     })
@@ -165,7 +223,7 @@ export async function GET(
       file_id: fileOnly.id,
       file_version_id: currentVersion.id,
       result: "success",
-      ip_address: req.headers.get("x-forwarded-for"),
+      ip_address: getClientIp(req),
       user_agent: req.headers.get("user-agent"),
     })
 

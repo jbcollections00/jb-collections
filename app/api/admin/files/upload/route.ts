@@ -6,6 +6,9 @@ import { getR2BucketName, getSignedUploadUrl } from "@/lib/r2"
 
 export const runtime = "nodejs"
 
+type Visibility = "free" | "premium" | "private"
+type FileStatus = "draft" | "review" | "published" | "flagged" | "removed"
+
 type RequestBody =
   | {
       action: "presign"
@@ -22,7 +25,10 @@ type RequestBody =
       title?: string
       description?: string
       categoryId?: string
-      isPremium?: boolean
+      visibility?: Visibility
+      status?: FileStatus
+      shrinkmeUrl?: string | null
+      linkvertiseUrl?: string | null
       storageKey?: string | null
       thumbnailUrl?: string | null
       fileSize?: number | null
@@ -48,6 +54,45 @@ function getExtension(fileName: string) {
   const parts = fileName.split(".")
   if (parts.length < 2) return ""
   return parts.pop()?.toLowerCase() || ""
+}
+
+function normalizeExternalUrl(value?: string | null) {
+  if (!value) return null
+
+  let url = value.trim()
+
+  url = url.replace(/^[^a-zA-Z0-9]+/, "")
+
+  if (url.startsWith("Phttp")) {
+    url = url.substring(1)
+  }
+
+  if (/^https?:\/\//i.test(url)) return url
+
+  if (/^[a-z0-9.-]+\.[a-z]{2,}/i.test(url)) {
+    return `https://${url}`
+  }
+
+  return null
+}
+
+function sanitizeVisibility(value?: string | null): Visibility {
+  if (value === "premium" || value === "private") return value
+  return "free"
+}
+
+function sanitizeStatus(value?: string | null): FileStatus {
+  if (
+    value === "draft" ||
+    value === "review" ||
+    value === "published" ||
+    value === "flagged" ||
+    value === "removed"
+  ) {
+    return value
+  }
+
+  return "published"
 }
 
 export async function POST(req: NextRequest) {
@@ -138,19 +183,40 @@ export async function POST(req: NextRequest) {
       const title = String(body.title || "").trim()
       const description = String(body.description || "").trim()
       const categoryId = String(body.categoryId || "").trim()
-      const isPremium = Boolean(body.isPremium)
+
+      const visibility = sanitizeVisibility(body.visibility)
+      const status = sanitizeStatus(body.status)
+
+      const rawShrinkmeUrl =
+        typeof body.shrinkmeUrl === "string" && body.shrinkmeUrl.trim()
+          ? body.shrinkmeUrl.trim()
+          : null
+
+      const rawLinkvertiseUrl =
+        typeof body.linkvertiseUrl === "string" && body.linkvertiseUrl.trim()
+          ? body.linkvertiseUrl.trim()
+          : null
+
+      const shrinkmeUrl = rawShrinkmeUrl ? normalizeExternalUrl(rawShrinkmeUrl) : null
+      const linkvertiseUrl = rawLinkvertiseUrl
+        ? normalizeExternalUrl(rawLinkvertiseUrl)
+        : null
+
       const storageKey =
         typeof body.storageKey === "string" && body.storageKey.trim()
           ? body.storageKey.trim()
           : null
+
       const incomingThumbnailUrl =
         typeof body.thumbnailUrl === "string" && body.thumbnailUrl.trim()
           ? body.thumbnailUrl.trim()
           : null
+
       const fileSize =
         typeof body.fileSize === "number" && Number.isFinite(body.fileSize)
           ? body.fileSize
           : null
+
       const fileType =
         typeof body.fileType === "string" && body.fileType.trim()
           ? body.fileType.trim().toLowerCase()
@@ -164,8 +230,21 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Category is required" }, { status: 400 })
       }
 
+      if (rawShrinkmeUrl && !shrinkmeUrl) {
+        return NextResponse.json(
+          { error: "ShrinkMe link is invalid." },
+          { status: 400 }
+        )
+      }
+
+      if (rawLinkvertiseUrl && !linkvertiseUrl) {
+        return NextResponse.json(
+          { error: "Linkvertise link is invalid." },
+          { status: 400 }
+        )
+      }
+
       const slug = slugify(title)
-      const visibility = isPremium ? "premium" : "free"
       const bucketName = getR2BucketName()
 
       if (mode === "create") {
@@ -185,8 +264,10 @@ export async function POST(req: NextRequest) {
             cover_url: incomingThumbnailUrl,
             thumbnail_url: incomingThumbnailUrl,
             visibility,
-            status: "published",
+            status,
             category_id: categoryId,
+            shrinkme_url: shrinkmeUrl,
+            linkvertise_url: linkvertiseUrl,
           })
           .select("id")
           .single()
@@ -215,8 +296,7 @@ export async function POST(req: NextRequest) {
 
           return NextResponse.json(
             {
-              error:
-                insertVersionError.message || "Failed to create file version.",
+              error: insertVersionError.message || "Failed to create file version.",
             },
             { status: 500 }
           )
@@ -260,8 +340,10 @@ export async function POST(req: NextRequest) {
           cover_url: finalThumbnailUrl,
           thumbnail_url: finalThumbnailUrl,
           visibility,
+          status,
           category_id: categoryId,
-          status: "published",
+          shrinkme_url: shrinkmeUrl,
+          linkvertise_url: linkvertiseUrl,
         })
         .eq("id", fileId)
 
