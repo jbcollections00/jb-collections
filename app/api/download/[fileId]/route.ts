@@ -17,6 +17,9 @@ type FileRow = {
   visibility?: "free" | "premium" | "private" | null
   status?: string | null
   downloads_count?: number | null
+  linkvertise_url?: string | null
+  shrinkme_url?: string | null
+  monetization_enabled?: boolean | null
 }
 
 type FileVersionRow = {
@@ -35,8 +38,7 @@ function normalizeSiteUrl(url: string) {
 }
 
 function buildSafeFilename(file: FileRow, version: FileVersionRow) {
-  const extension =
-    version.archive_type?.trim()?.toLowerCase() || "zip"
+  const extension = version.archive_type?.trim()?.toLowerCase() || "zip"
 
   const baseName = (file.slug || file.title || file.id || "download")
     .toString()
@@ -65,9 +67,7 @@ export async function GET(
     }
 
     const referer = req.headers.get("referer") || ""
-    const allowedHost = normalizeSiteUrl(
-      String(process.env.NEXT_PUBLIC_SITE_URL || "")
-    )
+    const allowedHost = normalizeSiteUrl(String(process.env.NEXT_PUBLIC_SITE_URL || ""))
 
     if (allowedHost && referer) {
       const normalizedReferer = referer.replace(/\/$/, "")
@@ -109,7 +109,9 @@ export async function GET(
 
     const { data: fileData, error: fileError } = await supabase
       .from("files")
-      .select("id, title, slug, visibility, status, downloads_count")
+      .select(
+        "id, title, slug, visibility, status, downloads_count, linkvertise_url, shrinkme_url, monetization_enabled"
+      )
       .eq("id", fileId)
       .maybeSingle()
 
@@ -156,7 +158,6 @@ export async function GET(
     }
 
     const versions = versionsData as FileVersionRow[]
-
     const currentVersion =
       versions.find((v) => v.is_current === true) || versions[0] || null
 
@@ -178,12 +179,12 @@ export async function GET(
 
     let allowed = false
 
-    if (isAdmin) {
+    if (isAdmin || isPremiumUser) {
       allowed = true
     } else if (visibility === "free") {
       allowed = true
     } else if (visibility === "premium") {
-      allowed = isPremiumUser
+      allowed = false
     } else if (visibility === "private") {
       allowed = false
     }

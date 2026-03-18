@@ -29,6 +29,7 @@ type RequestBody =
       status?: FileStatus
       shrinkmeUrl?: string | null
       linkvertiseUrl?: string | null
+      monetizationEnabled?: boolean | null
       storageKey?: string | null
       thumbnailUrl?: string | null
       fileSize?: number | null
@@ -93,6 +94,10 @@ function sanitizeStatus(value?: string | null): FileStatus {
   }
 
   return "published"
+}
+
+function sanitizeMonetizationEnabled(value?: boolean | null) {
+  return value !== false
 }
 
 export async function POST(req: NextRequest) {
@@ -186,6 +191,11 @@ export async function POST(req: NextRequest) {
 
       const visibility = sanitizeVisibility(body.visibility)
       const status = sanitizeStatus(body.status)
+      const monetizationEnabled = sanitizeMonetizationEnabled(
+        typeof body.monetizationEnabled === "boolean"
+          ? body.monetizationEnabled
+          : true
+      )
 
       const rawShrinkmeUrl =
         typeof body.shrinkmeUrl === "string" && body.shrinkmeUrl.trim()
@@ -268,6 +278,7 @@ export async function POST(req: NextRequest) {
             category_id: categoryId,
             shrinkme_url: shrinkmeUrl,
             linkvertise_url: linkvertiseUrl,
+            monetization_enabled: monetizationEnabled,
           })
           .select("id")
           .single()
@@ -344,6 +355,7 @@ export async function POST(req: NextRequest) {
           category_id: categoryId,
           shrinkme_url: shrinkmeUrl,
           linkvertise_url: linkvertiseUrl,
+          monetization_enabled: monetizationEnabled,
         })
         .eq("id", fileId)
 

@@ -18,6 +18,7 @@ type FileItem = {
   created_at: string
   shrinkme_url?: string | null
   linkvertise_url?: string | null
+  monetization_enabled?: boolean | null
 }
 
 type Category = {
@@ -78,6 +79,7 @@ export default function FilesPage() {
   const [status, setStatus] = useState<FileStatus>("published")
   const [shrinkmeUrl, setShrinkmeUrl] = useState("")
   const [linkvertiseUrl, setLinkvertiseUrl] = useState("")
+  const [monetizationEnabled, setMonetizationEnabled] = useState(true)
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedThumbnail, setSelectedThumbnail] = useState<File | null>(null)
@@ -148,7 +150,7 @@ export default function FilesPage() {
       supabase
         .from("files")
         .select(
-          "id, title, slug, description, cover_url, thumbnail_url, visibility, status, category_id, created_at, shrinkme_url, linkvertise_url"
+          "id, title, slug, description, cover_url, thumbnail_url, visibility, status, category_id, created_at, shrinkme_url, linkvertise_url, monetization_enabled"
         )
         .order("created_at", { ascending: false }),
       supabase.from("categories").select("id,name").order("name", { ascending: true }),
@@ -191,6 +193,7 @@ export default function FilesPage() {
     setStatus("published")
     setShrinkmeUrl("")
     setLinkvertiseUrl("")
+    setMonetizationEnabled(true)
     setSelectedFile(null)
     setSelectedThumbnail(null)
     setEditingId(null)
@@ -285,6 +288,7 @@ export default function FilesPage() {
     setStatus((file.status || "published") as FileStatus)
     setShrinkmeUrl(file.shrinkme_url || "")
     setLinkvertiseUrl(file.linkvertise_url || "")
+    setMonetizationEnabled(file.monetization_enabled !== false)
     setSelectedFile(null)
     setSelectedThumbnail(null)
     setEditingId(file.id)
@@ -376,6 +380,7 @@ export default function FilesPage() {
     status: FileStatus
     shrinkmeUrl: string | null
     linkvertiseUrl: string | null
+    monetizationEnabled: boolean
     storageKey: string | null
     thumbnailUrl: string | null
     fileSize: number | null
@@ -519,6 +524,7 @@ export default function FilesPage() {
         status,
         shrinkmeUrl: cleanedShrinkmeUrl,
         linkvertiseUrl: cleanedLinkvertiseUrl,
+        monetizationEnabled,
         storageKey: finalStorageKey,
         thumbnailUrl: finalThumbnailUrl,
         fileSize: finalFileSize,
@@ -717,6 +723,17 @@ export default function FilesPage() {
               />
             </div>
 
+            <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+              <input
+                type="checkbox"
+                checked={monetizationEnabled}
+                onChange={(e) => setMonetizationEnabled(e.target.checked)}
+                disabled={saving}
+                className="h-4 w-4"
+              />
+              Enable Linkvertise monetization for this file
+            </label>
+
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
               Save one monetized link per file. Example:
               <span className="ml-1 font-semibold">https://direct-link.net/...</span>
@@ -833,6 +850,7 @@ export default function FilesPage() {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {files.map((file) => {
                 const displayThumbnail = getDisplayThumbnail(file)
+                const monetizationIsOn = file.monetization_enabled !== false
 
                 return (
                   <div
@@ -889,8 +907,18 @@ export default function FilesPage() {
                       </div>
 
                       <div className="mb-3 space-y-1 text-[10px] font-bold text-slate-500">
-                        {file.shrinkme_url ? <p>ShrinkMe: Added</p> : <p>ShrinkMe: None</p>}
-                        {file.linkvertise_url ? <p>Linkvertise: Added</p> : <p>Linkvertise: None</p>}
+                        <p>{file.shrinkme_url ? "ShrinkMe: Added" : "ShrinkMe: None"}</p>
+                        <p>{file.linkvertise_url ? "Linkvertise: Added" : "Linkvertise: None"}</p>
+                        <p>
+                          Monetization:{" "}
+                          <span
+                            className={
+                              monetizationIsOn ? "text-green-600" : "text-red-500"
+                            }
+                          >
+                            {monetizationIsOn ? "Enabled" : "Disabled"}
+                          </span>
+                        </p>
                       </div>
 
                       <div className="flex gap-2">

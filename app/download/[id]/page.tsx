@@ -14,6 +14,7 @@ type FileRow = {
   visibility?: "free" | "premium" | "private" | null
   shrinkme_url?: string | null
   linkvertise_url?: string | null
+  monetization_enabled?: boolean | null
   status?: string | null
 }
 
@@ -56,6 +57,7 @@ function normalizeExternalUrl(value?: string | null) {
 
 function pickMonetizedLink(file: FileRow | null) {
   if (!file) return null
+  if (file.monetization_enabled === false) return null
 
   const linkvertise = normalizeExternalUrl(file.linkvertise_url)
   if (linkvertise) return linkvertise
@@ -180,7 +182,7 @@ export default function DownloadGatePage() {
           supabase
             .from("files")
             .select(
-              "id, title, description, visibility, shrinkme_url, linkvertise_url, status"
+              "id, title, description, visibility, shrinkme_url, linkvertise_url, monetization_enabled, status"
             )
             .eq("id", fileId)
             .eq("status", "published")
@@ -224,6 +226,7 @@ export default function DownloadGatePage() {
         void logEvent("gate_view", {
           visibility,
           has_sponsored_link: Boolean(shortlink),
+          monetization_enabled: foundFile.monetization_enabled !== false,
         })
       }
 
@@ -231,12 +234,13 @@ export default function DownloadGatePage() {
         void logEvent("premium_auto_download", {
           visibility,
           has_sponsored_link: Boolean(shortlink),
+          monetization_enabled: foundFile.monetization_enabled !== false,
         })
         window.location.href = `/api/download/${fileId}`
         return
       }
 
-      if (visibility === "premium") {
+      if (visibility === "premium" || visibility === "private") {
         setStep("premium-only")
         return
       }
@@ -351,6 +355,7 @@ export default function DownloadGatePage() {
 
   const visibility = (file.visibility || "free").toLowerCase()
   const hasSponsoredLink = Boolean(selectedShortlink)
+  const monetizationEnabled = file.monetization_enabled !== false
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8">
@@ -379,7 +384,7 @@ export default function DownloadGatePage() {
               </p>
 
               <p className="mt-2 text-lg font-bold text-slate-900">
-                {visibility === "premium" ? "Premium File" : "Free File"}
+                {visibility === "premium" ? "Premium File" : visibility === "private" ? "Private File" : "Free File"}
               </p>
 
               {step === "premium-only" ? (
@@ -402,7 +407,7 @@ export default function DownloadGatePage() {
                   {!sponsoredOpened && !downloadReady ? (
                     <div className="mt-6">
                       <p className="mb-4 text-sm text-slate-600">
-                        {hasSponsoredLink
+                        {hasSponsoredLink && monetizationEnabled
                           ? `Your free download unlocks in ${countdown} second${countdown === 1 ? "" : "s"}.`
                           : `Your download unlocks in ${countdown} second${countdown === 1 ? "" : "s"}.`}
                       </p>
@@ -411,7 +416,7 @@ export default function DownloadGatePage() {
                         <div className="inline-flex rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-500">
                           Please wait {countdown}s...
                         </div>
-                      ) : hasSponsoredLink ? (
+                      ) : hasSponsoredLink && monetizationEnabled ? (
                         <button
                           type="button"
                           onClick={handleOpenSponsoredLink}
@@ -436,7 +441,7 @@ export default function DownloadGatePage() {
                   {sponsoredOpened && !downloadReady ? (
                     <div className="mt-6">
                       <p className="mb-4 text-sm text-slate-600">
-                        {hasSponsoredLink
+                        {hasSponsoredLink && monetizationEnabled
                           ? `Sponsored page opened. Download unlocks in ${unlockCountdown} second${unlockCountdown === 1 ? "" : "s"}.`
                           : `Unlocking your download in ${unlockCountdown} second${unlockCountdown === 1 ? "" : "s"}.`}
                       </p>
@@ -458,7 +463,7 @@ export default function DownloadGatePage() {
                         {startingDownload ? "Starting download..." : "Download Now"}
                       </button>
 
-                      {hasSponsoredLink ? (
+                      {hasSponsoredLink && monetizationEnabled ? (
                         <button
                           type="button"
                           onClick={handleOpenSponsoredLink}
@@ -474,7 +479,7 @@ export default function DownloadGatePage() {
               )}
             </div>
 
-            {!isPremiumUser && visibility !== "premium" ? (
+            {!isPremiumUser && visibility !== "premium" && visibility !== "private" ? (
               <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center">
                 <p className="text-sm font-semibold text-amber-800">
                   Want instant downloads with no sponsored step?
