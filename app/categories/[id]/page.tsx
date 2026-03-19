@@ -259,7 +259,10 @@ export default function CategoryPage() {
   const membership = normalizeMembership(profile?.membership)
   const isAdmin = profile?.role === "admin"
   const isPremiumUser =
-    isAdmin || profile?.is_premium === true || membership === "premium" || membership === "platinum"
+    isAdmin ||
+    profile?.is_premium === true ||
+    membership === "premium" ||
+    membership === "platinum"
   const isPlatinumUser = isAdmin || membership === "platinum"
 
   const filteredFiles = useMemo(() => {
@@ -585,13 +588,9 @@ export default function CategoryPage() {
                     )}
 
                     <div
-                      className={`group overflow-hidden rounded-[20px] border bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
-                        isPlatinumLocked
-                          ? "border-fuchsia-200"
-                          : isPremiumLocked
-                            ? "border-amber-200"
-                            : "border-slate-200"
-                      }`}
+                      className={`group overflow-hidden rounded-[20px] border bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${getCardBorderClasses(
+                        file
+                      )}`}
                     >
                       <div className="relative overflow-hidden bg-slate-100">
                         <div className="aspect-[4/5] overflow-hidden">
@@ -725,31 +724,4 @@ export default function CategoryPage() {
       </div>
     </div>
   )
-}
-
-function getVisibilityLabel(file: FileItem) {
-  const visibility = (file.visibility || "free").toLowerCase()
-
-  if (visibility === "platinum") return "Platinum"
-  if (visibility === "premium") return "Premium"
-  if (visibility === "private") return "Private"
-  return "Free"
-}
-
-function getVisibilityBadgeClasses(file: FileItem) {
-  const visibility = (file.visibility || "free").toLowerCase()
-
-  if (visibility === "platinum") {
-    return "bg-fuchsia-600 text-white"
-  }
-
-  if (visibility === "premium") {
-    return "bg-black/75 text-white"
-  }
-
-  if (visibility === "private") {
-    return "bg-red-600 text-white"
-  }
-
-  return "bg-emerald-600 text-white"
 }
