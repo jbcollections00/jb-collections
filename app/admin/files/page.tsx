@@ -12,7 +12,7 @@ type FileItem = {
   description: string | null
   cover_url?: string | null
   thumbnail_url?: string | null
-  visibility?: "free" | "premium" | "private" | null
+  visibility?: "free" | "premium" | "platinum" | "private" | null
   status?: "draft" | "review" | "published" | "flagged" | "removed" | null
   category_id: string | null
   created_at: string
@@ -40,7 +40,7 @@ type FinalizeResponse = {
   fileId?: string
 }
 
-type Visibility = "free" | "premium" | "private"
+type Visibility = "free" | "premium" | "platinum" | "private"
 type FileStatus = "draft" | "review" | "published" | "flagged" | "removed"
 
 function normalizeExternalUrl(value?: string | null) {
@@ -587,6 +587,22 @@ export default function FilesPage() {
     }
   }
 
+  function getVisibilityBadgeClasses(currentVisibility?: string | null) {
+    if (currentVisibility === "platinum") {
+      return "bg-fuchsia-100 text-fuchsia-700"
+    }
+
+    if (currentVisibility === "premium") {
+      return "bg-slate-900 text-white"
+    }
+
+    if (currentVisibility === "private") {
+      return "bg-red-100 text-red-700"
+    }
+
+    return "bg-green-100 text-green-700"
+  }
+
   if (checkingAdmin) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
@@ -687,6 +703,7 @@ export default function FilesPage() {
                 >
                   <option value="free">Free</option>
                   <option value="premium">Premium</option>
+                  <option value="platinum">Platinum</option>
                   <option value="private">Private</option>
                 </select>
 
@@ -890,13 +907,9 @@ export default function FilesPage() {
 
                       <div className="mb-3 flex flex-wrap gap-2">
                         <span
-                          className={`rounded-full px-2 py-1 text-[10px] font-bold ${
-                            file.visibility === "premium"
-                              ? "bg-slate-900 text-white"
-                              : file.visibility === "private"
-                                ? "bg-red-100 text-red-700"
-                                : "bg-green-100 text-green-700"
-                          }`}
+                          className={`rounded-full px-2 py-1 text-[10px] font-bold ${getVisibilityBadgeClasses(
+                            file.visibility
+                          )}`}
                         >
                           {file.visibility || "free"}
                         </span>

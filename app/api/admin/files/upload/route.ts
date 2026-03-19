@@ -6,7 +6,7 @@ import { getR2BucketName, getSignedUploadUrl } from "@/lib/r2"
 
 export const runtime = "nodejs"
 
-type Visibility = "free" | "premium" | "private"
+type Visibility = "free" | "premium" | "platinum" | "private"
 type FileStatus = "draft" | "review" | "published" | "flagged" | "removed"
 
 type RequestBody =
@@ -78,7 +78,14 @@ function normalizeExternalUrl(value?: string | null) {
 }
 
 function sanitizeVisibility(value?: string | null): Visibility {
-  if (value === "premium" || value === "private") return value
+  if (
+    value === "premium" ||
+    value === "platinum" ||
+    value === "private"
+  ) {
+    return value
+  }
+
   return "free"
 }
 

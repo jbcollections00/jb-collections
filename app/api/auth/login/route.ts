@@ -59,6 +59,53 @@ export async function POST(req: Request) {
       })
     }
 
+    const user = data.user
+
+    const { data: existingProfile, error: profileLookupError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    if (profileLookupError) {
+      console.error("Profile lookup error:", profileLookupError)
+
+      return NextResponse.redirect(new URL("/login?error=failed", req.url), {
+        status: 303,
+      })
+    }
+
+    if (!existingProfile) {
+      const fullName =
+        user.user_metadata?.full_name ||
+        user.user_metadata?.name ||
+        null
+
+      const username =
+        user.email?.split("@")[0]?.replace(/[^a-zA-Z0-9_]/g, "") || null
+
+      const { error: insertError } = await supabase.from("profiles").insert({
+        id: user.id,
+        email: user.email ?? email,
+        full_name: fullName,
+        name: fullName,
+        username,
+        membership: "free",
+        account_status: "active",
+        status: "active",
+        is_premium: false,
+        role: "user",
+      })
+
+      if (insertError) {
+        console.error("Profile insert error:", insertError)
+
+        return NextResponse.redirect(new URL("/login?error=failed", req.url), {
+          status: 303,
+        })
+      }
+    }
+
     return response
   } catch (error) {
     console.error("Login route error:", error)

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import AdminHeader from "@/app/components/AdminHeader"
 import { createClient } from "@/lib/supabase/client"
@@ -14,7 +14,7 @@ type StatItem = {
 }
 
 type AdminProfile = {
-  role?: string | null
+  role: string | null
 }
 
 const cards = [
@@ -50,75 +50,90 @@ const cards = [
   },
 ]
 
+const defaultStats: StatItem[] = [
+  { label: "Categories", value: "0", icon: "📂", color: "#2563eb" },
+  { label: "Files", value: "0", icon: "📁", color: "#0f172a" },
+  { label: "Messages", value: "0", icon: "💬", color: "#dc2626" },
+  { label: "Upgrades", value: "0", icon: "⬆️", color: "#16a34a" },
+  { label: "Total Users", value: "0", icon: "👥", color: "#7c3aed" },
+  { label: "Online Users", value: "0", icon: "🟢", color: "#059669" },
+]
+
 export default function AdminPage() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
 
   const [checkingAdmin, setCheckingAdmin] = useState(true)
-  const [stats, setStats] = useState<StatItem[]>([
-    { label: "Categories", value: "0", icon: "📂", color: "#2563eb" },
-    { label: "Files", value: "0", icon: "📁", color: "#0f172a" },
-    { label: "Messages", value: "0", icon: "💬", color: "#dc2626" },
-    { label: "Upgrades", value: "0", icon: "⬆️", color: "#16a34a" },
-    { label: "Total Users", value: "0", icon: "👥", color: "#7c3aed" },
-    { label: "Online Users", value: "0", icon: "🟢", color: "#059669" },
-  ])
+  const [stats, setStats] = useState<StatItem[]>(defaultStats)
 
   useEffect(() => {
-    checkAdminAndLoad()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    let isMounted = true
 
-  async function checkAdminAndLoad() {
-    try {
-      setCheckingAdmin(true)
+    async function init() {
+      try {
+        setCheckingAdmin(true)
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser()
 
-      if (userError || !user) {
-        router.replace("/admin/login")
-        return
+        if (userError || !user) {
+          router.replace("/secure-admin-portal-7X9")
+          return
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .maybeSingle()
+
+        if (profileError) {
+          console.error("Failed to load admin profile:", profileError)
+          router.replace("/secure-admin-portal-7X9?error=failed")
+          return
+        }
+
+        const adminProfile = profile as AdminProfile | null
+
+        if (!adminProfile || adminProfile.role !== "admin") {
+          router.replace("/secure-admin-portal-7X9?error=not-admin")
+          return
+        }
+
+        const loadedStats = await loadStats()
+
+        if (isMounted) {
+          setStats(loadedStats)
+        }
+      } catch (error) {
+        console.error("Admin auth check failed:", error)
+        router.replace("/secure-admin-portal-7X9?error=failed")
+      } finally {
+        if (isMounted) {
+          setCheckingAdmin(false)
+        }
       }
-
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle<AdminProfile>()
-
-      if (profileError) {
-        console.error("Failed to load admin profile:", profileError)
-        router.replace("/admin/login?error=failed")
-        return
-      }
-
-      if (!profile || profile.role !== "admin") {
-        router.replace("/admin/login?error=not-admin")
-        return
-      }
-
-      await loadStats()
-    } catch (error) {
-      console.error("Admin auth check failed:", error)
-      router.replace("/admin/login?error=failed")
-    } finally {
-      setCheckingAdmin(false)
     }
-  }
 
-  async function loadStats() {
+    init()
+
+    return () => {
+      isMounted = false
+    }
+  }, [router, supabase])
+
+  async function loadStats(): Promise<StatItem[]> {
     try {
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
 
       const [
-        { count: categoriesCount, error: categoriesError },
-        { count: filesCount, error: filesError },
-        { count: messagesCount, error: messagesError },
-        { count: upgradesCount, error: upgradesError },
-        { count: usersCount, error: usersError },
+        categoriesResult,
+        filesResult,
+        messagesResult,
+        upgradesResult,
+        usersResult,
         onlineUsersResult,
       ] = await Promise.all([
         supabase.from("categories").select("*", { count: "exact", head: true }),
@@ -132,71 +147,66 @@ export default function AdminPage() {
           .gte("last_seen", fiveMinutesAgo),
       ])
 
-      if (categoriesError) {
-        console.error("Categories count error:", categoriesError.message)
+      if (categoriesResult.error) {
+        console.error("Categories count error:", categoriesResult.error.message)
       }
-      if (filesError) {
-        console.error("Files count error:", filesError.message)
+      if (filesResult.error) {
+        console.error("Files count error:", filesResult.error.message)
       }
-      if (messagesError) {
-        console.error("Messages count error:", messagesError.message)
+      if (messagesResult.error) {
+        console.error("Messages count error:", messagesResult.error.message)
       }
-      if (upgradesError) {
-        console.error("Upgrades count error:", upgradesError.message)
+      if (upgradesResult.error) {
+        console.error("Upgrades count error:", upgradesResult.error.message)
       }
-      if (usersError) {
-        console.error("Users count error:", usersError.message)
+      if (usersResult.error) {
+        console.error("Users count error:", usersResult.error.message)
       }
-
-      let onlineUsersCount = 0
-
       if (onlineUsersResult.error) {
         console.error("Online users count error:", onlineUsersResult.error.message)
-        onlineUsersCount = 0
-      } else {
-        onlineUsersCount = onlineUsersResult.count ?? 0
       }
 
-      setStats([
+      return [
         {
           label: "Categories",
-          value: String(categoriesCount ?? 0),
+          value: String(categoriesResult.count ?? 0),
           icon: "📂",
           color: "#2563eb",
         },
         {
           label: "Files",
-          value: String(filesCount ?? 0),
+          value: String(filesResult.count ?? 0),
           icon: "📁",
           color: "#0f172a",
         },
         {
           label: "Messages",
-          value: String(messagesCount ?? 0),
+          value: String(messagesResult.count ?? 0),
           icon: "💬",
           color: "#dc2626",
         },
         {
           label: "Upgrades",
-          value: String(upgradesCount ?? 0),
+          value: String(upgradesResult.count ?? 0),
           icon: "⬆️",
           color: "#16a34a",
         },
         {
           label: "Total Users",
-          value: String(usersCount ?? 0),
+          value: String(usersResult.count ?? 0),
           icon: "👥",
           color: "#7c3aed",
         },
         {
           label: "Online Users",
-          value: String(onlineUsersCount),
+          value: String(onlineUsersResult.count ?? 0),
           icon: "🟢",
           color: "#059669",
         },
-      ])
+      ]
     } catch (error) {
       console.error("Failed to load admin stats:", error)
+      return defaultStats
     }
   }
 

@@ -1,15 +1,18 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import { ShieldAlert, BadgeAlert, ArrowRight, X } from "lucide-react"
 
 export default function EnterPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const nextPath = searchParams.get("next") || "/"
 
   function accept() {
     document.cookie =
       "site_entered=true; path=/; max-age=31536000; SameSite=Lax"
-    router.push("/")
+    router.replace(nextPath)
   }
 
   function leave() {
@@ -103,7 +106,8 @@ export default function EnterPage() {
 
                     <div className="space-y-3">
                       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-neutral-200">
-                        You are at least <span className="font-semibold text-white">18 years old</span>.
+                        You are at least{" "}
+                        <span className="font-semibold text-white">18 years old</span>.
                       </div>
 
                       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-neutral-200">

@@ -94,18 +94,21 @@ export async function POST(req: Request) {
     const newUser = signUpData.user
 
     if (newUser?.id) {
+      const username =
+        email.split("@")[0]?.replace(/[^a-zA-Z0-9_]/g, "") || null
+
       const { error: profileError } = await supabase
         .from("profiles")
         .upsert(
           {
             id: newUser.id,
-            email: newUser.email,
+            email: newUser.email ?? email,
             full_name: fullName,
             name: fullName,
-            username: null,
-            membership: "standard",
-            account_status: "Active",
-            status: "Active",
+            username,
+            membership: "free",
+            account_status: "active",
+            status: "active",
             is_premium: false,
             role: "user",
           },
@@ -122,6 +125,9 @@ export async function POST(req: Request) {
     return response
   } catch (error) {
     console.error("Signup route error:", error)
-    return NextResponse.redirect(`${new URL(req.url).origin}/signup?error=failed`, 303)
+    return NextResponse.redirect(
+      `${new URL(req.url).origin}/signup?error=failed`,
+      303
+    )
   }
 }

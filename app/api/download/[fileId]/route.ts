@@ -14,7 +14,7 @@ type FileRow = {
   id: string
   title?: string | null
   slug?: string | null
-  visibility?: "free" | "premium" | "private" | null
+  visibility?: "free" | "premium" | "platinum" | "private" | null
   status?: string | null
   downloads_count?: number | null
   linkvertise_url?: string | null
@@ -35,6 +35,13 @@ type FileVersionRow = {
 
 function normalizeSiteUrl(url: string) {
   return url.trim().replace(/\/$/, "")
+}
+
+function normalizeMembership(value?: string | null) {
+  const membership = String(value || "").trim().toLowerCase()
+  if (membership === "platinum") return "platinum"
+  if (membership === "premium") return "premium"
+  return "standard"
 }
 
 function buildSafeFilename(file: FileRow, version: FileVersionRow) {
@@ -101,11 +108,14 @@ export async function GET(
     }
 
     const profile = profileData as ProfileRow | null
+    const membership = normalizeMembership(profile?.membership)
     const isAdmin = profile?.role === "admin"
     const isPremiumUser =
       isAdmin ||
       profile?.is_premium === true ||
-      profile?.membership === "premium"
+      membership === "premium" ||
+      membership === "platinum"
+    const isPlatinumUser = isAdmin || membership === "platinum"
 
     const { data: fileData, error: fileError } = await supabase
       .from("files")
@@ -179,12 +189,14 @@ export async function GET(
 
     let allowed = false
 
-    if (isAdmin || isPremiumUser) {
+    if (isAdmin) {
       allowed = true
     } else if (visibility === "free") {
       allowed = true
     } else if (visibility === "premium") {
-      allowed = false
+      allowed = isPremiumUser
+    } else if (visibility === "platinum") {
+      allowed = isPlatinumUser
     } else if (visibility === "private") {
       allowed = false
     }
@@ -202,9 +214,11 @@ export async function GET(
       return NextResponse.json(
         {
           error:
-            visibility === "premium"
-              ? "Premium membership required"
-              : "You do not have access to this file",
+            visibility === "platinum"
+              ? "Platinum membership required"
+              : visibility === "premium"
+                ? "Premium membership required"
+                : "You do not have access to this file",
         },
         { status: 403 }
       )

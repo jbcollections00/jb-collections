@@ -3,6 +3,34 @@ import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import { createClient } from "@supabase/supabase-js"
 
+export const runtime = "nodejs"
+
+function normalizeMembership(value?: string | null) {
+  const membership = String(value || "").trim().toLowerCase()
+  if (membership === "platinum") return "platinum"
+  if (membership === "premium") return "premium"
+  return "standard"
+}
+
+function normalizeRole(value?: string | null) {
+  const role = String(value || "").trim().toLowerCase()
+  if (role === "admin") return "admin"
+  return "user"
+}
+
+function normalizeAccountStatus(value?: string | null) {
+  const status = String(value || "").trim()
+  if (
+    status === "Active" ||
+    status === "Pending" ||
+    status === "Suspended" ||
+    status === "Banned"
+  ) {
+    return status
+  }
+  return "Active"
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -46,21 +74,34 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing user id" }, { status: 400 })
     }
 
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json(
+        { error: "Missing SUPABASE_SERVICE_ROLE_KEY" },
+        { status: 500 }
+      )
+    }
+
     const adminSupabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY
     )
+
+    const membership = normalizeMembership(body.membership)
+    const role = normalizeRole(body.role)
+    const accountStatus = normalizeAccountStatus(body.account_status)
+    const status = normalizeAccountStatus(body.status)
+    const isPremium = membership === "premium" || membership === "platinum"
 
     const { error } = await adminSupabase
       .from("profiles")
       .update({
         full_name: body.full_name ?? null,
         username: body.username ?? null,
-        membership: body.membership ?? "standard",
-        is_premium: Boolean(body.is_premium),
-        account_status: body.account_status ?? "Active",
-        status: body.status ?? "Active",
-        role: body.role ?? "user",
+        membership,
+        is_premium: isPremium,
+        account_status: accountStatus,
+        status,
+        role,
       })
       .eq("id", body.id)
 
@@ -68,7 +109,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      membership,
+      is_premium: isPremium,
+      role,
+    })
   } catch (error) {
     console.error("Admin update user API error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

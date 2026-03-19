@@ -5,6 +5,12 @@ import { createClient as createSupabaseAdmin } from "@supabase/supabase-js"
 
 export const runtime = "nodejs"
 
+function normalizePlan(plan?: string | null) {
+  const value = String(plan || "").trim().toLowerCase()
+  if (value === "platinum") return "platinum"
+  return "premium"
+}
+
 export async function POST(req: Request) {
   try {
     const { upgradeId, userId } = await req.json()
@@ -73,7 +79,7 @@ export async function POST(req: Request) {
 
     const { data: upgradeRow, error: upgradeLookupError } = await adminDb
       .from("upgrades")
-      .select("id, sender_id, status")
+      .select("id, sender_id, status, plan, admin_reply")
       .eq("id", upgradeId)
       .maybeSingle()
 
@@ -91,10 +97,21 @@ export async function POST(req: Request) {
       )
     }
 
+    if (upgradeRow.status === "approved") {
+      return NextResponse.json(
+        { success: true, message: "Request already approved." },
+        { status: 200 }
+      )
+    }
+
+    const approvedPlan = normalizePlan(upgradeRow.plan)
+
     const { error: upgradeError } = await adminDb
       .from("upgrades")
       .update({
         status: "approved",
+        admin_reply:
+          upgradeRow.admin_reply?.trim() || "Your upgrade request has been approved.",
       })
       .eq("id", upgradeId)
 
@@ -108,7 +125,7 @@ export async function POST(req: Request) {
     const { error: profileError } = await adminDb
       .from("profiles")
       .update({
-        membership: "premium",
+        membership: approvedPlan,
         is_premium: true,
         account_status: "Active",
         status: "Active",
@@ -122,7 +139,10 @@ export async function POST(req: Request) {
       )
     }
 
-    return NextResponse.json({ success: true }, { status: 200 })
+    return NextResponse.json(
+      { success: true, plan: approvedPlan },
+      { status: 200 }
+    )
   } catch (error) {
     console.error("Approve upgrade error:", error)
 

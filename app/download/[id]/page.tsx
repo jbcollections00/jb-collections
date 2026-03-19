@@ -11,7 +11,7 @@ type FileRow = {
   id: string
   title?: string | null
   description?: string | null
-  visibility?: "free" | "premium" | "private" | null
+  visibility?: "free" | "premium" | "platinum" | "private" | null
   shrinkme_url?: string | null
   linkvertise_url?: string | null
   monetization_enabled?: boolean | null
@@ -55,6 +55,13 @@ function normalizeExternalUrl(value?: string | null) {
   return null
 }
 
+function normalizeMembership(value?: string | null) {
+  const membership = String(value || "").trim().toLowerCase()
+  if (membership === "platinum") return "platinum"
+  if (membership === "premium") return "premium"
+  return "standard"
+}
+
 function pickMonetizedLink(file: FileRow | null) {
   if (!file) return null
   if (file.monetization_enabled === false) return null
@@ -77,9 +84,12 @@ export default function DownloadGatePage() {
   const [checking, setChecking] = useState(true)
   const [file, setFile] = useState<FileRow | null>(null)
   const [isPremiumUser, setIsPremiumUser] = useState(false)
+  const [isPlatinumUser, setIsPlatinumUser] = useState(false)
   const [error, setError] = useState("")
 
-  const [step, setStep] = useState<"waiting" | "ready" | "premium-only">("waiting")
+  const [step, setStep] = useState<"waiting" | "ready" | "premium-only" | "platinum-only">(
+    "waiting"
+  )
   const [countdown, setCountdown] = useState(5)
   const [sponsoredOpened, setSponsoredOpened] = useState(false)
   const [unlockCountdown, setUnlockCountdown] = useState(5)
@@ -157,6 +167,7 @@ export default function DownloadGatePage() {
       setError("")
       setFile(null)
       setIsPremiumUser(false)
+      setIsPlatinumUser(false)
 
       setStep("waiting")
       setCountdown(5)
@@ -209,10 +220,15 @@ export default function DownloadGatePage() {
       }
 
       const profile = profileData as ProfileRow | null
+      const membership = normalizeMembership(profile?.membership)
       const premium =
         profile?.role === "admin" ||
         profile?.is_premium === true ||
-        profile?.membership === "premium"
+        membership === "premium" ||
+        membership === "platinum"
+
+      const platinum =
+        profile?.role === "admin" || membership === "platinum"
 
       const foundFile = fileData as FileRow
       const visibility = (foundFile.visibility || "free").toLowerCase()
@@ -220,6 +236,7 @@ export default function DownloadGatePage() {
 
       setFile(foundFile)
       setIsPremiumUser(Boolean(premium))
+      setIsPlatinumUser(Boolean(platinum))
 
       if (!hasLoggedGateViewRef.current) {
         hasLoggedGateViewRef.current = true
@@ -230,13 +247,31 @@ export default function DownloadGatePage() {
         })
       }
 
-      if (premium) {
+      if (
+        premium &&
+        (visibility === "free" || visibility === "premium")
+      ) {
         void logEvent("premium_auto_download", {
           visibility,
           has_sponsored_link: Boolean(shortlink),
           monetization_enabled: foundFile.monetization_enabled !== false,
         })
         window.location.href = `/api/download/${fileId}`
+        return
+      }
+
+      if (platinum && visibility === "platinum") {
+        void logEvent("premium_auto_download", {
+          visibility,
+          has_sponsored_link: Boolean(shortlink),
+          monetization_enabled: foundFile.monetization_enabled !== false,
+        })
+        window.location.href = `/api/download/${fileId}`
+        return
+      }
+
+      if (visibility === "platinum") {
+        setStep("platinum-only")
         return
       }
 
@@ -357,6 +392,13 @@ export default function DownloadGatePage() {
   const hasSponsoredLink = Boolean(selectedShortlink)
   const monetizationEnabled = file.monetization_enabled !== false
 
+  function getAccessLabel() {
+    if (visibility === "platinum") return "Platinum File"
+    if (visibility === "premium") return "Premium File"
+    if (visibility === "private") return "Private File"
+    return "Free File"
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8">
       <div className="mx-auto max-w-3xl">
@@ -383,11 +425,24 @@ export default function DownloadGatePage() {
                 Access Type
               </p>
 
-              <p className="mt-2 text-lg font-bold text-slate-900">
-                {visibility === "premium" ? "Premium File" : visibility === "private" ? "Private File" : "Free File"}
-              </p>
+              <p className="mt-2 text-lg font-bold text-slate-900">{getAccessLabel()}</p>
 
-              {step === "premium-only" ? (
+              {step === "platinum-only" ? (
+                <>
+                  <p className="mt-3 text-sm text-fuchsia-700">
+                    This file is for platinum members only.
+                  </p>
+
+                  <div className="mt-6">
+                    <Link
+                      href="/upgrade"
+                      className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-6 py-3 text-sm font-bold text-white transition hover:opacity-90"
+                    >
+                      Upgrade to Platinum
+                    </Link>
+                  </div>
+                </>
+              ) : step === "premium-only" ? (
                 <>
                   <p className="mt-3 text-sm text-red-600">
                     This file is for premium members only.
@@ -479,7 +534,7 @@ export default function DownloadGatePage() {
               )}
             </div>
 
-            {!isPremiumUser && visibility !== "premium" && visibility !== "private" ? (
+            {!isPremiumUser && visibility === "free" ? (
               <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center">
                 <p className="text-sm font-semibold text-amber-800">
                   Want instant downloads with no sponsored step?
@@ -489,6 +544,20 @@ export default function DownloadGatePage() {
                   className="mt-3 inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-3 text-sm font-bold text-white transition hover:opacity-90"
                 >
                   Go Premium
+                </Link>
+              </div>
+            ) : null}
+
+            {!isPlatinumUser && visibility === "premium" ? (
+              <div className="mt-6 rounded-3xl border border-fuchsia-200 bg-fuchsia-50 p-5 text-center">
+                <p className="text-sm font-semibold text-fuchsia-800">
+                  Want access to exclusive platinum-only releases too?
+                </p>
+                <Link
+                  href="/upgrade"
+                  className="mt-3 inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-5 py-3 text-sm font-bold text-white transition hover:opacity-90"
+                >
+                  Go Platinum
                 </Link>
               </div>
             ) : null}

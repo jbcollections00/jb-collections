@@ -12,17 +12,23 @@ const ALLOWED_MIME_TYPES = [
   "application/pdf",
 ]
 
+function normalizePlan(value: FormDataEntryValue | null) {
+  const plan = String(value || "").trim().toLowerCase()
+  return plan === "platinum" ? "platinum" : "premium"
+}
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData()
 
+    const requestedPlan = normalizePlan(formData.get("plan"))
     const subject = String(formData.get("subject") || "").trim()
     const message = String(formData.get("message") || "").trim()
     const receipt = formData.get("receipt")
 
     if (!message) {
       return NextResponse.redirect(
-        new URL("/profile?error=missing-message", req.url),
+        new URL(`/upgrade?plan=${requestedPlan}&error=missing-message`, req.url),
         { status: 303 }
       )
     }
@@ -70,7 +76,7 @@ export async function POST(req: Request) {
     if (receipt instanceof File && receipt.size > 0) {
       if (receipt.size > MAX_FILE_SIZE) {
         return NextResponse.redirect(
-          new URL("/profile?error=file-too-large", req.url),
+          new URL(`/upgrade?plan=${requestedPlan}&error=file-too-large`, req.url),
           { status: 303 }
         )
       }
@@ -79,7 +85,7 @@ export async function POST(req: Request) {
 
       if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
         return NextResponse.redirect(
-          new URL("/profile?error=invalid-file-type", req.url),
+          new URL(`/upgrade?plan=${requestedPlan}&error=invalid-file-type`, req.url),
           { status: 303 }
         )
       }
@@ -105,7 +111,7 @@ export async function POST(req: Request) {
       if (uploadError) {
         console.error("Receipt upload error:", uploadError)
         return NextResponse.redirect(
-          new URL("/profile?error=upload-failed", req.url),
+          new URL(`/upgrade?plan=${requestedPlan}&error=upload-failed`, req.url),
           { status: 303 }
         )
       }
@@ -118,12 +124,17 @@ export async function POST(req: Request) {
       receiptPath = fileName
     }
 
+    const defaultSubject =
+      requestedPlan === "platinum"
+        ? "Platinum upgrade request"
+        : "Premium upgrade request"
+
     const payload = {
       sender_id: user.id,
       name: profile?.full_name || null,
       email: profile?.email || user.email || null,
-      plan: "premium",
-      subject: subject || "Premium upgrade request",
+      plan: requestedPlan,
+      subject: subject || defaultSubject,
       body: message,
       status: "pending",
       admin_reply: null,
@@ -138,20 +149,21 @@ export async function POST(req: Request) {
     if (insertError) {
       console.error("Insert upgrade error:", insertError)
       return NextResponse.redirect(
-        new URL("/profile?error=insert-failed", req.url),
+        new URL(`/upgrade?plan=${requestedPlan}&error=insert-failed`, req.url),
         { status: 303 }
       )
     }
 
-    return NextResponse.redirect(new URL("/profile?success=upgrade-requested", req.url), {
-      status: 303,
-    })
+    return NextResponse.redirect(
+      new URL(`/upgrade?plan=${requestedPlan}&success=1`, req.url),
+      { status: 303 }
+    )
   } catch (error) {
     console.error("Upgrade request error:", error)
 
     return NextResponse.redirect(
-      new URL("/profile?error=unexpected", req.url),
+      new URL("/upgrade?error=unexpected", req.url),
       { status: 303 }
     )
   }
-} 
+}

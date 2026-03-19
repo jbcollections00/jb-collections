@@ -24,6 +24,13 @@ type AdminProfile = {
   role?: string | null
 }
 
+function normalizeMembership(value?: string | null) {
+  const membership = String(value || "").trim().toLowerCase()
+  if (membership === "platinum") return "platinum"
+  if (membership === "premium") return "premium"
+  return "standard"
+}
+
 export default function AdminUsersPage() {
   const supabase = createClient()
   const router = useRouter()
@@ -47,23 +54,25 @@ export default function AdminUsersPage() {
   const [successMessage, setSuccessMessage] = useState("")
 
   useEffect(() => {
-    checkAdminAndLoad()
+    void checkAdminAndLoad()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     if (!selectedUser) return
 
+    const normalizedMembership = normalizeMembership(
+      selectedUser.membership || (selectedUser.is_premium ? "premium" : "standard")
+    )
+
     setEditFullName(selectedUser.full_name || selectedUser.name || "")
     setEditUsername(selectedUser.username || "")
-    setEditMembership(
-      String(selectedUser.membership || (selectedUser.is_premium ? "premium" : "standard"))
-    )
+    setEditMembership(normalizedMembership)
     setEditAccountStatus(
       String(selectedUser.account_status || selectedUser.status || "Active")
     )
     setEditRole(String(selectedUser.role || "user"))
-    setEditIsPremium(Boolean(selectedUser.is_premium))
+    setEditIsPremium(normalizedMembership === "premium" || normalizedMembership === "platinum")
   }, [selectedUser])
 
   async function checkAdminAndLoad() {
@@ -78,7 +87,7 @@ export default function AdminUsersPage() {
       } = await supabase.auth.getUser()
 
       if (userError || !user) {
-        router.replace("/admin/login")
+        router.replace("/secure-admin-portal-7X9")
         return
       }
 
@@ -89,14 +98,14 @@ export default function AdminUsersPage() {
         .maybeSingle<AdminProfile>()
 
       if (profileError || profile?.role !== "admin") {
-        router.replace("/admin/login?error=not-admin")
+        router.replace("/secure-admin-portal-7X9?error=not-admin")
         return
       }
 
       await loadUsers()
     } catch (error) {
       console.error("Admin users auth check failed:", error)
-      router.replace("/admin/login?error=failed")
+      router.replace("/secure-admin-portal-7X9?error=failed")
     } finally {
       setCheckingAdmin(false)
     }
@@ -160,19 +169,33 @@ export default function AdminUsersPage() {
     return getDisplayName(user).charAt(0).toUpperCase()
   }
 
+  function getMembershipLabel(user: UserRow) {
+    if (String(user.role || "").toLowerCase() === "admin") {
+      return "Admin"
+    }
+
+    const membership = normalizeMembership(user.membership)
+    if (membership === "platinum") return "Platinum"
+    if (membership === "premium") return "Premium"
+    return "Standard"
+  }
+
   function getMembershipBadge(user: UserRow) {
-    const premium =
-      typeof user.is_premium === "boolean"
-        ? user.is_premium
-        : String(user.membership || "").toLowerCase() === "premium"
+    const membership = normalizeMembership(user.membership)
 
     if (String(user.role || "").toLowerCase() === "admin") {
       return "bg-violet-100 text-violet-700"
     }
 
-    return premium
-      ? "bg-emerald-100 text-emerald-700"
-      : "bg-slate-100 text-slate-700"
+    if (membership === "platinum") {
+      return "bg-fuchsia-100 text-fuchsia-700"
+    }
+
+    if (membership === "premium") {
+      return "bg-emerald-100 text-emerald-700"
+    }
+
+    return "bg-slate-100 text-slate-700"
   }
 
   function getOnlineStatus(user: UserRow) {
@@ -189,9 +212,11 @@ export default function AdminUsersPage() {
       setErrorMessage("")
       setSuccessMessage("")
 
-      const normalizedMembership = editIsPremium ? "premium" : editMembership
+      const normalizedMembership = normalizeMembership(editMembership)
       const normalizedRole = editRole.trim() || "user"
       const normalizedStatus = editAccountStatus.trim() || "Active"
+      const normalizedIsPremium =
+        normalizedMembership === "premium" || normalizedMembership === "platinum"
 
       const res = await fetch("/api/admin/users/update", {
         method: "POST",
@@ -203,7 +228,7 @@ export default function AdminUsersPage() {
           full_name: editFullName.trim() || null,
           username: editUsername.trim() || null,
           membership: normalizedMembership,
-          is_premium: editIsPremium,
+          is_premium: normalizedIsPremium,
           account_status: normalizedStatus,
           status: normalizedStatus,
           role: normalizedRole,
@@ -318,11 +343,7 @@ export default function AdminUsersPage() {
                               user
                             )}`}
                           >
-                            {String(user.role || "").toLowerCase() === "admin"
-                              ? "Admin"
-                              : user.is_premium || String(user.membership || "").toLowerCase() === "premium"
-                                ? "Premium"
-                                : "Standard"}
+                            {getMembershipLabel(user)}
                           </span>
 
                           <span
@@ -351,7 +372,17 @@ export default function AdminUsersPage() {
                     {getDisplayName(selectedUser)}
                   </h2>
 
-                  <div className="mt-2 space-y-1 text-sm leading-7 text-slate-600">
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${getMembershipBadge(
+                        selectedUser
+                      )}`}
+                    >
+                      {getMembershipLabel(selectedUser)}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 space-y-1 text-sm leading-7 text-slate-600">
                     <div>
                       <strong>Email:</strong> {selectedUser.email || "No email"}
                     </div>
@@ -401,11 +432,18 @@ export default function AdminUsersPage() {
                       </label>
                       <select
                         value={editMembership}
-                        onChange={(e) => setEditMembership(e.target.value)}
+                        onChange={(e) => {
+                          const nextMembership = normalizeMembership(e.target.value)
+                          setEditMembership(nextMembership)
+                          setEditIsPremium(
+                            nextMembership === "premium" || nextMembership === "platinum"
+                          )
+                        }}
                         className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
                       >
                         <option value="standard">Standard</option>
                         <option value="premium">Premium</option>
+                        <option value="platinum">Platinum</option>
                       </select>
                     </div>
 
@@ -446,11 +484,17 @@ export default function AdminUsersPage() {
                         type="checkbox"
                         checked={editIsPremium}
                         onChange={(e) => {
-                          setEditIsPremium(e.target.checked)
-                          setEditMembership(e.target.checked ? "premium" : "standard")
+                          const checked = e.target.checked
+                          setEditIsPremium(checked)
+
+                          if (!checked) {
+                            setEditMembership("standard")
+                          } else if (editMembership === "standard") {
+                            setEditMembership("premium")
+                          }
                         }}
                       />
-                      Premium User
+                      Premium Access
                     </label>
                   </div>
 

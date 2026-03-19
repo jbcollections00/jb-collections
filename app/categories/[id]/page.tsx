@@ -35,16 +35,22 @@ type FileItem = {
   download_count?: number | null
   file_type?: string | null
   mime_type?: string | null
-  visibility?: "free" | "premium" | "private" | null
+  visibility?: "free" | "premium" | "platinum" | "private" | null
   status?: "draft" | "review" | "published" | "flagged" | "removed" | null
   created_at?: string | null
+}
+
+type ProfileRow = {
+  role?: string | null
+  membership?: string | null
+  is_premium?: boolean | null
 }
 
 const PAGE_SIZE = 36
 
 function isImageFile(url?: string | null) {
   if (!url) return false
-  return /\.(jpg|jpeg|png|webp|gif|bmp|svg)$/i.test(url)
+  return /\.(jpg|jpeg|png|webp|gif|bmp|svg)(\?|$)/i.test(url)
 }
 
 function getPreviewImage(file: FileItem) {
@@ -97,6 +103,48 @@ function getDisplayName(file: FileItem) {
   return file.title || file.name || "Untitled File"
 }
 
+function normalizeMembership(value?: string | null) {
+  const membership = String(value || "").trim().toLowerCase()
+  if (membership === "platinum") return "platinum"
+  if (membership === "premium") return "premium"
+  return "standard"
+}
+
+function getVisibilityLabel(file: FileItem) {
+  const visibility = (file.visibility || "free").toLowerCase()
+
+  if (visibility === "platinum") return "Platinum"
+  if (visibility === "premium") return "Premium"
+  if (visibility === "private") return "Private"
+  return "Free"
+}
+
+function getVisibilityBadgeClasses(file: FileItem) {
+  const visibility = (file.visibility || "free").toLowerCase()
+
+  if (visibility === "platinum") {
+    return "bg-fuchsia-600 text-white"
+  }
+
+  if (visibility === "premium") {
+    return "bg-black/75 text-white"
+  }
+
+  if (visibility === "private") {
+    return "bg-red-600 text-white"
+  }
+
+  return "bg-emerald-600 text-white"
+}
+
+function getCardBorderClasses(file: FileItem) {
+  const visibility = (file.visibility || "free").toLowerCase()
+
+  if (visibility === "platinum") return "border-fuchsia-200"
+  if (visibility === "premium") return "border-amber-200"
+  return "border-slate-200"
+}
+
 export default function CategoryPage() {
   const params = useParams()
   const router = useRouter()
@@ -112,10 +160,11 @@ export default function CategoryPage() {
   const [search, setSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [profile, setProfile] = useState<ProfileRow | null>(null)
 
   useEffect(() => {
     if (categoryId) {
-      checkUserAndLoad()
+      void checkUserAndLoad()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryId])
@@ -139,7 +188,7 @@ export default function CategoryPage() {
         return
       }
 
-      await fetchCategoryPage()
+      await fetchCategoryPage(user.id)
     } catch (error) {
       console.error("Category auth check failed:", error)
       router.replace("/login")
@@ -149,11 +198,12 @@ export default function CategoryPage() {
     }
   }
 
-  async function fetchCategoryPage() {
+  async function fetchCategoryPage(userId: string) {
     const [
       { data: categoryData, error: categoryError },
       { data: filesData, error: filesError },
       { data: categoriesData, error: categoriesError },
+      { data: profileData, error: profileError },
     ] = await Promise.all([
       supabase
         .from("categories")
@@ -170,6 +220,11 @@ export default function CategoryPage() {
         .from("categories")
         .select("id, name")
         .order("name", { ascending: true }),
+      supabase
+        .from("profiles")
+        .select("role, membership, is_premium")
+        .eq("id", userId)
+        .maybeSingle(),
     ])
 
     if (categoryError) {
@@ -192,7 +247,20 @@ export default function CategoryPage() {
     } else {
       setAllCategories(categoriesData || [])
     }
+
+    if (profileError) {
+      console.error("Profile fetch error:", profileError)
+      setProfile(null)
+    } else {
+      setProfile((profileData as ProfileRow | null) || null)
+    }
   }
+
+  const membership = normalizeMembership(profile?.membership)
+  const isAdmin = profile?.role === "admin"
+  const isPremiumUser =
+    isAdmin || profile?.is_premium === true || membership === "premium" || membership === "platinum"
+  const isPlatinumUser = isAdmin || membership === "platinum"
 
   const filteredFiles = useMemo(() => {
     const keyword = search.trim().toLowerCase()
@@ -202,11 +270,13 @@ export default function CategoryPage() {
       const name = getDisplayName(file).toLowerCase()
       const description = file.description?.toLowerCase() || ""
       const type = getDisplayFileType(file).toLowerCase()
+      const visibility = String(file.visibility || "free").toLowerCase()
 
       return (
         name.includes(keyword) ||
         description.includes(keyword) ||
-        type.includes(keyword)
+        type.includes(keyword) ||
+        visibility.includes(keyword)
       )
     })
   }, [files, search])
@@ -502,6 +572,9 @@ export default function CategoryPage() {
                 const previewImage = getPreviewImage(file)
                 const type = getDisplayFileType(file)
                 const icon = getFileIcon(type)
+                const visibility = (file.visibility || "free").toLowerCase()
+                const isPremiumLocked = visibility === "premium"
+                const isPlatinumLocked = visibility === "platinum"
 
                 return (
                   <div key={file.id}>
@@ -511,7 +584,15 @@ export default function CategoryPage() {
                       </div>
                     )}
 
-                    <div className="group overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+                    <div
+                      className={`group overflow-hidden rounded-[20px] border bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
+                        isPlatinumLocked
+                          ? "border-fuchsia-200"
+                          : isPremiumLocked
+                            ? "border-amber-200"
+                            : "border-slate-200"
+                      }`}
+                    >
                       <div className="relative overflow-hidden bg-slate-100">
                         <div className="aspect-[4/5] overflow-hidden">
                           {previewImage ? (
@@ -520,7 +601,9 @@ export default function CategoryPage() {
                               alt={getDisplayName(file)}
                               loading="lazy"
                               decoding="async"
-                              className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                              className={`h-full w-full object-cover transition duration-500 group-hover:scale-105 ${
+                                isPlatinumLocked || isPremiumLocked ? "brightness-90" : ""
+                              }`}
                             />
                           ) : (
                             <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-slate-100 via-slate-50 to-slate-200">
@@ -531,9 +614,29 @@ export default function CategoryPage() {
                             </div>
                           )}
 
-                          {file.visibility === "premium" && (
-                            <div className="absolute right-3 top-3 rounded-full bg-black/75 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur-md">
-                              Premium
+                          <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+                            <div
+                              className={`rounded-full px-3 py-1.5 text-[11px] font-bold backdrop-blur-md ${getVisibilityBadgeClasses(
+                                file
+                              )}`}
+                            >
+                              {getVisibilityLabel(file)}
+                            </div>
+                          </div>
+
+                          {isPremiumLocked && (
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-amber-900/80 via-amber-800/30 to-transparent px-3 pb-3 pt-10">
+                              <div className="text-center text-[11px] font-bold uppercase tracking-[0.18em] text-amber-100">
+                                Premium Access
+                              </div>
+                            </div>
+                          )}
+
+                          {isPlatinumLocked && (
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-fuchsia-900/80 via-violet-800/30 to-transparent px-3 pb-3 pt-10">
+                              <div className="text-center text-[11px] font-bold uppercase tracking-[0.18em] text-fuchsia-100">
+                                Platinum Exclusive
+                              </div>
                             </div>
                           )}
                         </div>
@@ -547,13 +650,29 @@ export default function CategoryPage() {
                           {getDisplayName(file)}
                         </h3>
 
-                        <button
-                          type="button"
-                          onClick={() => handleDownload(file)}
-                          className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-3 py-2 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
-                        >
-                          Download Now
-                        </button>
+                        {isPlatinumLocked && !isPlatinumUser ? (
+                          <Link
+                            href="/upgrade"
+                            className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-3 py-2 text-sm font-bold text-white transition hover:opacity-90"
+                          >
+                            Unlock with Platinum
+                          </Link>
+                        ) : isPremiumLocked && !isPremiumUser ? (
+                          <Link
+                            href="/upgrade"
+                            className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-2 text-sm font-bold text-white transition hover:opacity-90"
+                          >
+                            Unlock with Premium
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleDownload(file)}
+                            className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-3 py-2 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
+                          >
+                            Download Now
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -606,4 +725,31 @@ export default function CategoryPage() {
       </div>
     </div>
   )
+}
+
+function getVisibilityLabel(file: FileItem) {
+  const visibility = (file.visibility || "free").toLowerCase()
+
+  if (visibility === "platinum") return "Platinum"
+  if (visibility === "premium") return "Premium"
+  if (visibility === "private") return "Private"
+  return "Free"
+}
+
+function getVisibilityBadgeClasses(file: FileItem) {
+  const visibility = (file.visibility || "free").toLowerCase()
+
+  if (visibility === "platinum") {
+    return "bg-fuchsia-600 text-white"
+  }
+
+  if (visibility === "premium") {
+    return "bg-black/75 text-white"
+  }
+
+  if (visibility === "private") {
+    return "bg-red-600 text-white"
+  }
+
+  return "bg-emerald-600 text-white"
 }

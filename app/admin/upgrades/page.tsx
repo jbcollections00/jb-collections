@@ -30,6 +30,17 @@ type ToastState = {
   message: string
 }
 
+type StatusAction = {
+  id: string | null
+  action: "approve" | "reject" | "pending" | null
+}
+
+function normalizePlan(plan?: string | null) {
+  const value = String(plan || "").trim().toLowerCase()
+  if (value === "platinum") return "platinum"
+  return "premium"
+}
+
 export default function UpgradesPage() {
   const supabase = createClient()
   const router = useRouter()
@@ -47,7 +58,7 @@ export default function UpgradesPage() {
   const [isEditingRequest, setIsEditingRequest] = useState(false)
   const [editName, setEditName] = useState("")
   const [editEmail, setEditEmail] = useState("")
-  const [editPlan, setEditPlan] = useState("")
+  const [editPlan, setEditPlan] = useState("premium")
   const [editSubject, setEditSubject] = useState("")
   const [editBody, setEditBody] = useState("")
   const [savingRequestEdit, setSavingRequestEdit] = useState(false)
@@ -56,7 +67,10 @@ export default function UpgradesPage() {
   const [editReplyText, setEditReplyText] = useState("")
   const [savingReplyEdit, setSavingReplyEdit] = useState(false)
 
-  const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [statusAction, setStatusAction] = useState<StatusAction>({
+    id: null,
+    action: null,
+  })
   const [deletingRequest, setDeletingRequest] = useState(false)
 
   const [toast, setToast] = useState<ToastState>({
@@ -98,16 +112,24 @@ export default function UpgradesPage() {
       await loadRequests(true)
 
       interval = setInterval(() => {
-        loadRequests(false)
+        const isBusyEditing =
+          isEditingRequest || isEditingReply || savingRequestEdit || savingReplyEdit
+
+        const hasDraftText = Boolean(replyBody.trim())
+
+        if (!isBusyEditing && !hasDraftText) {
+          void loadRequests(false)
+        }
       }, 5000)
     }
 
-    init()
+    void init()
 
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [])
+    // intentionally include editing state so refresh respects current UI usage
+  }, [isEditingRequest, isEditingReply, savingRequestEdit, savingReplyEdit, replyBody])
 
   useEffect(() => {
     if (!selectedRequest) {
@@ -119,7 +141,7 @@ export default function UpgradesPage() {
 
     setEditName(selectedRequest.name || "")
     setEditEmail(selectedRequest.email || "")
-    setEditPlan(selectedRequest.plan || "premium")
+    setEditPlan(normalizePlan(selectedRequest.plan))
     setEditSubject(selectedRequest.subject || "")
     setEditBody(selectedRequest.body || "")
     setReplyBody("")
@@ -192,7 +214,7 @@ export default function UpgradesPage() {
 
   async function setPending(id: string) {
     try {
-      setUpdatingStatus(true)
+      setStatusAction({ id, action: "pending" })
 
       const { error } = await supabase
         .from("upgrades")
@@ -208,7 +230,7 @@ export default function UpgradesPage() {
       await loadRequests(false)
       showToast("info", "Request Updated", "Request set to pending.")
     } finally {
-      setUpdatingStatus(false)
+      setStatusAction({ id: null, action: null })
     }
   }
 
@@ -223,7 +245,7 @@ export default function UpgradesPage() {
     }
 
     try {
-      setUpdatingStatus(true)
+      setStatusAction({ id: request.id, action: "approve" })
 
       const response = await fetch("/api/admin/upgrades/approve", {
         method: "POST",
@@ -237,7 +259,7 @@ export default function UpgradesPage() {
       })
 
       const text = await response.text()
-      let result: { error?: string; success?: boolean } = {}
+      let result: { error?: string; success?: boolean; plan?: string } = {}
 
       try {
         result = text ? JSON.parse(text) : {}
@@ -250,19 +272,25 @@ export default function UpgradesPage() {
         return
       }
 
+      const approvedPlan = result.plan || normalizePlan(request.plan)
+
       await loadRequests(false)
-      showToast("success", "Upgrade Approved", "Request approved. User is now premium.")
+      showToast(
+        "success",
+        "Upgrade Approved",
+        `Request approved. User is now ${approvedPlan}.`
+      )
     } catch (error) {
       console.error("Approve request error:", error)
       showToast("error", "Approval Failed", "Approve failed.")
     } finally {
-      setUpdatingStatus(false)
+      setStatusAction({ id: null, action: null })
     }
   }
 
   async function rejectRequest(request: UpgradeRequest) {
     try {
-      setUpdatingStatus(true)
+      setStatusAction({ id: request.id, action: "reject" })
 
       const response = await fetch("/api/admin/upgrades/reject", {
         method: "POST",
@@ -294,7 +322,7 @@ export default function UpgradesPage() {
       console.error("Reject request error:", error)
       showToast("error", "Reject Failed", "Reject failed.")
     } finally {
-      setUpdatingStatus(false)
+      setStatusAction({ id: null, action: null })
     }
   }
 
@@ -313,7 +341,6 @@ export default function UpgradesPage() {
         return
       }
 
-      setSelectedRequest(null)
       await loadRequests(false)
       showToast("success", "Request Deleted", "The upgrade request was deleted.")
     } finally {
@@ -366,7 +393,7 @@ export default function UpgradesPage() {
         .update({
           name: editName.trim() || null,
           email: editEmail.trim() || null,
-          plan: editPlan.trim() || "premium",
+          plan: normalizePlan(editPlan),
           subject: editSubject.trim() || null,
           body: editBody.trim() || null,
         })
@@ -451,12 +478,18 @@ export default function UpgradesPage() {
     return "bg-amber-100 text-amber-700"
   }
 
+  function getPlanClasses(plan?: string | null) {
+    const normalized = normalizePlan(plan)
+    if (normalized === "platinum") return "bg-violet-100 text-violet-700"
+    return "bg-blue-100 text-blue-700"
+  }
+
   function isImage(url: string) {
-    return /\.(jpg|jpeg|png|webp|gif)$/i.test(url)
+    return /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(url)
   }
 
   function isPdf(url: string) {
-    return /\.pdf$/i.test(url)
+    return /\.pdf(\?|$)/i.test(url)
   }
 
   const filteredRequests = useMemo(() => {
@@ -487,6 +520,9 @@ export default function UpgradesPage() {
       rejected: requests.filter((req) => getStatusLabel(req) === "rejected").length,
     }
   }, [requests])
+
+  const isCurrentAction = (id: string, action: StatusAction["action"]) =>
+    statusAction.id === id && statusAction.action === action
 
   if (checkingAdmin) {
     return (
@@ -540,7 +576,7 @@ export default function UpgradesPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, email, subject, or message"
+              placeholder="Search name, email, subject, message, or plan"
               className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 lg:flex-1"
             />
 
@@ -581,6 +617,7 @@ export default function UpgradesPage() {
                 filteredRequests.map((req) => {
                   const active = selectedRequest?.id === req.id
                   const status = getStatusLabel(req)
+                  const plan = normalizePlan(req.plan)
 
                   return (
                     <button
@@ -603,7 +640,7 @@ export default function UpgradesPage() {
                           {req.subject || "Premium upgrade request"}
                         </div>
 
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
                           <span
                             className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold capitalize ${getStatusClasses(
                               status
@@ -612,16 +649,26 @@ export default function UpgradesPage() {
                             {status.replace("_", " ")}
                           </span>
 
-                          <span className="shrink-0 whitespace-nowrap text-xs text-slate-500">
-                            {new Date(req.created_at).toLocaleDateString()}
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold uppercase ${getPlanClasses(
+                              plan
+                            )}`}
+                          >
+                            {plan}
                           </span>
                         </div>
 
-                        {req.receipt_url && (
-                          <div className="mt-2 text-[11px] font-bold text-violet-600">
-                            Receipt attached
-                          </div>
-                        )}
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="shrink-0 whitespace-nowrap text-xs text-slate-500">
+                            {new Date(req.created_at).toLocaleDateString()}
+                          </span>
+
+                          {req.receipt_url ? (
+                            <span className="text-[11px] font-bold text-violet-600">
+                              Receipt attached
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                     </button>
                   )
@@ -643,7 +690,25 @@ export default function UpgradesPage() {
                       {selectedRequest.subject || "Premium upgrade request"}
                     </h2>
 
-                    <div className="mt-2 text-sm leading-7 text-slate-600">
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-bold capitalize ${getStatusClasses(
+                          getStatusLabel(selectedRequest)
+                        )}`}
+                      >
+                        {getStatusLabel(selectedRequest).replace("_", " ")}
+                      </span>
+
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase ${getPlanClasses(
+                          selectedRequest.plan
+                        )}`}
+                      >
+                        {normalizePlan(selectedRequest.plan)}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 text-sm leading-7 text-slate-600">
                       <div>
                         <strong>Name:</strong> {selectedRequest.name || "No name"}
                       </div>
@@ -651,7 +716,7 @@ export default function UpgradesPage() {
                         <strong>Email:</strong> {selectedRequest.email || "No email"}
                       </div>
                       <div>
-                        <strong>Plan:</strong> {selectedRequest.plan || "premium"}
+                        <strong>Plan:</strong> {normalizePlan(selectedRequest.plan)}
                       </div>
                       <div>
                         <strong>Status:</strong>{" "}
@@ -701,12 +766,14 @@ export default function UpgradesPage() {
                       className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
                     />
 
-                    <input
+                    <select
                       value={editPlan}
                       onChange={(e) => setEditPlan(e.target.value)}
-                      placeholder="Plan"
-                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
-                    />
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+                    >
+                      <option value="premium">premium</option>
+                      <option value="platinum">platinum</option>
+                    </select>
 
                     <input
                       value={editSubject}
@@ -830,17 +897,19 @@ export default function UpgradesPage() {
                       Submitted Receipt
                     </h3>
 
-                    {isImage(selectedRequest.receipt_url) && (
+                    {isImage(selectedRequest.receipt_url) ? (
                       <img
                         src={selectedRequest.receipt_url}
                         alt="Submitted receipt"
                         className="w-full max-w-[260px] rounded-xl border border-slate-200 bg-white"
                       />
-                    )}
-
-                    {isPdf(selectedRequest.receipt_url) && (
+                    ) : isPdf(selectedRequest.receipt_url) ? (
                       <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-700">
                         PDF receipt uploaded
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+                        Receipt file attached
                       </div>
                     )}
 
@@ -891,26 +960,32 @@ export default function UpgradesPage() {
 
                     <button
                       onClick={() => approveRequest(selectedRequest)}
-                      disabled={updatingStatus}
+                      disabled={Boolean(statusAction.action)}
                       className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
                     >
-                      {updatingStatus ? "Working..." : "Approve"}
+                      {isCurrentAction(selectedRequest.id, "approve")
+                        ? "Approving..."
+                        : `Approve ${normalizePlan(selectedRequest.plan)}`}
                     </button>
 
                     <button
                       onClick={() => rejectRequest(selectedRequest)}
-                      disabled={updatingStatus}
+                      disabled={Boolean(statusAction.action)}
                       className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-70"
                     >
-                      {updatingStatus ? "Working..." : "Reject"}
+                      {isCurrentAction(selectedRequest.id, "reject")
+                        ? "Rejecting..."
+                        : "Reject"}
                     </button>
 
                     <button
                       onClick={() => setPending(selectedRequest.id)}
-                      disabled={updatingStatus}
+                      disabled={Boolean(statusAction.action)}
                       className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
                     >
-                      {updatingStatus ? "Working..." : "Set Pending"}
+                      {isCurrentAction(selectedRequest.id, "pending")
+                        ? "Updating..."
+                        : "Set Pending"}
                     </button>
                   </div>
                 </div>
