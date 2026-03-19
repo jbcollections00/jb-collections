@@ -7,7 +7,7 @@ export default function EnterPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const nextPath = searchParams.get("next") || "/"
+  const nextPath = searchParams?.get("next") || "/"
 
   function accept() {
     document.cookie =
@@ -58,6 +58,7 @@ export default function EnterPage() {
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <button
+                  type="button"
                   onClick={accept}
                   className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-3.5 text-sm font-semibold text-black transition hover:scale-[1.01] hover:opacity-95"
                 >
@@ -66,6 +67,7 @@ export default function EnterPage() {
                 </button>
 
                 <button
+                  type="button"
                   onClick={leave}
                   className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-6 py-3.5 text-sm font-medium text-neutral-200 transition hover:bg-white/10"
                 >
