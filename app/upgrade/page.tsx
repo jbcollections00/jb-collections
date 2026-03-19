@@ -1,11 +1,13 @@
 import Link from "next/link"
 
+type SearchParams = {
+  success?: string
+  error?: string
+  plan?: string
+}
+
 type UpgradePageProps = {
-  searchParams?: {
-    success?: string
-    error?: string
-    plan?: string
-  }
+  searchParams?: Promise<SearchParams>
 }
 
 function normalizePlan(value?: string) {
@@ -14,8 +16,8 @@ function normalizePlan(value?: string) {
   return "premium"
 }
 
-export default function UpgradePage({ searchParams }: UpgradePageProps) {
-  const params = searchParams || {}
+export default async function UpgradePage({ searchParams }: UpgradePageProps) {
+  const params = (await searchParams) ?? {}
   const success = params.success
   const error = params.error
   const selectedPlan = normalizePlan(params.plan)
