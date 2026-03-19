@@ -1,5 +1,6 @@
 import "./globals.css"
 import type { Metadata } from "next"
+import Link from "next/link"
 
 export const metadata: Metadata = {
   title: "JB Collections",
@@ -41,8 +42,39 @@ export default function RootLayout({
         <link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png" />
       </head>
 
-      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
-        {children}
+      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased flex flex-col">
+        
+        {/* MAIN CONTENT */}
+        <main className="flex-1">
+          {children}
+        </main>
+
+        {/* FOOTER */}
+        <footer className="border-t bg-white py-6 mt-10">
+          <div className="max-w-6xl mx-auto px-4 flex flex-col items-center gap-3 text-sm text-slate-500">
+
+            <div className="flex flex-wrap justify-center gap-4">
+              <Link href="/terms" className="hover:text-slate-900">
+                Terms
+              </Link>
+              <Link href="/privacy" className="hover:text-slate-900">
+                Privacy Policy
+              </Link>
+              <Link href="/disclaimer" className="hover:text-slate-900">
+                Disclaimer
+              </Link>
+              <Link href="/refund-policy" className="hover:text-slate-900">
+                Refund Policy
+              </Link>
+            </div>
+
+            <div className="text-xs text-slate-400">
+              © {new Date().getFullYear()} JB Collections. All rights reserved.
+            </div>
+
+          </div>
+        </footer>
+
       </body>
     </html>
   )
