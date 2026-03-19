@@ -1,9 +1,18 @@
 "use client"
 
+import { Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { ShieldAlert, BadgeAlert, ArrowRight, X } from "lucide-react"
 
 export default function EnterPage() {
+  return (
+    <Suspense fallback={<EnterPageFallback />}>
+      <EnterPageContent />
+    </Suspense>
+  )
+}
+
+function EnterPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -144,6 +153,16 @@ export default function EnterPage() {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function EnterPageFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-black px-5">
+      <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5 text-center text-sm text-neutral-300 backdrop-blur">
+        Loading...
       </div>
     </div>
   )
