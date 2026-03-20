@@ -15,9 +15,9 @@ function normalizePlan(value?: string | null) {
 export default function UpgradePage() {
   const searchParams = useSearchParams()
 
-  const success = searchParams.get("success") || ""
-  const error = searchParams.get("error") || ""
-  const initialPlan = normalizePlan(searchParams.get("plan"))
+  const success = searchParams?.get("success") ?? ""
+  const error = searchParams?.get("error") ?? ""
+  const initialPlan = normalizePlan(searchParams?.get("plan") ?? "")
   const [selectedPlan, setSelectedPlan] = useState<"premium" | "platinum">(initialPlan)
   const [showPaymentBox, setShowPaymentBox] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<"gcash" | "maya" | "bank">("gcash")
