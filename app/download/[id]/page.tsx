@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import AdSlot from "@/app/components/AdSlot"
@@ -24,34 +24,11 @@ type ProfileRow = {
   is_premium?: boolean | null
 }
 
-type EventType =
-  | "gate_view"
-  | "premium_auto_download"
-  | "sponsored_open"
-  | "download_click"
+type EventType = "gate_view" | "premium_auto_download" | "download_click"
 
 function getDisplayName(file: FileRow | null) {
   if (!file) return "Download"
   return file.title || "Untitled File"
-}
-
-function normalizeExternalUrl(value?: string | null) {
-  if (!value) return null
-
-  let url = value.trim()
-  url = url.replace(/^[^a-zA-Z0-9]+/, "")
-
-  if (url.startsWith("Phttp")) {
-    url = url.substring(1)
-  }
-
-  if (/^https?:\/\//i.test(url)) return url
-
-  if (/^[a-z0-9.-]+\.[a-z]{2,}/i.test(url)) {
-    return `https://${url}`
-  }
-
-  return null
 }
 
 function normalizeMembership(value?: string | null) {
@@ -59,19 +36,6 @@ function normalizeMembership(value?: string | null) {
   if (membership === "platinum") return "platinum"
   if (membership === "premium") return "premium"
   return "standard"
-}
-
-function pickMonetizedLink(file: FileRow | null) {
-  if (!file) return null
-  if (file.monetization_enabled === false) return null
-
-  const linkvertise = normalizeExternalUrl(file.linkvertise_url)
-  if (linkvertise) return linkvertise
-
-  const shrinkme = normalizeExternalUrl(file.shrinkme_url)
-  if (shrinkme) return shrinkme
-
-  return null
 }
 
 export default function DownloadGatePage() {
@@ -93,12 +57,10 @@ export default function DownloadGatePage() {
   )
   const [countdown, setCountdown] = useState(3)
   const [downloadReady, setDownloadReady] = useState(false)
-  const [openingSponsored, setOpeningSponsored] = useState(false)
   const [startingDownload, setStartingDownload] = useState(false)
   const [showStickyAd, setShowStickyAd] = useState(true)
 
   const hasLoggedGateViewRef = useRef(false)
-  const selectedShortlink = useMemo(() => pickMonetizedLink(file), [file])
 
   useEffect(() => {
     if (!fileId) return
@@ -113,14 +75,13 @@ export default function DownloadGatePage() {
     if (step !== "waiting") return
     if (downloadReady) return
     if (countdown <= 0) return
-    if (unlockedFromQuery) return
 
     const timer = window.setTimeout(() => {
       setCountdown((prev) => prev - 1)
     }, 1000)
 
     return () => window.clearTimeout(timer)
-  }, [checking, file, isPremiumUser, step, downloadReady, countdown, unlockedFromQuery])
+  }, [checking, file, isPremiumUser, step, downloadReady, countdown])
 
   async function logEvent(eventType: EventType, meta?: Record<string, unknown>) {
     try {
@@ -156,7 +117,6 @@ export default function DownloadGatePage() {
       setStep("waiting")
       setCountdown(3)
       setDownloadReady(false)
-      setOpeningSponsored(false)
       setStartingDownload(false)
       hasLoggedGateViewRef.current = false
 
@@ -214,7 +174,6 @@ export default function DownloadGatePage() {
 
       const foundFile = fileData as FileRow
       const visibility = (foundFile.visibility || "free").toLowerCase()
-      const shortlink = pickMonetizedLink(foundFile)
 
       setFile(foundFile)
       setIsPremiumUser(Boolean(premium))
@@ -224,7 +183,6 @@ export default function DownloadGatePage() {
         hasLoggedGateViewRef.current = true
         void logEvent("gate_view", {
           visibility,
-          has_sponsored_link: Boolean(shortlink),
           monetization_enabled: foundFile.monetization_enabled !== false,
           unlocked_from_query: unlockedFromQuery,
         })
@@ -233,7 +191,6 @@ export default function DownloadGatePage() {
       if (premium && (visibility === "free" || visibility === "premium")) {
         void logEvent("premium_auto_download", {
           visibility,
-          has_sponsored_link: Boolean(shortlink),
           monetization_enabled: foundFile.monetization_enabled !== false,
         })
         window.location.href = `/api/download/${fileId}`
@@ -243,7 +200,6 @@ export default function DownloadGatePage() {
       if (platinum && visibility === "platinum") {
         void logEvent("premium_auto_download", {
           visibility,
-          has_sponsored_link: Boolean(shortlink),
           monetization_enabled: foundFile.monetization_enabled !== false,
         })
         window.location.href = `/api/download/${fileId}`
@@ -275,28 +231,6 @@ export default function DownloadGatePage() {
     }
   }
 
-  function handleOpenSponsoredLink() {
-    if (openingSponsored) return
-
-    const safeUrl = selectedShortlink
-
-    if (!safeUrl) {
-      setDownloadReady(true)
-      setStep("ready")
-      return
-    }
-
-    setOpeningSponsored(true)
-    setError("")
-
-    void logEvent("sponsored_open", {
-      sponsored_url: safeUrl,
-      source: "monetized_link",
-    })
-
-    window.location.href = safeUrl
-  }
-
   function handleDirectDownload() {
     if (startingDownload) return
 
@@ -304,7 +238,6 @@ export default function DownloadGatePage() {
 
     void logEvent("download_click", {
       source: unlockedFromQuery ? "gate_after_unlock" : "direct_button",
-      has_sponsored_link: Boolean(selectedShortlink),
     })
 
     window.location.href = `/api/download/${fileId}`
@@ -342,7 +275,6 @@ export default function DownloadGatePage() {
   }
 
   const visibility = (file.visibility || "free").toLowerCase()
-  const hasSponsoredLink = Boolean(selectedShortlink)
   const monetizationEnabled = file.monetization_enabled !== false
 
   const shouldShowTopAd =
@@ -438,24 +370,13 @@ export default function DownloadGatePage() {
                   {!downloadReady ? (
                     <div className="mt-6">
                       <p className="mb-4 text-sm text-slate-600">
-                        {hasSponsoredLink && monetizationEnabled
-                          ? `Your free download unlocks in ${countdown} second${countdown === 1 ? "" : "s"}.`
-                          : `Your download unlocks in ${countdown} second${countdown === 1 ? "" : "s"}.`}
+                        Your download unlocks in {countdown} second{countdown === 1 ? "" : "s"}.
                       </p>
 
-                      {countdown > 0 && !unlockedFromQuery ? (
+                      {countdown > 0 ? (
                         <div className="inline-flex rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-500">
                           Please wait {countdown}s...
                         </div>
-                      ) : hasSponsoredLink && monetizationEnabled && !unlockedFromQuery ? (
-                        <button
-                          type="button"
-                          onClick={handleOpenSponsoredLink}
-                          disabled={openingSponsored}
-                          className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {openingSponsored ? "Opening..." : "Open Sponsored Link"}
-                        </button>
                       ) : (
                         <button
                           type="button"
