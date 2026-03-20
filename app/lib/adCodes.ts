@@ -45,6 +45,7 @@ export const STICKY_BOTTOM_AD = `
   src="https://www.highperformanceformat.com/b34ceb41f59688ea67157fc3adaa80c5/invoke.js">
 </script>
 `
+export const IN_CONTENT_AD = DOWNLOAD_WAIT_AD
 
 /*
   OPTIONAL:
