@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { Suspense, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import AdSlot from "@/app/components/AdSlot"
 import { IN_CONTENT_AD } from "@/app/lib/adCodes"
@@ -12,12 +12,13 @@ function normalizePlan(value?: string | null) {
   return "premium"
 }
 
-export default function UpgradePage() {
+function UpgradePageContent() {
   const searchParams = useSearchParams()
 
   const success = searchParams?.get("success") ?? ""
   const error = searchParams?.get("error") ?? ""
   const initialPlan = normalizePlan(searchParams?.get("plan") ?? "")
+
   const [selectedPlan, setSelectedPlan] = useState<"premium" | "platinum">(initialPlan)
   const [showPaymentBox, setShowPaymentBox] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<"gcash" | "maya" | "bank">("gcash")
@@ -1153,5 +1154,40 @@ export default function UpgradePage() {
         </footer>
       </div>
     </div>
+  )
+}
+
+export default function UpgradePage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "linear-gradient(180deg, #eef4ff 0%, #f8fbff 45%, #ffffff 100%)",
+            fontFamily: "Arial, Helvetica, sans-serif",
+          }}
+        >
+          <div
+            style={{
+              border: "1px solid #e2e8f0",
+              background: "#ffffff",
+              borderRadius: "18px",
+              padding: "18px 22px",
+              color: "#334155",
+              fontWeight: 700,
+              boxShadow: "0 8px 20px rgba(15, 23, 42, 0.06)",
+            }}
+          >
+            Loading upgrade page...
+          </div>
+        </div>
+      }
+    >
+      <UpgradePageContent />
+    </Suspense>
   )
 }
