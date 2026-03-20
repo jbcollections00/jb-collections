@@ -4,6 +4,8 @@ import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import AdSlot from "@/app/components/AdSlot"
+import { DOWNLOAD_TOP_AD, DOWNLOAD_WAIT_AD, STICKY_BOTTOM_AD } from "@/app/lib/adCodes"
 
 type FileRow = {
   id: string
@@ -93,6 +95,7 @@ export default function DownloadGatePage() {
   const [downloadReady, setDownloadReady] = useState(false)
   const [openingSponsored, setOpeningSponsored] = useState(false)
   const [startingDownload, setStartingDownload] = useState(false)
+  const [showStickyAd, setShowStickyAd] = useState(true)
 
   const hasLoggedGateViewRef = useRef(false)
   const selectedShortlink = useMemo(() => pickMonetizedLink(file), [file])
@@ -342,6 +345,24 @@ export default function DownloadGatePage() {
   const hasSponsoredLink = Boolean(selectedShortlink)
   const monetizationEnabled = file.monetization_enabled !== false
 
+  const shouldShowTopAd =
+    !isPremiumUser && visibility === "free" && monetizationEnabled && Boolean(DOWNLOAD_TOP_AD)
+
+  const shouldShowWaitAd =
+    !isPremiumUser &&
+    visibility === "free" &&
+    monetizationEnabled &&
+    step === "waiting" &&
+    !downloadReady &&
+    Boolean(DOWNLOAD_WAIT_AD)
+
+  const shouldShowStickyAd =
+    !isPremiumUser &&
+    visibility === "free" &&
+    monetizationEnabled &&
+    showStickyAd &&
+    Boolean(STICKY_BOTTOM_AD)
+
   function getAccessLabel() {
     if (visibility === "platinum") return "Platinum File"
     if (visibility === "premium") return "Premium File"
@@ -350,8 +371,17 @@ export default function DownloadGatePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-8">
+    <div className="min-h-screen bg-slate-50 px-4 py-8 pb-28">
       <div className="mx-auto max-w-3xl">
+        {shouldShowTopAd ? (
+          <div className="mb-6 overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 text-center text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Sponsored
+            </div>
+            <AdSlot code={DOWNLOAD_TOP_AD} className="flex justify-center" />
+          </div>
+        ) : null}
+
         <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
           <div className="bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 px-6 py-8 text-white sm:px-8">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/80">
@@ -436,6 +466,15 @@ export default function DownloadGatePage() {
                           {startingDownload ? "Starting download..." : "Download Now"}
                         </button>
                       )}
+
+                      {shouldShowWaitAd ? (
+                        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
+                          <div className="mb-3 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                            Sponsored
+                          </div>
+                          <AdSlot code={DOWNLOAD_WAIT_AD} className="flex justify-center" />
+                        </div>
+                      ) : null}
                     </div>
                   ) : (
                     <div className="mt-6 space-y-3">
@@ -483,6 +522,26 @@ export default function DownloadGatePage() {
           </div>
         </div>
       </div>
+
+      {shouldShowStickyAd ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 py-2 backdrop-blur">
+          <div className="mx-auto max-w-3xl">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Sponsored
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowStickyAd(false)}
+                className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100"
+              >
+                Close
+              </button>
+            </div>
+            <AdSlot code={STICKY_BOTTOM_AD} className="flex justify-center overflow-hidden" />
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

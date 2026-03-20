@@ -40,6 +40,12 @@ export default function AdSlot({ code, className }: AdSlotProps) {
 
       containerRef.current?.appendChild(newScript)
     })
+
+    return () => {
+      if (containerRef.current) {
+        containerRef.current.innerHTML = ""
+      }
+    }
   }, [code])
 
   if (!code) return null

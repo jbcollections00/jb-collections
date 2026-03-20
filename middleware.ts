@@ -13,6 +13,7 @@ const PROTECTED_USER_ROUTES = [
   "/upgrade",
   "/contact",
   "/categories",
+  "/download",
 ]
 
 export async function middleware(request: NextRequest) {
@@ -21,6 +22,7 @@ export async function middleware(request: NextRequest) {
 
   const response = NextResponse.next()
 
+  // ✅ Skip static files
   const isStaticFile =
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
@@ -31,18 +33,27 @@ export async function middleware(request: NextRequest) {
     pathname === "/sitemap.xml" ||
     pathname.includes(".")
 
+  if (isStaticFile) {
+    return response
+  }
+
+  // ✅ Skip Vercel preview/internal requests (fixes 500 error)
+  const host = request.headers.get("host") || ""
+  if (host.includes("vercel.app")) {
+    return response
+  }
+
   const isEnterPage = pathname === ENTER_PATH
+  const isLoginPage = pathname === "/login"
   const isAdminLoginPage = pathname === ADMIN_LOGIN_PATH
+
   const isProtectedAdminRoute = pathname.startsWith("/admin")
   const isProtectedUserRoute = PROTECTED_USER_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`)
   )
 
-  if (isStaticFile) {
-    return response
-  }
-
-  if (!isEnterPage && !isAdminLoginPage) {
+  // ✅ ENTER GATE (safe)
+  if (!isEnterPage && !isAdminLoginPage && !isLoginPage) {
     const hasEntered = request.cookies.get(ENTER_COOKIE)?.value === "true"
 
     if (!hasEntered) {
@@ -52,36 +63,42 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // ✅ Skip auth if not protected
   if (!isProtectedAdminRoute && !isProtectedUserRoute) {
     return response
   }
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value
-        },
-        set(name: string, value: string, options: Record<string, any>) {
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-        },
-        remove(name: string, options: Record<string, any>) {
-          response.cookies.set({
-            name,
-            value: "",
-            ...options,
-            maxAge: 0,
-          })
-        },
+  // ✅ Safe env handling (prevents crash)
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error("Missing Supabase env vars")
+    return NextResponse.redirect(new URL("/login", request.url))
+  }
+
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      get(name: string) {
+        return request.cookies.get(name)?.value
       },
-    }
-  )
+      set(name: string, value: string, options: Record<string, any>) {
+        response.cookies.set({
+          name,
+          value,
+          ...options,
+        })
+      },
+      remove(name: string, options: Record<string, any>) {
+        response.cookies.set({
+          name,
+          value: "",
+          ...options,
+          maxAge: 0,
+        })
+      },
+    },
+  })
 
   const {
     data: { user },
@@ -92,12 +109,14 @@ export async function middleware(request: NextRequest) {
     console.error("Middleware auth error:", userError)
   }
 
+  // ✅ User protected routes
   if (isProtectedUserRoute && !user) {
     const loginUrl = new URL("/login", request.url)
     loginUrl.searchParams.set("next", `${pathname}${search}`)
     return NextResponse.redirect(loginUrl)
   }
 
+  // ✅ Admin protection
   if (isProtectedAdminRoute) {
     if (!user) {
       const adminLoginUrl = new URL(ADMIN_LOGIN_PATH, request.url)
