@@ -80,7 +80,7 @@ export default function DownloadGatePage() {
   const searchParams = useSearchParams()
   const supabase = createClient()
   const fileId = params?.id as string
-  const unlockedFromQuery = searchParams.get("unlocked") === "1"
+  const unlockedFromQuery = searchParams?.get("unlocked") === "1"
 
   const [checking, setChecking] = useState(true)
   const [file, setFile] = useState<FileRow | null>(null)
