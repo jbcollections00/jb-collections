@@ -24,11 +24,43 @@ export async function POST(req: Request) {
     const requestedPlan = normalizePlan(formData.get("plan"))
     const subject = String(formData.get("subject") || "").trim()
     const message = String(formData.get("message") || "").trim()
+    const paymentName = String(formData.get("payment_name") || "").trim()
+    const paymentMethod = String(formData.get("payment_method") || "").trim()
+    const paymentNumber = String(formData.get("payment_number") || "").trim()
+    const referenceNumber = String(formData.get("reference_number") || "").trim()
     const receipt = formData.get("receipt")
 
     if (!message) {
       return NextResponse.redirect(
         new URL(`/upgrade?plan=${requestedPlan}&error=missing-message`, req.url),
+        { status: 303 }
+      )
+    }
+
+    if (!paymentName) {
+      return NextResponse.redirect(
+        new URL(`/upgrade?plan=${requestedPlan}&error=missing-payment-name`, req.url),
+        { status: 303 }
+      )
+    }
+
+    if (!paymentMethod) {
+      return NextResponse.redirect(
+        new URL(`/upgrade?plan=${requestedPlan}&error=missing-payment-method`, req.url),
+        { status: 303 }
+      )
+    }
+
+    if (!referenceNumber) {
+      return NextResponse.redirect(
+        new URL(`/upgrade?plan=${requestedPlan}&error=missing-reference-number`, req.url),
+        { status: 303 }
+      )
+    }
+
+    if (!(receipt instanceof File) || receipt.size === 0) {
+      return NextResponse.redirect(
+        new URL(`/upgrade?plan=${requestedPlan}&error=missing-receipt`, req.url),
         { status: 303 }
       )
     }
@@ -73,56 +105,54 @@ export async function POST(req: Request) {
     let receiptUrl: string | null = null
     let receiptPath: string | null = null
 
-    if (receipt instanceof File && receipt.size > 0) {
-      if (receipt.size > MAX_FILE_SIZE) {
-        return NextResponse.redirect(
-          new URL(`/upgrade?plan=${requestedPlan}&error=file-too-large`, req.url),
-          { status: 303 }
-        )
-      }
-
-      const mimeType = receipt.type || "application/octet-stream"
-
-      if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
-        return NextResponse.redirect(
-          new URL(`/upgrade?plan=${requestedPlan}&error=invalid-file-type`, req.url),
-          { status: 303 }
-        )
-      }
-
-      const rawExt = receipt.name.split(".").pop()?.toLowerCase() || ""
-      const safeExt =
-        rawExt && /^[a-z0-9]+$/.test(rawExt)
-          ? rawExt
-          : mimeType === "application/pdf"
-            ? "pdf"
-            : "jpg"
-
-      const fileName = `${user.id}/${Date.now()}-${crypto.randomUUID()}.${safeExt}`
-
-      const { error: uploadError } = await supabase.storage
-        .from("receipts")
-        .upload(fileName, receipt, {
-          cacheControl: "3600",
-          upsert: false,
-          contentType: mimeType,
-        })
-
-      if (uploadError) {
-        console.error("Receipt upload error:", uploadError)
-        return NextResponse.redirect(
-          new URL(`/upgrade?plan=${requestedPlan}&error=upload-failed`, req.url),
-          { status: 303 }
-        )
-      }
-
-      const { data: publicUrlData } = supabase.storage
-        .from("receipts")
-        .getPublicUrl(fileName)
-
-      receiptUrl = publicUrlData.publicUrl
-      receiptPath = fileName
+    if (receipt.size > MAX_FILE_SIZE) {
+      return NextResponse.redirect(
+        new URL(`/upgrade?plan=${requestedPlan}&error=file-too-large`, req.url),
+        { status: 303 }
+      )
     }
+
+    const mimeType = receipt.type || "application/octet-stream"
+
+    if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
+      return NextResponse.redirect(
+        new URL(`/upgrade?plan=${requestedPlan}&error=invalid-file-type`, req.url),
+        { status: 303 }
+      )
+    }
+
+    const rawExt = receipt.name.split(".").pop()?.toLowerCase() || ""
+    const safeExt =
+      rawExt && /^[a-z0-9]+$/.test(rawExt)
+        ? rawExt
+        : mimeType === "application/pdf"
+          ? "pdf"
+          : "jpg"
+
+    const fileName = `${user.id}/${Date.now()}-${crypto.randomUUID()}.${safeExt}`
+
+    const { error: uploadError } = await supabase.storage
+      .from("receipts")
+      .upload(fileName, receipt, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: mimeType,
+      })
+
+    if (uploadError) {
+      console.error("Receipt upload error:", uploadError)
+      return NextResponse.redirect(
+        new URL(`/upgrade?plan=${requestedPlan}&error=upload-failed`, req.url),
+        { status: 303 }
+      )
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from("receipts")
+      .getPublicUrl(fileName)
+
+    receiptUrl = publicUrlData.publicUrl
+    receiptPath = fileName
 
     const defaultSubject =
       requestedPlan === "platinum"
@@ -140,11 +170,13 @@ export async function POST(req: Request) {
       admin_reply: null,
       receipt_url: receiptUrl,
       receipt_path: receiptPath,
+      payment_name: paymentName,
+      payment_method: paymentMethod,
+      payment_number: paymentNumber || null,
+      reference_number: referenceNumber,
     }
 
-    const { error: insertError } = await supabase
-      .from("upgrades")
-      .insert(payload)
+    const { error: insertError } = await supabase.from("upgrades").insert(payload)
 
     if (insertError) {
       console.error("Insert upgrade error:", insertError)

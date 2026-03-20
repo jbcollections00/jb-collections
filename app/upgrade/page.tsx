@@ -25,17 +25,23 @@ export default async function UpgradePage({ searchParams }: UpgradePageProps) {
   const errorMessage =
     error === "missing-message"
       ? "Please enter your upgrade reason."
-      : error === "file-too-large"
-        ? "Receipt file is too large. Maximum size is 10MB."
-        : error === "invalid-file-type"
-          ? "Invalid receipt file type. Please upload JPG, PNG, WEBP, or PDF."
-          : error === "upload-failed"
-            ? "Receipt upload failed. Please try again."
-            : error === "insert-failed"
-              ? "Failed to save your request. Please try again."
-              : error === "unexpected"
-                ? "Something went wrong. Please try again."
-                : null
+      : error === "missing-payment-name"
+        ? "Please enter the account name used for payment."
+        : error === "missing-payment-method"
+          ? "Please select a payment method."
+          : error === "missing-reference-number"
+            ? "Please enter the payment reference number."
+            : error === "file-too-large"
+              ? "Receipt file is too large. Maximum size is 10MB."
+              : error === "invalid-file-type"
+                ? "Invalid receipt file type. Please upload JPG, PNG, WEBP, or PDF."
+                : error === "upload-failed"
+                  ? "Receipt upload failed. Please try again."
+                  : error === "insert-failed"
+                    ? "Failed to save your request. Please try again."
+                    : error === "unexpected"
+                      ? "Something went wrong. Please try again."
+                      : null
 
   const planTitle = selectedPlan === "platinum" ? "Platinum" : "Premium"
   const planPrice = selectedPlan === "platinum" ? "₱299" : "₱149"
@@ -43,10 +49,12 @@ export default async function UpgradePage({ searchParams }: UpgradePageProps) {
     selectedPlan === "platinum"
       ? "linear-gradient(90deg, #c026d3, #7c3aed)"
       : "linear-gradient(90deg, #0ea5e9, #4f46e5)"
+
   const formDefaultSubject =
     selectedPlan === "platinum"
       ? "Platinum upgrade request"
       : "Premium upgrade request"
+
   const successText =
     selectedPlan === "platinum"
       ? "Your platinum upgrade request was submitted successfully."
@@ -56,19 +64,13 @@ export default async function UpgradePage({ searchParams }: UpgradePageProps) {
     <div
       style={{
         minHeight: "100vh",
-        background:
-          "linear-gradient(180deg, #eef4ff 0%, #f8fbff 45%, #ffffff 100%)",
+        background: "linear-gradient(180deg, #eef4ff 0%, #f8fbff 45%, #ffffff 100%)",
         padding: "24px",
         fontFamily: "Arial, Helvetica, sans-serif",
       }}
     >
       <div style={{ width: "100%", maxWidth: "1180px", margin: "0 auto" }}>
-        <div
-          style={{
-            textAlign: "center",
-            marginBottom: "28px",
-          }}
-        >
+        <div style={{ textAlign: "center", marginBottom: "28px" }}>
           <div
             style={{
               width: "92px",
@@ -188,36 +190,15 @@ export default async function UpgradePage({ searchParams }: UpgradePageProps) {
               boxShadow: "0 8px 20px rgba(15, 23, 42, 0.04)",
             }}
           >
-            <div
-              style={{
-                fontSize: "14px",
-                fontWeight: 700,
-                color: "#64748b",
-                marginBottom: "10px",
-              }}
-            >
+            <div style={{ fontSize: "14px", fontWeight: 700, color: "#64748b", marginBottom: "10px" }}>
               FREE
             </div>
-            <div
-              style={{
-                fontSize: "32px",
-                fontWeight: 800,
-                color: "#0f172a",
-                marginBottom: "4px",
-              }}
-            >
+            <div style={{ fontSize: "32px", fontWeight: 800, color: "#0f172a", marginBottom: "4px" }}>
               ₱0
             </div>
-            <div
-              style={{
-                fontSize: "14px",
-                color: "#64748b",
-                marginBottom: "18px",
-              }}
-            >
+            <div style={{ fontSize: "14px", color: "#64748b", marginBottom: "18px" }}>
               basic access
             </div>
-
             <div style={{ display: "grid", gap: "10px", fontSize: "14px", color: "#475569" }}>
               <div>✔ Access free files</div>
               <div>✔ Can browse all categories</div>
@@ -229,8 +210,7 @@ export default async function UpgradePage({ searchParams }: UpgradePageProps) {
 
           <div
             style={{
-              border:
-                selectedPlan === "premium" ? "2px solid #2563eb" : "1px solid #bfdbfe",
+              border: selectedPlan === "premium" ? "2px solid #2563eb" : "1px solid #bfdbfe",
               borderRadius: "22px",
               background: "#ffffff",
               padding: "22px",
@@ -255,33 +235,13 @@ export default async function UpgradePage({ searchParams }: UpgradePageProps) {
               MOST POPULAR
             </div>
 
-            <div
-              style={{
-                fontSize: "14px",
-                fontWeight: 700,
-                color: "#2563eb",
-                marginBottom: "10px",
-              }}
-            >
+            <div style={{ fontSize: "14px", fontWeight: 700, color: "#2563eb", marginBottom: "10px" }}>
               PREMIUM
             </div>
-            <div
-              style={{
-                fontSize: "32px",
-                fontWeight: 800,
-                color: "#0f172a",
-                marginBottom: "4px",
-              }}
-            >
+            <div style={{ fontSize: "32px", fontWeight: 800, color: "#0f172a", marginBottom: "4px" }}>
               ₱149
             </div>
-            <div
-              style={{
-                fontSize: "14px",
-                color: "#64748b",
-                marginBottom: "18px",
-              }}
-            >
+            <div style={{ fontSize: "14px", color: "#64748b", marginBottom: "18px" }}>
               per month
             </div>
 
@@ -317,41 +277,20 @@ export default async function UpgradePage({ searchParams }: UpgradePageProps) {
 
           <div
             style={{
-              border:
-                selectedPlan === "platinum" ? "2px solid #a21caf" : "1px solid #e9d5ff",
+              border: selectedPlan === "platinum" ? "2px solid #a21caf" : "1px solid #e9d5ff",
               borderRadius: "22px",
               background: "#ffffff",
               padding: "22px",
               boxShadow: "0 12px 28px rgba(124, 58, 237, 0.10)",
             }}
           >
-            <div
-              style={{
-                fontSize: "14px",
-                fontWeight: 700,
-                color: "#a21caf",
-                marginBottom: "10px",
-              }}
-            >
+            <div style={{ fontSize: "14px", fontWeight: 700, color: "#a21caf", marginBottom: "10px" }}>
               PLATINUM
             </div>
-            <div
-              style={{
-                fontSize: "32px",
-                fontWeight: 800,
-                color: "#0f172a",
-                marginBottom: "4px",
-              }}
-            >
+            <div style={{ fontSize: "32px", fontWeight: 800, color: "#0f172a", marginBottom: "4px" }}>
               ₱299
             </div>
-            <div
-              style={{
-                fontSize: "14px",
-                color: "#64748b",
-                marginBottom: "18px",
-              }}
-            >
+            <div style={{ fontSize: "14px", color: "#64748b", marginBottom: "18px" }}>
               per month
             </div>
 
@@ -386,13 +325,7 @@ export default async function UpgradePage({ searchParams }: UpgradePageProps) {
           </div>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr)",
-            gap: "24px",
-          }}
-        >
+        <div style={{ display: "grid", gap: "24px" }}>
           <div
             style={{
               border: "1px solid #e2e8f0",
@@ -415,12 +348,8 @@ export default async function UpgradePage({ searchParams }: UpgradePageProps) {
 
             <div
               style={{
-                border:
-                  selectedPlan === "platinum"
-                    ? "1px solid #f5d0fe"
-                    : "1px solid #bfdbfe",
-                background:
-                  selectedPlan === "platinum" ? "#fdf4ff" : "#eff6ff",
+                border: selectedPlan === "platinum" ? "1px solid #f5d0fe" : "1px solid #bfdbfe",
+                background: selectedPlan === "platinum" ? "#fdf4ff" : "#eff6ff",
                 borderRadius: "18px",
                 padding: "18px",
                 marginBottom: "20px",
@@ -438,24 +367,113 @@ export default async function UpgradePage({ searchParams }: UpgradePageProps) {
                 {planTitle.toUpperCase()} MEMBERSHIP
               </div>
 
+              <div style={{ fontSize: "32px", fontWeight: 800, color: "#0f172a" }}>
+                {planPrice}
+              </div>
+
+              <div style={{ fontSize: "14px", color: "#64748b", marginTop: "4px" }}>
+                per month
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid #e2e8f0",
+                borderRadius: "18px",
+                background: "#f8fafc",
+                padding: "18px",
+                marginBottom: "20px",
+              }}
+            >
               <div
                 style={{
-                  fontSize: "32px",
+                  fontSize: "18px",
                   fontWeight: 800,
                   color: "#0f172a",
+                  marginBottom: "10px",
+                  textAlign: "center",
                 }}
               >
-                {planPrice}
+                Payment Instructions
+              </div>
+
+              <p
+                style={{
+                  margin: "0 0 14px",
+                  fontSize: "14px",
+                  color: "#475569",
+                  lineHeight: 1.7,
+                  textAlign: "center",
+                }}
+              >
+                Send <strong>{planPrice}</strong> first, then fill out the form below and upload your receipt.
+              </p>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                  gap: "14px",
+                }}
+              >
+                <div
+                  style={{
+                    border: "1px solid #dbeafe",
+                    background: "#ffffff",
+                    borderRadius: "16px",
+                    padding: "16px",
+                    textAlign: "center",
+                  }}
+                >
+                  <div style={{ fontSize: "14px", fontWeight: 800, color: "#1d4ed8", marginBottom: "8px" }}>
+                    GCash
+                  </div>
+                  <div style={{ fontSize: "15px", fontWeight: 700, color: "#0f172a" }}>
+                    0912 345 6789
+                  </div>
+                  <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>
+                    Juan Dela Cruz
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    border: "1px solid #e9d5ff",
+                    background: "#ffffff",
+                    borderRadius: "16px",
+                    padding: "16px",
+                    textAlign: "center",
+                  }}
+                >
+                  <div style={{ fontSize: "14px", fontWeight: 800, color: "#7c3aed", marginBottom: "8px" }}>
+                    Maya
+                  </div>
+                  <div style={{ fontSize: "15px", fontWeight: 700, color: "#0f172a" }}>
+                    0912 345 6789
+                  </div>
+                  <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>
+                    Juan Dela Cruz
+                  </div>
+                </div>
               </div>
 
               <div
                 style={{
-                  fontSize: "14px",
-                  color: "#64748b",
-                  marginTop: "4px",
+                  marginTop: "14px",
+                  borderRadius: "14px",
+                  background: "#ffffff",
+                  border: "1px dashed #cbd5e1",
+                  padding: "14px",
+                  fontSize: "13px",
+                  color: "#475569",
+                  lineHeight: 1.7,
                 }}
               >
-                per month
+                <div><strong>How it works:</strong></div>
+                <div>1. Send payment for the selected membership.</div>
+                <div>2. Fill out the request form below.</div>
+                <div>3. Upload your receipt.</div>
+                <div>4. Wait for admin approval.</div>
               </div>
             </div>
 
@@ -463,10 +481,7 @@ export default async function UpgradePage({ searchParams }: UpgradePageProps) {
               action="/api/upgrade/request"
               method="POST"
               encType="multipart/form-data"
-              style={{
-                display: "grid",
-                gap: "14px",
-              }}
+              style={{ display: "grid", gap: "14px" }}
             >
               <input type="hidden" name="plan" value={selectedPlan} />
 
@@ -484,6 +499,80 @@ export default async function UpgradePage({ searchParams }: UpgradePageProps) {
                   outline: "none",
                 }}
               />
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                  gap: "14px",
+                }}
+              >
+                <input
+                  type="text"
+                  name="payment_name"
+                  placeholder="Account name used for payment"
+                  required
+                  style={{
+                    width: "100%",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "14px",
+                    padding: "14px 16px",
+                    fontSize: "15px",
+                    outline: "none",
+                  }}
+                />
+
+                <select
+                  name="payment_method"
+                  required
+                  defaultValue=""
+                  style={{
+                    width: "100%",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "14px",
+                    padding: "14px 16px",
+                    fontSize: "15px",
+                    outline: "none",
+                    background: "#fff",
+                  }}
+                >
+                  <option value="" disabled>
+                    Select payment method
+                  </option>
+                  <option value="gcash">GCash</option>
+                  <option value="maya">Maya</option>
+                  <option value="bank">Bank Transfer</option>
+                </select>
+
+                <input
+                  type="text"
+                  name="payment_number"
+                  placeholder="Mobile number used for payment"
+                  style={{
+                    width: "100%",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "14px",
+                    padding: "14px 16px",
+                    fontSize: "15px",
+                    outline: "none",
+                  }}
+                />
+
+                <input
+                  type="text"
+                  name="reference_number"
+                  placeholder="Reference number"
+                  required
+                  style={{
+                    width: "100%",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "14px",
+                    padding: "14px 16px",
+                    fontSize: "15px",
+                    outline: "none",
+                  }}
+                />
+              </div>
 
               <textarea
                 name="message"
@@ -520,7 +609,7 @@ export default async function UpgradePage({ searchParams }: UpgradePageProps) {
                     color: "#334155",
                   }}
                 >
-                  Upload receipt (optional)
+                  Upload receipt
                 </label>
 
                 <input
@@ -528,6 +617,7 @@ export default async function UpgradePage({ searchParams }: UpgradePageProps) {
                   type="file"
                   name="receipt"
                   accept="image/*,.pdf"
+                  required
                   style={{
                     width: "100%",
                     fontSize: "14px",
@@ -613,18 +703,6 @@ export default async function UpgradePage({ searchParams }: UpgradePageProps) {
             Back to Categories
           </Link>
         </div>
-
-        <p
-          style={{
-            margin: 0,
-            fontSize: "13px",
-            color: "#94a3b8",
-            lineHeight: 1.6,
-            textAlign: "center",
-          }}
-        >
-          Choose the membership level that matches the content you want to unlock.
-        </p>
       </div>
     </div>
   )
