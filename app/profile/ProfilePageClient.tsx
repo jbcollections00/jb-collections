@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
@@ -25,11 +24,9 @@ export default function ProfilePageClient() {
   const searchParams = useSearchParams()
 
   const [loggingOut, setLoggingOut] = useState(false)
-  const [showPaymentDetails, setShowPaymentDetails] = useState(false)
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [authEmail, setAuthEmail] = useState("")
-  const [message, setMessage] = useState("")
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const loadProfile = useCallback(
@@ -341,111 +338,13 @@ export default function ProfilePageClient() {
         ) : null}
 
         {!isPremiumUser && (
-          <div className="rounded-3xl border border-blue-100 bg-white p-6 shadow-sm">
-            <button
-              type="button"
-              onClick={() => setShowPaymentDetails((prev) => !prev)}
-              className="flex w-full items-center justify-between gap-4 rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4 text-left transition hover:bg-blue-100"
+          <div className="mb-8">
+            <Link
+              href="/upgrade"
+              className="inline-flex items-center rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-bold text-blue-700 transition hover:bg-blue-100"
             >
-              <div>
-                <h2 className="text-2xl font-black text-slate-900">
-                  Upgrade to Premium
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Access premium-only files and exclusive content.
-                </p>
-              </div>
-
-              <div className="shrink-0 rounded-full bg-white px-4 py-2 text-sm font-bold text-blue-700 shadow-sm">
-                {showPaymentDetails ? "Hide ▲" : "Show ▼"}
-              </div>
-            </button>
-
-            {showPaymentDetails && (
-              <div className="mt-6 rounded-2xl border border-blue-100 p-5">
-                <h3 className="font-semibold text-slate-900">
-                  GCash Payment Information
-                </h3>
-
-                <div className="mt-3 space-y-1 text-sm text-slate-600">
-                  <p>
-                    <b>Name:</b> JONATHAN BARRUGA
-                  </p>
-                  <p>
-                    <b>Number:</b> 09685289257
-                  </p>
-                  <p>
-                    <b>Reference:</b> Use your email
-                  </p>
-                </div>
-
-                <div className="mt-4 flex justify-center">
-                  <Image
-                    src="/gcash-qr.jpg"
-                    alt="GCash QR"
-                    width={200}
-                    height={200}
-                    className="rounded-xl border"
-                  />
-                </div>
-
-                <form
-                  action="/api/upgrade/request"
-                  method="POST"
-                  encType="multipart/form-data"
-                  className="mt-6 space-y-4"
-                >
-                  <input
-                    type="hidden"
-                    name="subject"
-                    value="Premium upgrade request"
-                  />
-
-                  <div>
-                    <label className="text-sm font-semibold text-slate-700">
-                      Message to Admin
-                    </label>
-
-                    <textarea
-                      name="message"
-                      value={message}
-                      onChange={(e) => setMessage(e.target.value)}
-                      rows={4}
-                      required
-                      placeholder="Example: I already sent the payment. Please review and upgrade my account to premium."
-                      className="mt-2 w-full rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-400"
-                    />
-                  </div>
-
-                  <div className="rounded-2xl border-2 border-dashed border-blue-300 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 shadow-sm">
-                    <div className="mb-2 flex items-center gap-2">
-                      <span className="text-lg">📎</span>
-                      <label className="text-sm font-extrabold text-blue-900">
-                        Upload Receipt
-                      </label>
-                    </div>
-
-                    <input
-                      name="receipt"
-                      type="file"
-                      accept="image/*,.pdf"
-                      className="block w-full rounded-xl border border-blue-200 bg-white px-3 py-3 text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white"
-                    />
-
-                    <p className="mt-2 text-xs font-medium text-blue-700">
-                      Upload your GCash receipt image or PDF here.
-                    </p>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white hover:bg-blue-700"
-                  >
-                    Send Request to Admin
-                  </button>
-                </form>
-              </div>
-            )}
+              Upgrade to Premium
+            </Link>
           </div>
         )}
 
