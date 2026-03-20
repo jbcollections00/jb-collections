@@ -4,8 +4,6 @@ import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import AdSlot from "@/app/components/AdSlot"
-import { IN_CONTENT_AD } from "@/app/lib/adCodes"
 
 type FileRow = {
   id: string
@@ -91,9 +89,7 @@ export default function DownloadGatePage() {
   const [step, setStep] = useState<"waiting" | "ready" | "premium-only" | "platinum-only">(
     "waiting"
   )
-  const [countdown, setCountdown] = useState(5)
-  const [sponsoredOpened, setSponsoredOpened] = useState(false)
-  const [unlockCountdown, setUnlockCountdown] = useState(5)
+  const [countdown, setCountdown] = useState(3)
   const [downloadReady, setDownloadReady] = useState(false)
   const [openingSponsored, setOpeningSponsored] = useState(false)
   const [startingDownload, setStartingDownload] = useState(false)
@@ -122,23 +118,6 @@ export default function DownloadGatePage() {
 
     return () => window.clearTimeout(timer)
   }, [checking, file, isPremiumUser, step, downloadReady, countdown, unlockedFromQuery])
-
-  useEffect(() => {
-    if (!sponsoredOpened) return
-    if (downloadReady) return
-
-    if (unlockCountdown <= 0) {
-      setDownloadReady(true)
-      setStep("ready")
-      return
-    }
-
-    const timer = window.setTimeout(() => {
-      setUnlockCountdown((prev) => prev - 1)
-    }, 1000)
-
-    return () => window.clearTimeout(timer)
-  }, [sponsoredOpened, unlockCountdown, downloadReady])
 
   async function logEvent(eventType: EventType, meta?: Record<string, unknown>) {
     try {
@@ -172,9 +151,7 @@ export default function DownloadGatePage() {
       setIsPlatinumUser(false)
 
       setStep("waiting")
-      setCountdown(5)
-      setSponsoredOpened(false)
-      setUnlockCountdown(5)
+      setCountdown(3)
       setDownloadReady(false)
       setOpeningSponsored(false)
       setStartingDownload(false)
@@ -281,8 +258,6 @@ export default function DownloadGatePage() {
       }
 
       if (unlockedFromQuery && visibility === "free") {
-        setSponsoredOpened(true)
-        setUnlockCountdown(0)
         setDownloadReady(true)
         setStep("ready")
         return
@@ -303,7 +278,8 @@ export default function DownloadGatePage() {
     const safeUrl = selectedShortlink
 
     if (!safeUrl) {
-      handleUnlockWithoutSponsor()
+      setDownloadReady(true)
+      setStep("ready")
       return
     }
 
@@ -315,41 +291,7 @@ export default function DownloadGatePage() {
       source: "monetized_link",
     })
 
-    const newWindow = window.open(safeUrl, "_blank", "noopener,noreferrer")
-
-    if (!newWindow) {
-      setOpeningSponsored(false)
-      setError("Popup blocked. Please allow popups and try again.")
-      return
-    }
-
-    setSponsoredOpened(true)
-    setUnlockCountdown(5)
-    setStep("waiting")
-
-    window.setTimeout(() => {
-      setOpeningSponsored(false)
-    }, 800)
-  }
-
-  function handleUnlockWithoutSponsor() {
-    if (openingSponsored) return
-
-    setOpeningSponsored(true)
-    setError("")
-
-    void logEvent("sponsored_open", {
-      sponsored_url: null,
-      source: "unlock_without_sponsor",
-    })
-
-    setSponsoredOpened(true)
-    setUnlockCountdown(1)
-    setStep("waiting")
-
-    window.setTimeout(() => {
-      setOpeningSponsored(false)
-    }, 800)
+    window.location.href = safeUrl
   }
 
   function handleDirectDownload() {
@@ -358,7 +300,7 @@ export default function DownloadGatePage() {
     setStartingDownload(true)
 
     void logEvent("download_click", {
-      source: sponsoredOpened || unlockedFromQuery ? "gate_after_unlock" : "direct_button",
+      source: unlockedFromQuery ? "gate_after_unlock" : "direct_button",
       has_sponsored_link: Boolean(selectedShortlink),
     })
 
@@ -424,10 +366,6 @@ export default function DownloadGatePage() {
           </div>
 
           <div className="p-6 sm:p-8">
-            <div className="mb-6 flex justify-center">
-              <AdSlot code={IN_CONTENT_AD} className="text-center" />
-            </div>
-
             <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-center">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Access Type
@@ -467,7 +405,7 @@ export default function DownloadGatePage() {
                 </>
               ) : (
                 <>
-                  {!sponsoredOpened && !downloadReady ? (
+                  {!downloadReady ? (
                     <div className="mt-6">
                       <p className="mb-4 text-sm text-slate-600">
                         {hasSponsoredLink && monetizationEnabled
@@ -475,11 +413,11 @@ export default function DownloadGatePage() {
                           : `Your download unlocks in ${countdown} second${countdown === 1 ? "" : "s"}.`}
                       </p>
 
-                      {countdown > 0 ? (
+                      {countdown > 0 && !unlockedFromQuery ? (
                         <div className="inline-flex rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-500">
                           Please wait {countdown}s...
                         </div>
-                      ) : hasSponsoredLink && monetizationEnabled ? (
+                      ) : hasSponsoredLink && monetizationEnabled && !unlockedFromQuery ? (
                         <button
                           type="button"
                           onClick={handleOpenSponsoredLink}
@@ -491,31 +429,15 @@ export default function DownloadGatePage() {
                       ) : (
                         <button
                           type="button"
-                          onClick={handleUnlockWithoutSponsor}
-                          disabled={openingSponsored}
-                          className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={handleDirectDownload}
+                          disabled={startingDownload}
+                          className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-6 py-3 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {openingSponsored ? "Unlocking..." : "Unlock Download"}
+                          {startingDownload ? "Starting download..." : "Download Now"}
                         </button>
                       )}
                     </div>
-                  ) : null}
-
-                  {sponsoredOpened && !downloadReady ? (
-                    <div className="mt-6">
-                      <p className="mb-4 text-sm text-slate-600">
-                        {hasSponsoredLink && monetizationEnabled
-                          ? `Sponsored page opened. Download unlocks in ${unlockCountdown} second${unlockCountdown === 1 ? "" : "s"}.`
-                          : `Unlocking your download in ${unlockCountdown} second${unlockCountdown === 1 ? "" : "s"}.`}
-                      </p>
-
-                      <div className="inline-flex rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-500">
-                        Unlocking...
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {downloadReady ? (
+                  ) : (
                     <div className="mt-6 space-y-3">
                       <button
                         type="button"
@@ -526,7 +448,7 @@ export default function DownloadGatePage() {
                         {startingDownload ? "Starting download..." : "Download Now"}
                       </button>
                     </div>
-                  ) : null}
+                  )}
                 </>
               )}
             </div>
