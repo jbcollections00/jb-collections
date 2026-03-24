@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     const cookieStore = await cookies()
 
     const response = NextResponse.redirect(
-      `${origin}/login?message=check-email`,
+      `${origin}/signup?success=true`,
       { status: 303 }
     )
 

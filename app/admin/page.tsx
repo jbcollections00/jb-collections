@@ -68,6 +68,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     let isMounted = true
+    let refreshInterval: ReturnType<typeof setInterval> | null = null
 
     async function init() {
       try {
@@ -107,6 +108,13 @@ export default function AdminPage() {
         if (isMounted) {
           setStats(loadedStats)
         }
+
+        refreshInterval = setInterval(async () => {
+          const refreshedStats = await loadStats()
+          if (isMounted) {
+            setStats(refreshedStats)
+          }
+        }, 5000)
       } catch (error) {
         console.error("Admin auth check failed:", error)
         router.replace("/secure-admin-portal-7X9?error=failed")
@@ -119,8 +127,26 @@ export default function AdminPage() {
 
     init()
 
+    const channel = supabase
+      .channel("admin-dashboard-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "profiles" },
+        async () => {
+          const refreshedStats = await loadStats()
+          if (isMounted) {
+            setStats(refreshedStats)
+          }
+        }
+      )
+      .subscribe()
+
     return () => {
       isMounted = false
+      if (refreshInterval) {
+        clearInterval(refreshInterval)
+      }
+      supabase.removeChannel(channel)
     }
   }, [router, supabase])
 
@@ -215,7 +241,7 @@ export default function AdminPage() {
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-[#eef4ff] via-[#f8fbff] to-white px-4">
         <div className="rounded-[24px] border border-slate-200 bg-white px-8 py-6 text-center shadow-[0_12px_28px_rgba(0,0,0,0.05)]">
           <p className="text-lg font-bold text-slate-800">
-            Checking admin access...
+            Checking admin access.
           </p>
           <p className="mt-2 text-sm text-slate-500">Please wait.</p>
         </div>
@@ -270,26 +296,26 @@ export default function AdminPage() {
           ))}
         </div>
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-5 xl:gap-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           {cards.map((card) => (
             <Link
               key={card.title}
               href={card.href}
-              className="block min-h-[200px] rounded-[22px] border border-slate-200 bg-white px-5 py-6 text-slate-900 shadow-[0_18px_40px_rgba(15,23,42,0.07)] transition hover:-translate-y-1 hover:shadow-xl sm:min-h-[220px] sm:rounded-[26px] sm:px-6 sm:py-7"
+              className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-[0_12px_28px_rgba(0,0,0,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(0,0,0,0.08)]"
             >
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-[18px] bg-gradient-to-br from-blue-50 to-blue-100 text-3xl sm:mb-5 sm:h-[72px] sm:w-[72px] sm:rounded-[20px] sm:text-[34px]">
+              <div className="flex h-20 w-20 items-center justify-center rounded-[26px] bg-blue-50 text-4xl">
                 {card.icon}
               </div>
 
-              <h2 className="text-2xl font-extrabold sm:text-[30px]">
+              <h2 className="mt-7 text-2xl font-extrabold text-slate-900">
                 {card.title}
               </h2>
 
-              <p className="mt-3 text-sm leading-7 text-slate-500 sm:text-base">
+              <p className="mt-5 text-lg leading-10 text-slate-600">
                 {card.description}
               </p>
 
-              <div className="mt-5 text-sm font-bold text-blue-600 sm:mt-6 sm:text-[15px]">
+              <div className="mt-8 text-xl font-extrabold text-blue-600">
                 Open page →
               </div>
             </Link>

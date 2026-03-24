@@ -28,6 +28,7 @@ function SignupPageContent() {
   const fullNameRef = useRef<HTMLInputElement | null>(null)
 
   const errorParam = searchParams?.get("error") ?? ""
+  const successParam = searchParams?.get("success") ?? ""
 
   const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
@@ -38,10 +39,54 @@ function SignupPageContent() {
   const [submitting, setSubmitting] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [googleError, setGoogleError] = useState("")
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false)
+  const [welcomeName, setWelcomeName] = useState("User")
+  const [modalVisible, setModalVisible] = useState(false)
+  const [countdown, setCountdown] = useState(3)
 
   useEffect(() => {
     fullNameRef.current?.focus()
   }, [])
+
+  useEffect(() => {
+    if (successParam === "true") {
+      const savedName =
+        typeof window !== "undefined"
+          ? sessionStorage.getItem("signupFullName")
+          : null
+
+      const finalName = savedName?.trim() || "User"
+
+      setWelcomeName(finalName)
+      setShowWelcomeModal(true)
+
+      const enterTimer = setTimeout(() => {
+        setModalVisible(true)
+      }, 30)
+
+      let secondsLeft = 3
+
+      const countdownTimer = setInterval(() => {
+        secondsLeft -= 1
+        if (secondsLeft >= 0) {
+          setCountdown(secondsLeft)
+        }
+      }, 1000)
+
+      const redirectTimer = setTimeout(() => {
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem("signupFullName")
+          window.location.href = "/dashboard"
+        }
+      }, 3000)
+
+      return () => {
+        clearTimeout(enterTimer)
+        clearTimeout(redirectTimer)
+        clearInterval(countdownTimer)
+      }
+    }
+  }, [successParam])
 
   const errorMessage = useMemo(() => {
     if (!errorParam) return ""
@@ -105,6 +150,10 @@ function SignupPageContent() {
       return
     }
 
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("signupFullName", fullName.trim())
+    }
+
     setSubmitting(true)
   }
 
@@ -133,6 +182,41 @@ function SignupPageContent() {
 
   return (
     <SignupLayout>
+      {showWelcomeModal ? (
+        <div
+          style={{
+            ...modalOverlayStyle,
+            opacity: modalVisible ? 1 : 0,
+            pointerEvents: modalVisible ? "auto" : "none",
+          }}
+        >
+          <div
+            style={{
+              ...modalCardStyle,
+              opacity: modalVisible ? 1 : 0,
+              transform: modalVisible
+                ? "translateY(0px) scale(1)"
+                : "translateY(18px) scale(0.96)",
+            }}
+          >
+            <div style={successIconStyle}>✓</div>
+
+            <h2 style={modalTitleStyle}>Welcome, {welcomeName}! 🎉</h2>
+
+            <p style={modalTextStyle}>
+              Your account has been successfully created.
+            </p>
+
+            <p style={modalSubTextStyle}>
+              We’re happy to have you here. You will be redirected to your
+              dashboard in {countdown} second{countdown === 1 ? "" : "s"}.
+            </p>
+
+            <div style={modalAdminTextStyle}>— Admin</div>
+          </div>
+        </div>
+      ) : null}
+
       <form
         method="post"
         action="/api/auth/signup"
@@ -619,4 +703,74 @@ const spinnerBlueStyle: CSSProperties = {
   borderTopColor: "#1557ff",
   display: "inline-block",
   animation: "spin 0.8s linear infinite",
+}
+
+const modalOverlayStyle: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(15, 23, 42, 0.45)",
+  backdropFilter: "blur(6px)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "20px",
+  zIndex: 9999,
+  transition: "opacity 0.35s ease",
+}
+
+const modalCardStyle: CSSProperties = {
+  width: "100%",
+  maxWidth: "420px",
+  background: "#ffffff",
+  borderRadius: "24px",
+  padding: "28px 24px",
+  boxShadow: "0 30px 80px rgba(0,0,0,0.18)",
+  textAlign: "center",
+  transition: "all 0.35s ease",
+}
+
+const successIconStyle: CSSProperties = {
+  width: "72px",
+  height: "72px",
+  margin: "0 auto 16px",
+  borderRadius: "999px",
+  background: "linear-gradient(180deg, #22c55e 0%, #16a34a 100%)",
+  color: "#ffffff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: "34px",
+  fontWeight: 800,
+  boxShadow: "0 14px 30px rgba(34,197,94,0.28)",
+}
+
+const modalTitleStyle: CSSProperties = {
+  margin: 0,
+  fontSize: "28px",
+  fontWeight: 800,
+  color: "#0f172a",
+  lineHeight: 1.2,
+}
+
+const modalTextStyle: CSSProperties = {
+  marginTop: "14px",
+  marginBottom: 0,
+  fontSize: "16px",
+  color: "#334155",
+  lineHeight: 1.6,
+}
+
+const modalSubTextStyle: CSSProperties = {
+  marginTop: "10px",
+  marginBottom: 0,
+  fontSize: "15px",
+  color: "#64748b",
+  lineHeight: 1.6,
+}
+
+const modalAdminTextStyle: CSSProperties = {
+  marginTop: "18px",
+  fontSize: "14px",
+  fontWeight: 700,
+  color: "#1557ff",
 }

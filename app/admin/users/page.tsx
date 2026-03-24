@@ -54,7 +54,31 @@ export default function AdminUsersPage() {
   const [successMessage, setSuccessMessage] = useState("")
 
   useEffect(() => {
-    void checkAdminAndLoad()
+    let refreshInterval: ReturnType<typeof setInterval> | null = null
+
+    void checkAdminAndLoad().then(() => {
+      refreshInterval = setInterval(() => {
+        void loadUsers(false)
+      }, 5000)
+    })
+
+    const channel = supabase
+      .channel("admin-users-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "profiles" },
+        () => {
+          void loadUsers(false)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      if (refreshInterval) {
+        clearInterval(refreshInterval)
+      }
+      supabase.removeChannel(channel)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -102,7 +126,7 @@ export default function AdminUsersPage() {
         return
       }
 
-      await loadUsers()
+      await loadUsers(true)
     } catch (error) {
       console.error("Admin users auth check failed:", error)
       router.replace("/secure-admin-portal-7X9?error=failed")
@@ -111,9 +135,11 @@ export default function AdminUsersPage() {
     }
   }
 
-  async function loadUsers() {
+  async function loadUsers(showLoader = true) {
     try {
-      setLoading(true)
+      if (showLoader) {
+        setLoading(true)
+      }
       setErrorMessage("")
       setSuccessMessage("")
 
@@ -140,7 +166,9 @@ export default function AdminUsersPage() {
       console.error("Load users error:", error)
       setErrorMessage("Failed to load users.")
     } finally {
-      setLoading(false)
+      if (showLoader) {
+        setLoading(false)
+      }
     }
   }
 
@@ -243,7 +271,7 @@ export default function AdminUsersPage() {
       }
 
       setSuccessMessage("User profile updated successfully.")
-      await loadUsers()
+      await loadUsers(false)
     } catch (error) {
       console.error("Save user error:", error)
       setErrorMessage("Failed to update user.")
@@ -347,10 +375,15 @@ export default function AdminUsersPage() {
                           </span>
 
                           <span
-                            className={`text-[11px] font-bold ${
+                            className={`inline-flex items-center gap-1 text-[11px] font-bold ${
                               isOnline ? "text-emerald-600" : "text-slate-400"
                             }`}
                           >
+                            <span
+                              className={`h-2.5 w-2.5 rounded-full ${
+                                isOnline ? "animate-pulse bg-emerald-500" : "bg-slate-300"
+                              }`}
+                            />
                             {isOnline ? "Online" : "Offline"}
                           </span>
                         </div>
