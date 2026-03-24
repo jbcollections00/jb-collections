@@ -12,6 +12,7 @@ type Conversation = {
   status: string
   created_at: string
   updated_at: string
+  deleted_at?: string | null
 }
 
 type ProfileRow = {
@@ -29,6 +30,7 @@ type ConversationMessage = {
   attachment_url: string | null
   created_at: string
   read_at: string | null
+  deleted_at?: string | null
 }
 
 type ConversationWithMeta = Conversation & {
@@ -43,7 +45,8 @@ export default function AdminMessagesPage() {
 
   const [checkingAdmin, setCheckingAdmin] = useState(true)
   const [conversations, setConversations] = useState<ConversationWithMeta[]>([])
-  const [selectedConversation, setSelectedConversation] = useState<ConversationWithMeta | null>(null)
+  const [selectedConversation, setSelectedConversation] =
+    useState<ConversationWithMeta | null>(null)
   const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
 
@@ -116,9 +119,12 @@ export default function AdminMessagesPage() {
     if (showLoader) setLoading(true)
 
     try {
+      setError("")
+
       const { data: conversationRows, error: conversationError } = await supabase
         .from("conversations")
         .select("*")
+        .is("deleted_at", null)
         .order("updated_at", { ascending: false })
 
       if (conversationError) {
@@ -126,7 +132,9 @@ export default function AdminMessagesPage() {
       }
 
       const conversationList = (conversationRows as Conversation[]) || []
-      const userIds = [...new Set(conversationList.map((item) => item.user_id).filter(Boolean))]
+      const userIds = [
+        ...new Set(conversationList.map((item) => item.user_id).filter(Boolean)),
+      ]
       const conversationIds = conversationList.map((item) => item.id)
 
       let profiles: ProfileRow[] = []
@@ -150,6 +158,7 @@ export default function AdminMessagesPage() {
           .from("conversation_messages")
           .select("*")
           .in("conversation_id", conversationIds)
+          .is("deleted_at", null)
           .order("created_at", { ascending: true })
 
         if (messageError) {
@@ -159,11 +168,17 @@ export default function AdminMessagesPage() {
         }
       }
 
-      const combined: ConversationWithMeta[] = conversationList.map((conversation) => ({
-        ...conversation,
-        profile: profiles.find((profile) => profile.id === conversation.user_id) || null,
-        messages: messages.filter((message) => message.conversation_id === conversation.id),
-      }))
+      const combined: ConversationWithMeta[] = conversationList.map(
+        (conversation) => ({
+          ...conversation,
+          profile:
+            profiles.find((profile) => profile.id === conversation.user_id) ||
+            null,
+          messages: messages.filter(
+            (message) => message.conversation_id === conversation.id
+          ),
+        })
+      )
 
       setConversations(combined)
 
@@ -174,7 +189,9 @@ export default function AdminMessagesPage() {
       })
     } catch (err) {
       console.error("Load admin conversations error:", err)
-      setError(err instanceof Error ? err.message : "Failed to load conversations.")
+      setError(
+        err instanceof Error ? err.message : "Failed to load conversations."
+      )
     } finally {
       if (showLoader) setLoading(false)
     }
@@ -247,7 +264,11 @@ export default function AdminMessagesPage() {
       await loadAll(false)
     } catch (err) {
       console.error("Mark conversation read error:", err)
-      setError(err instanceof Error ? err.message : "Failed to mark conversation as read.")
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to mark conversation as read."
+      )
     } finally {
       setMarkingRead(false)
     }
@@ -275,7 +296,140 @@ export default function AdminMessagesPage() {
       await loadAll(false)
     } catch (err) {
       console.error("Close conversation error:", err)
-      setError(err instanceof Error ? err.message : "Failed to close conversation.")
+      setError(
+        err instanceof Error ? err.message : "Failed to close conversation."
+      )
+    }
+  }
+
+  async function softDeleteMessage(messageId: string) {
+    const ok = window.confirm("Delete this message?")
+    if (!ok) return
+
+    try {
+      setError("")
+
+      const { error } = await supabase
+        .from("conversation_messages")
+        .update({
+          deleted_at: new Date().toISOString(),
+        })
+        .eq("id", messageId)
+
+      if (error) {
+        throw error
+      }
+
+      await loadAll(false)
+    } catch (err) {
+      console.error("Soft delete message error:", err)
+      setError(err instanceof Error ? err.message : "Failed to delete message.")
+    }
+  }
+
+  async function hardDeleteMessage(messageId: string) {
+    const ok = window.confirm("Permanently delete this message?")
+    if (!ok) return
+
+    try {
+      setError("")
+
+      const { error } = await supabase
+        .from("conversation_messages")
+        .delete()
+        .eq("id", messageId)
+
+      if (error) {
+        throw error
+      }
+
+      await loadAll(false)
+    } catch (err) {
+      console.error("Hard delete message error:", err)
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to permanently delete message."
+      )
+    }
+  }
+
+  async function softDeleteConversation(conversationId: string) {
+    const ok = window.confirm("Delete this conversation?")
+    if (!ok) return
+
+    try {
+      setError("")
+
+      const now = new Date().toISOString()
+
+      const { error: conversationError } = await supabase
+        .from("conversations")
+        .update({
+          deleted_at: now,
+          updated_at: now,
+        })
+        .eq("id", conversationId)
+
+      if (conversationError) {
+        throw conversationError
+      }
+
+      const { error: messagesError } = await supabase
+        .from("conversation_messages")
+        .update({
+          deleted_at: now,
+        })
+        .eq("conversation_id", conversationId)
+
+      if (messagesError) {
+        throw messagesError
+      }
+
+      setSelectedConversation(null)
+      await loadAll(false)
+    } catch (err) {
+      console.error("Soft delete conversation error:", err)
+      setError(
+        err instanceof Error ? err.message : "Failed to delete conversation."
+      )
+    }
+  }
+
+  async function hardDeleteConversation(conversationId: string) {
+    const ok = window.confirm("Permanently delete this conversation and all messages?")
+    if (!ok) return
+
+    try {
+      setError("")
+
+      const { error: messagesError } = await supabase
+        .from("conversation_messages")
+        .delete()
+        .eq("conversation_id", conversationId)
+
+      if (messagesError) {
+        throw messagesError
+      }
+
+      const { error: conversationError } = await supabase
+        .from("conversations")
+        .delete()
+        .eq("id", conversationId)
+
+      if (conversationError) {
+        throw conversationError
+      }
+
+      setSelectedConversation(null)
+      await loadAll(false)
+    } catch (err) {
+      console.error("Hard delete conversation error:", err)
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to permanently delete conversation."
+      )
     }
   }
 
@@ -330,7 +484,9 @@ export default function AdminMessagesPage() {
   const stats = useMemo(() => {
     return {
       total: conversations.length,
-      open: conversations.filter((item) => item.status === "open" || item.status === "unread").length,
+      open: conversations.filter(
+        (item) => item.status === "open" || item.status === "unread"
+      ).length,
       replied: conversations.filter((item) => item.status === "replied").length,
       closed: conversations.filter((item) => item.status === "closed").length,
     }
@@ -340,7 +496,9 @@ export default function AdminMessagesPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-[#eef4ff] via-[#f8fbff] to-white px-4">
         <div className="rounded-[24px] border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
-          <p className="text-lg font-bold text-slate-800">Checking admin access...</p>
+          <p className="text-lg font-bold text-slate-800">
+            Checking admin access...
+          </p>
           <p className="mt-2 text-sm text-slate-500">Please wait.</p>
         </div>
       </div>
@@ -366,23 +524,39 @@ export default function AdminMessagesPage() {
 
         <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-2 text-xs font-bold text-slate-500 sm:text-sm">Total</div>
-            <div className="text-3xl font-extrabold text-slate-900 sm:text-[34px]">{stats.total}</div>
+            <div className="mb-2 text-xs font-bold text-slate-500 sm:text-sm">
+              Total
+            </div>
+            <div className="text-3xl font-extrabold text-slate-900 sm:text-[34px]">
+              {stats.total}
+            </div>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-2 text-xs font-bold text-slate-500 sm:text-sm">Open</div>
-            <div className="text-3xl font-extrabold text-blue-600 sm:text-[34px]">{stats.open}</div>
+            <div className="mb-2 text-xs font-bold text-slate-500 sm:text-sm">
+              Open
+            </div>
+            <div className="text-3xl font-extrabold text-blue-600 sm:text-[34px]">
+              {stats.open}
+            </div>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-2 text-xs font-bold text-slate-500 sm:text-sm">Replied</div>
-            <div className="text-3xl font-extrabold text-violet-600 sm:text-[34px]">{stats.replied}</div>
+            <div className="mb-2 text-xs font-bold text-slate-500 sm:text-sm">
+              Replied
+            </div>
+            <div className="text-3xl font-extrabold text-violet-600 sm:text-[34px]">
+              {stats.replied}
+            </div>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-2 text-xs font-bold text-slate-500 sm:text-sm">Closed</div>
-            <div className="text-3xl font-extrabold text-red-500 sm:text-[34px]">{stats.closed}</div>
+            <div className="mb-2 text-xs font-bold text-slate-500 sm:text-sm">
+              Closed
+            </div>
+            <div className="text-3xl font-extrabold text-red-500 sm:text-[34px]">
+              {stats.closed}
+            </div>
           </div>
         </div>
 
@@ -395,7 +569,9 @@ export default function AdminMessagesPage() {
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
           <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-4 py-4">
-              <div className="mb-3 font-extrabold text-slate-900">Conversations</div>
+              <div className="mb-3 font-extrabold text-slate-900">
+                Conversations
+              </div>
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -406,9 +582,13 @@ export default function AdminMessagesPage() {
 
             <div className="max-h-[760px] overflow-y-auto">
               {loading ? (
-                <div className="px-4 py-5 text-sm text-slate-500">Loading conversations...</div>
+                <div className="px-4 py-5 text-sm text-slate-500">
+                  Loading conversations...
+                </div>
               ) : filteredConversations.length === 0 ? (
-                <div className="px-4 py-5 text-sm text-slate-500">No conversations found.</div>
+                <div className="px-4 py-5 text-sm text-slate-500">
+                  No conversations found.
+                </div>
               ) : (
                 filteredConversations.map((item) => {
                   const active = selectedConversation?.id === item.id
@@ -485,10 +665,12 @@ export default function AdminMessagesPage() {
                         <strong>User:</strong> {getDisplayName(selectedConversation)}
                       </div>
                       <div>
-                        <strong>Email:</strong> {selectedConversation.profile?.email || "No email"}
+                        <strong>Email:</strong>{" "}
+                        {selectedConversation.profile?.email || "No email"}
                       </div>
                       <div>
-                        <strong>Started:</strong> {formatTime(selectedConversation.created_at)}
+                        <strong>Started:</strong>{" "}
+                        {formatTime(selectedConversation.created_at)}
                       </div>
                     </div>
                   </div>
@@ -525,6 +707,20 @@ export default function AdminMessagesPage() {
                         Close
                       </button>
                     )}
+
+                    <button
+                      onClick={() => softDeleteConversation(selectedConversation.id)}
+                      className="rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-bold text-red-600 transition hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+
+                    <button
+                      onClick={() => hardDeleteConversation(selectedConversation.id)}
+                      className="rounded-xl bg-red-700 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-800"
+                    >
+                      Delete Permanently
+                    </button>
                   </div>
                 </div>
 
@@ -582,11 +778,31 @@ export default function AdminMessagesPage() {
                               )}
 
                               <div
-                                className={`mt-2 text-[11px] ${
+                                className={`mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] ${
                                   isAdmin ? "text-white/75" : "text-slate-500"
                                 }`}
                               >
-                                {formatTime(message.created_at)}
+                                <span>{formatTime(message.created_at)}</span>
+
+                                <div className="flex gap-3">
+                                  <button
+                                    onClick={() => softDeleteMessage(message.id)}
+                                    className={`font-bold hover:underline ${
+                                      isAdmin ? "text-white/90" : "text-red-500"
+                                    }`}
+                                  >
+                                    Delete
+                                  </button>
+
+                                  <button
+                                    onClick={() => hardDeleteMessage(message.id)}
+                                    className={`font-bold hover:underline ${
+                                      isAdmin ? "text-white" : "text-red-700"
+                                    }`}
+                                  >
+                                    Delete Permanently
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -598,7 +814,9 @@ export default function AdminMessagesPage() {
                 </div>
 
                 <div className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
-                  <div className="mb-3 text-lg font-extrabold text-slate-900">Send Reply</div>
+                  <div className="mb-3 text-lg font-extrabold text-slate-900">
+                    Send Reply
+                  </div>
 
                   <textarea
                     value={replyBody}
@@ -615,7 +833,11 @@ export default function AdminMessagesPage() {
 
                     <button
                       onClick={sendReply}
-                      disabled={sending || !replyBody.trim() || selectedConversation.status === "closed"}
+                      disabled={
+                        sending ||
+                        !replyBody.trim() ||
+                        selectedConversation.status === "closed"
+                      }
                       className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       {sending ? "Sending..." : "Send Reply"}

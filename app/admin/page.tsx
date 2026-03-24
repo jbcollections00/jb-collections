@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import AdminHeader from "@/app/components/AdminHeader"
 import { createClient } from "@/lib/supabase/client"
@@ -11,10 +11,33 @@ type StatItem = {
   value: string
   icon: string
   color: string
+  helper?: string
 }
 
 type AdminProfile = {
   role: string | null
+}
+
+type RecentUser = {
+  id: string
+  email: string | null
+  full_name?: string | null
+  name?: string | null
+  username?: string | null
+  role?: string | null
+  created_at?: string | null
+  last_seen?: string | null
+}
+
+type DashboardResponse = {
+  categories?: number
+  files?: number
+  messages?: number
+  upgrades?: number
+  users?: number
+  activeToday?: number
+  onlineUsers?: number
+  recentUsers?: RecentUser[]
 }
 
 const cards = [
@@ -56,8 +79,50 @@ const defaultStats: StatItem[] = [
   { label: "Messages", value: "0", icon: "💬", color: "#dc2626" },
   { label: "Upgrades", value: "0", icon: "⬆️", color: "#16a34a" },
   { label: "Total Users", value: "0", icon: "👥", color: "#7c3aed" },
+  { label: "Using Website", value: "0", icon: "🌐", color: "#ea580c" },
   { label: "Online Users", value: "0", icon: "🟢", color: "#059669" },
 ]
+
+function getDisplayName(user: RecentUser) {
+  return (
+    user.full_name?.trim() ||
+    user.name?.trim() ||
+    user.username?.trim() ||
+    user.email?.trim() ||
+    "Unknown User"
+  )
+}
+
+function getInitials(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return "U"
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase()
+  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase()
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "—"
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "—"
+
+  return date.toLocaleString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+
+function isUserOnline(lastSeen?: string | null) {
+  if (!lastSeen) return false
+
+  const time = new Date(lastSeen).getTime()
+  if (Number.isNaN(time)) return false
+
+  return Date.now() - time <= 5 * 60 * 1000
+}
 
 export default function AdminPage() {
   const supabase = useMemo(() => createClient(), [])
@@ -65,6 +130,84 @@ export default function AdminPage() {
 
   const [checkingAdmin, setCheckingAdmin] = useState(true)
   const [stats, setStats] = useState<StatItem[]>(defaultStats)
+  const [recentUsers, setRecentUsers] = useState<RecentUser[]>([])
+  const [loadingRecent, setLoadingRecent] = useState(true)
+
+  const loadStats = useCallback(async (): Promise<{
+    stats: StatItem[]
+    recentUsers: RecentUser[]
+  }> => {
+    try {
+      const response = await fetch("/api/admin/stats", {
+        method: "GET",
+        cache: "no-store",
+      })
+
+      const data = (await response.json()) as DashboardResponse & {
+        error?: string
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to fetch admin stats")
+      }
+
+      return {
+        stats: [
+          {
+            label: "Categories",
+            value: String(data.categories ?? 0),
+            icon: "📂",
+            color: "#2563eb",
+          },
+          {
+            label: "Files",
+            value: String(data.files ?? 0),
+            icon: "📁",
+            color: "#0f172a",
+          },
+          {
+            label: "Messages",
+            value: String(data.messages ?? 0),
+            icon: "💬",
+            color: "#dc2626",
+          },
+          {
+            label: "Upgrades",
+            value: String(data.upgrades ?? 0),
+            icon: "⬆️",
+            color: "#16a34a",
+          },
+          {
+            label: "Total Users",
+            value: String(data.users ?? 0),
+            icon: "👥",
+            color: "#7c3aed",
+          },
+          {
+            label: "Using Website",
+            value: String(data.activeToday ?? 0),
+            icon: "🌐",
+            color: "#ea580c",
+            helper: "Active within 24 hours",
+          },
+          {
+            label: "Online Users",
+            value: String(data.onlineUsers ?? 0),
+            icon: "🟢",
+            color: "#059669",
+            helper: "Active within 5 minutes",
+          },
+        ],
+        recentUsers: Array.isArray(data.recentUsers) ? data.recentUsers : [],
+      }
+    } catch (error) {
+      console.error("Failed to load admin stats:", error)
+      return {
+        stats: defaultStats,
+        recentUsers: [],
+      }
+    }
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -73,6 +216,7 @@ export default function AdminPage() {
     async function init() {
       try {
         setCheckingAdmin(true)
+        setLoadingRecent(true)
 
         const {
           data: { user },
@@ -103,16 +247,19 @@ export default function AdminPage() {
           return
         }
 
-        const loadedStats = await loadStats()
+        const loaded = await loadStats()
 
         if (isMounted) {
-          setStats(loadedStats)
+          setStats(loaded.stats)
+          setRecentUsers(loaded.recentUsers)
+          setLoadingRecent(false)
         }
 
         refreshInterval = setInterval(async () => {
-          const refreshedStats = await loadStats()
+          const refreshed = await loadStats()
           if (isMounted) {
-            setStats(refreshedStats)
+            setStats(refreshed.stats)
+            setRecentUsers(refreshed.recentUsers)
           }
         }, 5000)
       } catch (error) {
@@ -133,9 +280,11 @@ export default function AdminPage() {
         "postgres_changes",
         { event: "*", schema: "public", table: "profiles" },
         async () => {
-          const refreshedStats = await loadStats()
+          const refreshed = await loadStats()
           if (isMounted) {
-            setStats(refreshedStats)
+            setStats(refreshed.stats)
+            setRecentUsers(refreshed.recentUsers)
+            setLoadingRecent(false)
           }
         }
       )
@@ -148,93 +297,7 @@ export default function AdminPage() {
       }
       supabase.removeChannel(channel)
     }
-  }, [router, supabase])
-
-  async function loadStats(): Promise<StatItem[]> {
-    try {
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
-
-      const [
-        categoriesResult,
-        filesResult,
-        messagesResult,
-        upgradesResult,
-        usersResult,
-        onlineUsersResult,
-      ] = await Promise.all([
-        supabase.from("categories").select("*", { count: "exact", head: true }),
-        supabase.from("files").select("*", { count: "exact", head: true }),
-        supabase.from("messages").select("*", { count: "exact", head: true }),
-        supabase.from("upgrades").select("*", { count: "exact", head: true }),
-        supabase.from("profiles").select("*", { count: "exact", head: true }),
-        supabase
-          .from("profiles")
-          .select("*", { count: "exact", head: true })
-          .gte("last_seen", fiveMinutesAgo),
-      ])
-
-      if (categoriesResult.error) {
-        console.error("Categories count error:", categoriesResult.error.message)
-      }
-      if (filesResult.error) {
-        console.error("Files count error:", filesResult.error.message)
-      }
-      if (messagesResult.error) {
-        console.error("Messages count error:", messagesResult.error.message)
-      }
-      if (upgradesResult.error) {
-        console.error("Upgrades count error:", upgradesResult.error.message)
-      }
-      if (usersResult.error) {
-        console.error("Users count error:", usersResult.error.message)
-      }
-      if (onlineUsersResult.error) {
-        console.error("Online users count error:", onlineUsersResult.error.message)
-      }
-
-      return [
-        {
-          label: "Categories",
-          value: String(categoriesResult.count ?? 0),
-          icon: "📂",
-          color: "#2563eb",
-        },
-        {
-          label: "Files",
-          value: String(filesResult.count ?? 0),
-          icon: "📁",
-          color: "#0f172a",
-        },
-        {
-          label: "Messages",
-          value: String(messagesResult.count ?? 0),
-          icon: "💬",
-          color: "#dc2626",
-        },
-        {
-          label: "Upgrades",
-          value: String(upgradesResult.count ?? 0),
-          icon: "⬆️",
-          color: "#16a34a",
-        },
-        {
-          label: "Total Users",
-          value: String(usersResult.count ?? 0),
-          icon: "👥",
-          color: "#7c3aed",
-        },
-        {
-          label: "Online Users",
-          value: String(onlineUsersResult.count ?? 0),
-          icon: "🟢",
-          color: "#059669",
-        },
-      ]
-    } catch (error) {
-      console.error("Failed to load admin stats:", error)
-      return defaultStats
-    }
-  }
+  }, [router, supabase, loadStats])
 
   if (checkingAdmin) {
     return (
@@ -264,12 +327,12 @@ export default function AdminPage() {
           </h1>
 
           <p className="mt-3 max-w-3xl text-sm leading-7 text-blue-100 sm:text-base lg:text-lg">
-            Manage categories, files, messages, users, and upgrade requests from one
-            clean dashboard.
+            Manage categories, files, messages, users, upgrade requests, and live
+            user activity from one clean dashboard.
           </p>
         </div>
 
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 lg:gap-5">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 lg:gap-5">
           {stats.map((item) => (
             <div
               key={item.label}
@@ -286,6 +349,11 @@ export default function AdminPage() {
                   >
                     {item.value}
                   </div>
+                  {item.helper ? (
+                    <div className="mt-2 text-xs font-medium text-slate-400">
+                      {item.helper}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-blue-50 text-3xl sm:h-[58px] sm:w-[58px]">
@@ -320,6 +388,95 @@ export default function AdminPage() {
               </div>
             </Link>
           ))}
+        </div>
+
+        <div className="mt-8 rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(0,0,0,0.05)] sm:rounded-[28px] sm:p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-extrabold text-slate-900">
+                Recent Registered Users
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Latest users who signed up, with their current activity status.
+              </p>
+            </div>
+
+            <div className="rounded-full bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700">
+              {recentUsers.length} recent user{recentUsers.length === 1 ? "" : "s"}
+            </div>
+          </div>
+
+          <div className="mt-5">
+            {loadingRecent ? (
+              <div className="rounded-[20px] bg-slate-50 px-4 py-10 text-center text-sm font-semibold text-slate-500">
+                Loading recent users...
+              </div>
+            ) : recentUsers.length === 0 ? (
+              <div className="rounded-[20px] bg-slate-50 px-4 py-10 text-center text-sm font-semibold text-slate-500">
+                No recent users found.
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-[20px] border border-slate-200">
+                <div className="hidden grid-cols-[1.4fr_1.2fr_1fr_0.8fr] gap-4 bg-slate-50 px-5 py-4 text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500 md:grid">
+                  <div>User</div>
+                  <div>Email</div>
+                  <div>Registered</div>
+                  <div>Status</div>
+                </div>
+
+                <div className="divide-y divide-slate-200">
+                  {recentUsers.map((user) => {
+                    const displayName = getDisplayName(user)
+                    const online = isUserOnline(user.last_seen)
+
+                    return (
+                      <div
+                        key={user.id}
+                        className="grid grid-cols-1 gap-4 px-4 py-4 sm:px-5 md:grid-cols-[1.4fr_1.2fr_1fr_0.8fr] md:items-center"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-extrabold text-blue-700">
+                            {getInitials(displayName)}
+                          </div>
+
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-extrabold text-slate-900 sm:text-base">
+                              {displayName}
+                            </div>
+                            <div className="mt-1 text-xs font-medium text-slate-500">
+                              Role: {user.role || "user"}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="truncate text-sm font-medium text-slate-600">
+                          {user.email || "—"}
+                        </div>
+
+                        <div className="text-sm font-medium text-slate-600">
+                          {formatDate(user.created_at)}
+                        </div>
+
+                        <div>
+                          {online ? (
+                            <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-extrabold text-emerald-700">
+                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                              Online
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-extrabold text-slate-600">
+                              <span className="h-2.5 w-2.5 rounded-full bg-slate-400" />
+                              Offline
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

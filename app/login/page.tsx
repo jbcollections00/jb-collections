@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import type { CSSProperties, FormEvent } from "react"
 
 export default function LoginPage() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const emailRef = useRef<HTMLInputElement | null>(null)
 
   const [email, setEmail] = useState("")
@@ -53,8 +53,13 @@ export default function LoginPage() {
       return
     }
 
+    if (!password.trim()) {
+      e.preventDefault()
+      return
+    }
+
     if (rememberMe) {
-      window.localStorage.setItem("remembered_login_email", email)
+      window.localStorage.setItem("remembered_login_email", email.trim())
     } else {
       window.localStorage.removeItem("remembered_login_email")
     }
@@ -101,7 +106,7 @@ export default function LoginPage() {
               width: "70px",
               height: "auto",
               margin: "0 auto 14px",
-              opacity: 0.9,
+              opacity: 0.95,
             }}
           />
 
@@ -255,6 +260,25 @@ export default function LoginPage() {
           </div>
         </form>
       </div>
+
+      <style jsx global>{`
+        @keyframes spin {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        input::placeholder {
+          color: #94a3b8;
+        }
+      `}</style>
     </main>
   )
 }

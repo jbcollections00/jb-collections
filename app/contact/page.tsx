@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Mail,
   Send,
@@ -42,6 +42,7 @@ export default function ContactPage() {
   const [message, setMessage] = useState("")
   const [attachment, setAttachment] = useState<File | null>(null)
 
+  const [conversations, setConversations] = useState<Conversation[]>([])
   const [conversation, setConversation] = useState<Conversation | null>(null)
 
   const [sending, setSending] = useState(false)
@@ -83,21 +84,20 @@ export default function ContactPage() {
       setFullName(displayName)
       setEmail(displayEmail)
 
-      const { data: existingConversation, error: conversationError } = await supabase
+      const { data: existingConversations, error: conversationError } = await supabase
         .from("conversations")
         .select("*")
         .eq("user_id", user.id)
         .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
 
       if (conversationError) {
-        console.error("Failed to load conversation:", conversationError)
+        console.error("Failed to load conversations:", conversationError)
       } else {
-        setConversation((existingConversation as Conversation) || null)
-        if (existingConversation?.subject) {
-          setSubject(existingConversation.subject)
-        }
+        const rows = (existingConversations as Conversation[]) || []
+        setConversations(rows)
+        const latest = rows[0] || null
+        setConversation(latest)
+        setSubject(latest?.subject || "")
       }
     } catch (err) {
       console.error("Failed to load user details:", err)
@@ -148,6 +148,36 @@ export default function ContactPage() {
     setAttachment(file)
   }
 
+  function startNewConversation() {
+    setConversation(null)
+    setSubject("")
+    setMessage("")
+    setAttachment(null)
+    setError("")
+    setSuccess("")
+    const fileInput = document.getElementById("attachment-input") as HTMLInputElement | null
+    if (fileInput) fileInput.value = ""
+  }
+
+  function selectConversation(item: Conversation) {
+    setConversation(item)
+    setSubject(item.subject || "")
+    setSuccess("")
+    setError("")
+  }
+
+  const normalizedSubject = subject.trim().toLowerCase()
+
+  const matchingConversation = useMemo(() => {
+    if (!normalizedSubject) return null
+
+    return (
+      conversations.find(
+        (item) => (item.subject || "").trim().toLowerCase() === normalizedSubject
+      ) || null
+    )
+  }, [conversations, normalizedSubject])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
@@ -157,7 +187,7 @@ export default function ContactPage() {
       return
     }
 
-    if (!conversation && !subject.trim()) {
+    if (!subject.trim()) {
       setError("Please enter a subject.")
       setSuccess("")
       return
@@ -184,7 +214,7 @@ export default function ContactPage() {
         return
       }
 
-      let activeConversationId = conversation?.id ?? null
+      let activeConversation: Conversation | null = null
       let attachmentUrl: string | null = null
       let uploadWarning = ""
 
@@ -202,7 +232,9 @@ export default function ContactPage() {
         }
       }
 
-      if (!activeConversationId) {
+      if (matchingConversation) {
+        activeConversation = matchingConversation
+      } else {
         const { data: newConversation, error: createConversationError } = await supabase
           .from("conversations")
           .insert({
@@ -217,12 +249,15 @@ export default function ContactPage() {
           throw new Error(`Conversation creation failed: ${createConversationError.message}`)
         }
 
-        activeConversationId = newConversation.id
-        setConversation(newConversation as Conversation)
+        activeConversation = newConversation as Conversation
+      }
+
+      if (!activeConversation) {
+        throw new Error("Conversation ID is missing.")
       }
 
       const { error: insertError } = await supabase.from("conversation_messages").insert({
-        conversation_id: activeConversationId,
+        conversation_id: activeConversation.id,
         sender_id: user.id,
         sender_role: "user",
         body: message.trim() || null,
@@ -233,25 +268,39 @@ export default function ContactPage() {
         throw new Error(`Message send failed: ${insertError.message}`)
       }
 
-      await supabase
+      const { data: updatedConversation, error: updateConversationError } = await supabase
         .from("conversations")
         .update({
           updated_at: new Date().toISOString(),
           status: "open",
+          subject: subject.trim(),
         })
-        .eq("id", activeConversationId)
+        .eq("id", activeConversation.id)
+        .select()
+        .single()
 
+      if (updateConversationError) {
+        throw new Error(`Conversation update failed: ${updateConversationError.message}`)
+      }
+
+      setConversation(updatedConversation as Conversation)
       setMessage("")
       setAttachment(null)
 
       const fileInput = document.getElementById("attachment-input") as HTMLInputElement | null
       if (fileInput) fileInput.value = ""
 
+      await loadUserDetails()
+
       if (uploadWarning) {
         setSuccess("Your message was sent, but the attachment could not be uploaded.")
         setError("")
       } else {
-        setSuccess("Your message has been sent successfully.")
+        setSuccess(
+          matchingConversation
+            ? "Your message was added to the matching conversation."
+            : "Your message has been sent successfully."
+        )
         setError("")
       }
     } catch (err) {
@@ -394,64 +443,113 @@ export default function ContactPage() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-[24px] border border-white/60 bg-white/75 shadow-2xl shadow-slate-200/50 backdrop-blur-xl lg:rounded-[32px]">
-          <div className="p-5 sm:p-8 lg:p-12">
-            <div className="mx-auto max-w-xl">
-              <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-                {conversation ? "Continue Conversation" : "Start a Conversation"}
-              </h2>
-              <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
-                {conversation
-                  ? "Send another message to continue your existing thread with the admin."
-                  : "Fill out the form below to start a conversation with the admin."}
-              </p>
-
-              {(success || error) && (
-                <div
-                  className={`mt-6 rounded-2xl border px-4 py-3 text-sm font-medium ${
-                    success
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : "border-red-200 bg-red-50 text-red-700"
-                  }`}
+        <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <div className="overflow-hidden rounded-[24px] border border-white/60 bg-white/75 shadow-2xl shadow-slate-200/50 backdrop-blur-xl">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-lg font-extrabold text-slate-900">Conversations</h3>
+                <button
+                  type="button"
+                  onClick={startNewConversation}
+                  className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700"
                 >
-                  {success || error}
+                  New
+                </button>
+              </div>
+            </div>
+
+            <div className="max-h-[700px] overflow-y-auto">
+              {conversations.length === 0 ? (
+                <div className="px-5 py-6 text-sm text-slate-500">
+                  No conversations yet.
                 </div>
+              ) : (
+                conversations.map((item) => {
+                  const activeId = conversation?.id
+                  const isActive = activeId === item.id
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => selectConversation(item)}
+                      className={`w-full border-b border-slate-100 px-5 py-4 text-left transition ${
+                        isActive ? "bg-blue-50" : "bg-white hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="truncate text-sm font-extrabold text-slate-900">
+                        {item.subject || "No subject"}
+                      </div>
+                      <div className="mt-1 flex items-center justify-between gap-3 text-xs text-slate-500">
+                        <span className="capitalize">{item.status || "open"}</span>
+                        <span>
+                          {new Date(item.updated_at || item.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </button>
+                  )
+                })
               )}
+            </div>
+          </div>
 
-              <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Full Name
-                  </label>
-                  <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
-                    <User size={18} className="text-slate-400" />
-                    <input
-                      type="text"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      placeholder={loadingUser ? "Loading your name..." : "Your full name"}
-                      className="h-14 w-full rounded-2xl bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                    />
+          <div className="overflow-hidden rounded-[24px] border border-white/60 bg-white/75 shadow-2xl shadow-slate-200/50 backdrop-blur-xl lg:rounded-[32px]">
+            <div className="p-5 sm:p-8 lg:p-12">
+              <div className="mx-auto max-w-xl">
+                <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
+                  {conversation ? "Continue or Edit Conversation" : "Start a Conversation"}
+                </h2>
+                <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
+                  {conversation
+                    ? "Edit the subject or send another message. If the subject is different, a new conversation will be created automatically."
+                    : "Fill out the form below to start a conversation with the admin."}
+                </p>
+
+                {(success || error) && (
+                  <div
+                    className={`mt-6 rounded-2xl border px-4 py-3 text-sm font-medium ${
+                      success
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-red-200 bg-red-50 text-red-700"
+                    }`}
+                  >
+                    {success || error}
                   </div>
-                </div>
+                )}
 
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Email
-                  </label>
-                  <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
-                    <Mail size={18} className="text-slate-400" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder={loadingUser ? "Loading your email..." : "you@example.com"}
-                      className="h-14 w-full rounded-2xl bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                    />
+                <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Full Name
+                    </label>
+                    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
+                      <User size={18} className="text-slate-400" />
+                      <input
+                        type="text"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        placeholder={loadingUser ? "Loading your name..." : "Your full name"}
+                        className="h-14 w-full rounded-2xl bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                      />
+                    </div>
                   </div>
-                </div>
 
-                {!conversation && (
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Email
+                    </label>
+                    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
+                      <Mail size={18} className="text-slate-400" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder={loadingUser ? "Loading your email..." : "you@example.com"}
+                        className="h-14 w-full rounded-2xl bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                      />
+                    </div>
+                  </div>
+
                   <div>
                     <label className="mb-2 block text-sm font-semibold text-slate-700">
                       Subject
@@ -467,90 +565,90 @@ export default function ContactPage() {
                       />
                     </div>
                   </div>
-                )}
 
-                {conversation && (
-                  <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-                    <span className="font-bold">Current subject:</span>{" "}
-                    {conversation.subject || "No subject"}
-                  </div>
-                )}
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Message
-                  </label>
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
-                    <textarea
-                      value={message}
-                      onChange={(e) => setMessage(e.target.value)}
-                      placeholder="Write your message here..."
-                      rows={7}
-                      className="w-full resize-none bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Attachment (optional)
-                  </label>
-
-                  <label className="flex cursor-pointer flex-col items-start justify-between gap-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-4 transition hover:border-blue-400 hover:bg-blue-50 sm:flex-row sm:items-center">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-xl bg-slate-100 p-2">
-                        <Paperclip size={18} className="text-slate-700" />
-                      </div>
-
-                      <div>
-                        <p className="break-all text-sm font-semibold text-slate-800">
-                          {attachment ? attachment.name : "Choose a file"}
-                        </p>
-                        <p className="text-xs text-slate-500">Max file size: 25MB</p>
-                      </div>
+                  {conversation && (
+                    <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                      <span className="font-bold">Selected conversation:</span>{" "}
+                      {conversation.subject || "No subject"}
                     </div>
-
-                    <div className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">
-                      Browse
-                    </div>
-
-                    <input
-                      id="attachment-input"
-                      type="file"
-                      onChange={handleAttachmentChange}
-                      className="hidden"
-                    />
-                  </label>
-
-                  {attachment && (
-                    <p className="mt-2 break-all text-xs text-slate-500">
-                      Selected file: {attachment.name}
-                    </p>
                   )}
-                </div>
 
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <button
-                    type="submit"
-                    disabled={sending || uploading}
-                    className="inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <Send size={18} />
-                    {sending || uploading
-                      ? "Sending..."
-                      : conversation
-                        ? "Send to Conversation"
-                        : "Start Conversation"}
-                  </button>
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Message
+                    </label>
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
+                      <textarea
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        placeholder="Write your message here..."
+                        rows={7}
+                        className="w-full resize-none bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                      />
+                    </div>
+                  </div>
 
-                  <Link
-                    href="/dashboard/inbox"
-                    className="inline-flex h-14 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-                  >
-                    Open Chat
-                  </Link>
-                </div>
-              </form>
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Attachment (optional)
+                    </label>
+
+                    <label className="flex cursor-pointer flex-col items-start justify-between gap-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-4 transition hover:border-blue-400 hover:bg-blue-50 sm:flex-row sm:items-center">
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-xl bg-slate-100 p-2">
+                          <Paperclip size={18} className="text-slate-700" />
+                        </div>
+
+                        <div>
+                          <p className="break-all text-sm font-semibold text-slate-800">
+                            {attachment ? attachment.name : "Choose a file"}
+                          </p>
+                          <p className="text-xs text-slate-500">Max file size: 25MB</p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">
+                        Browse
+                      </div>
+
+                      <input
+                        id="attachment-input"
+                        type="file"
+                        onChange={handleAttachmentChange}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {attachment && (
+                      <p className="mt-2 break-all text-xs text-slate-500">
+                        Selected file: {attachment.name}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="submit"
+                      disabled={sending || uploading}
+                      className="inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Send size={18} />
+                      {sending || uploading
+                        ? "Sending..."
+                        : matchingConversation
+                          ? "Send to Matching Conversation"
+                          : "Start New Conversation"}
+                    </button>
+
+                    <Link
+                      href="/dashboard/inbox"
+                      className="inline-flex h-14 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Open Chat
+                    </Link>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
         </div>

@@ -32,6 +32,7 @@ type ConversationMessage = {
   attachment_url: string | null
   created_at: string
   read_at: string | null
+  deleted_at?: string | null
 }
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024
@@ -134,6 +135,7 @@ export default function MessagesPage() {
       .from("conversation_messages")
       .select("*")
       .eq("conversation_id", conversationId)
+      .is("deleted_at", null)
       .order("created_at", { ascending: true })
 
     if (messagesError) {
@@ -143,6 +145,55 @@ export default function MessagesPage() {
 
     setConversation((conversationData as Conversation) || null)
     setMessages((messagesData as ConversationMessage[]) || [])
+  }
+
+  async function deleteMyMessage(messageId: string, senderId: string) {
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        alert("You must be logged in.")
+        return
+      }
+
+      if (user.id !== senderId) {
+        alert("You can only delete your own message.")
+        return
+      }
+
+      const ok = window.confirm("Delete this message?")
+      if (!ok) return
+
+      const { data, error } = await supabase
+        .from("conversation_messages")
+        .update({
+          deleted_at: new Date().toISOString(),
+        })
+        .eq("id", messageId)
+        .eq("sender_id", user.id)
+        .select("id, deleted_at")
+
+      if (error) {
+        console.error("Delete message error:", error)
+        alert(`Failed to delete message: ${error.message}`)
+        return
+      }
+
+      if (!data || data.length === 0) {
+        alert("Message was not updated. Check your Supabase RLS policy.")
+        return
+      }
+
+      if (conversation?.id) {
+        await loadConversation(conversation.id)
+      }
+    } catch (err) {
+      console.error("Delete message failed:", err)
+      alert("Failed to delete message.")
+    }
   }
 
   async function uploadAttachment(file: File) {
@@ -481,6 +532,18 @@ export default function MessagesPage() {
                           >
                             {formatTime(item.created_at)}
                           </div>
+
+                          {isUser && (
+                            <div className="mt-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() => deleteMyMessage(item.id, item.sender_id || "")}
+                                className="text-[11px] text-white/85 hover:underline"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )

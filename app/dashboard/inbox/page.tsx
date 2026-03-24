@@ -12,6 +12,7 @@ type Conversation = {
   status: string
   created_at: string
   updated_at: string
+  deleted_at?: string | null
 }
 
 type ConversationMessage = {
@@ -23,6 +24,7 @@ type ConversationMessage = {
   attachment_url: string | null
   created_at: string
   read_at: string | null
+  deleted_at?: string | null
 }
 
 type UpgradeReply = {
@@ -126,6 +128,7 @@ export default function DashboardInboxPage() {
         .from("conversations")
         .select("*")
         .eq("user_id", user.id)
+        .is("deleted_at", null)
         .order("updated_at", { ascending: false }),
       supabase
         .from("upgrades")
@@ -151,6 +154,7 @@ export default function DashboardInboxPage() {
         .from("conversation_messages")
         .select("*")
         .in("conversation_id", conversationIds)
+        .is("deleted_at", null)
         .order("created_at", { ascending: true })
 
       if (error) {
@@ -229,6 +233,100 @@ export default function DashboardInboxPage() {
     })
 
     if (showLoader) setLoading(false)
+  }
+
+  async function deleteConversationMessage(messageId: string, senderId: string | null) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      alert("Please log in again.")
+      return
+    }
+
+    if (senderId !== user.id) {
+      alert("You can only delete your own message.")
+      return
+    }
+
+    const ok = window.confirm("Delete this message?")
+    if (!ok) return
+
+    const { data, error } = await supabase
+      .from("conversation_messages")
+      .update({
+        deleted_at: new Date().toISOString(),
+      })
+      .eq("id", messageId)
+      .eq("sender_id", user.id)
+      .select("id, deleted_at")
+
+    if (error) {
+      console.error("Delete conversation message error:", error)
+      alert(error.message)
+      return
+    }
+
+    if (!data || data.length === 0) {
+      alert("Message was not updated. Check your RLS policy.")
+      return
+    }
+
+    await loadInbox(false)
+  }
+
+  async function deleteConversationThread(conversationId: string) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      alert("Please log in again.")
+      return
+    }
+
+    const ok = window.confirm("Delete this conversation?")
+    if (!ok) return
+
+    const now = new Date().toISOString()
+
+    const { data: conversationUpdated, error: conversationError } = await supabase
+      .from("conversations")
+      .update({
+        deleted_at: now,
+        updated_at: now,
+      })
+      .eq("id", conversationId)
+      .eq("user_id", user.id)
+      .select("id, deleted_at")
+
+    if (conversationError) {
+      console.error("Delete conversation error:", conversationError)
+      alert(conversationError.message)
+      return
+    }
+
+    if (!conversationUpdated || conversationUpdated.length === 0) {
+      alert("Conversation was not updated. Check your RLS policy.")
+      return
+    }
+
+    const { error: messagesError } = await supabase
+      .from("conversation_messages")
+      .update({
+        deleted_at: now,
+      })
+      .eq("conversation_id", conversationId)
+      .eq("sender_id", user.id)
+
+    if (messagesError) {
+      console.error("Delete conversation messages error:", messagesError)
+      alert(messagesError.message)
+      return
+    }
+
+    await loadInbox(false)
   }
 
   async function sendReply() {
@@ -600,12 +698,22 @@ export default function DashboardInboxPage() {
                     </div>
                   </div>
 
-                  <Link
-                    href="/contact"
-                    className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
-                  >
-                    Open Chat
-                  </Link>
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href="/contact"
+                      className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
+                    >
+                      Open Chat
+                    </Link>
+
+                    <button
+                      type="button"
+                      onClick={() => deleteConversationThread(selectedItem.conversation.id)}
+                      className="inline-flex items-center justify-center rounded-xl border border-red-300 bg-white px-4 py-3 text-sm font-bold text-red-600 transition hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
 
                 <h3 className="mb-3 text-lg font-extrabold text-slate-900">Conversation</h3>
@@ -629,12 +737,26 @@ export default function DashboardInboxPage() {
                           }`}
                         >
                           <div
-                            className={`mb-2 text-xs font-bold ${
+                            className={`mb-2 flex flex-wrap items-center justify-between gap-2 text-xs font-bold ${
                               isUser ? "text-slate-600" : "text-blue-700"
                             }`}
                           >
-                            {isUser ? "You" : "Admin"} •{" "}
-                            {new Date(message.created_at).toLocaleString()}
+                            <span>
+                              {isUser ? "You" : "Admin"} •{" "}
+                              {new Date(message.created_at).toLocaleString()}
+                            </span>
+
+                            {isUser && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  deleteConversationMessage(message.id, message.sender_id)
+                                }
+                                className="text-red-500 hover:underline"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
 
                           {message.body && (
