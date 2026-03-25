@@ -43,7 +43,7 @@ export default function DownloadGatePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
-  const fileId = params?.id as string
+  const id = params?.id as string
   const unlockedFromQuery = searchParams?.get("unlocked") === "1"
 
   const [checking, setChecking] = useState(true)
@@ -63,10 +63,10 @@ export default function DownloadGatePage() {
   const hasLoggedGateViewRef = useRef(false)
 
   useEffect(() => {
-    if (!fileId) return
+    if (!id) return
     void loadPage()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileId, unlockedFromQuery])
+  }, [id, unlockedFromQuery])
 
   useEffect(() => {
     if (checking) return
@@ -83,17 +83,21 @@ export default function DownloadGatePage() {
     return () => window.clearTimeout(timer)
   }, [checking, file, isPremiumUser, step, downloadReady, countdown])
 
-  async function logEvent(eventType: EventType, meta?: Record<string, unknown>) {
+  async function logEvent(
+    eventType: EventType,
+    meta?: Record<string, unknown>,
+    targetFileId?: string
+  ) {
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser()
 
-      if (!user || !fileId) return
+      if (!user || !targetFileId) return
 
       const { error } = await supabase.from("download_events").insert({
         user_id: user.id,
-        file_id: fileId,
+        file_id: targetFileId,
         event_type: eventType,
         meta: meta ?? {},
       })
@@ -137,7 +141,7 @@ export default function DownloadGatePage() {
             .select(
               "id, title, description, visibility, shrinkme_url, linkvertise_url, monetization_enabled, status"
             )
-            .eq("id", fileId)
+            .eq("id", id)
             .eq("status", "published")
             .maybeSingle(),
           supabase
@@ -153,7 +157,7 @@ export default function DownloadGatePage() {
       }
 
       if (!fileData) {
-        setError(`No file row found for ID: ${fileId}`)
+        setError(`No file row found for id: ${id}`)
         return
       }
 
@@ -173,6 +177,7 @@ export default function DownloadGatePage() {
       const platinum = profile?.role === "admin" || membership === "platinum"
 
       const foundFile = fileData as FileRow
+      const realFileId = foundFile.id
       const visibility = (foundFile.visibility || "free").toLowerCase()
 
       setFile(foundFile)
@@ -181,28 +186,40 @@ export default function DownloadGatePage() {
 
       if (!hasLoggedGateViewRef.current) {
         hasLoggedGateViewRef.current = true
-        void logEvent("gate_view", {
-          visibility,
-          monetization_enabled: foundFile.monetization_enabled !== false,
-          unlocked_from_query: unlockedFromQuery,
-        })
+        void logEvent(
+          "gate_view",
+          {
+            visibility,
+            monetization_enabled: foundFile.monetization_enabled !== false,
+            unlocked_from_query: unlockedFromQuery,
+          },
+          realFileId
+        )
       }
 
       if (premium && (visibility === "free" || visibility === "premium")) {
-        void logEvent("premium_auto_download", {
-          visibility,
-          monetization_enabled: foundFile.monetization_enabled !== false,
-        })
-        window.location.href = `/api/download/${fileId}`
+        void logEvent(
+          "premium_auto_download",
+          {
+            visibility,
+            monetization_enabled: foundFile.monetization_enabled !== false,
+          },
+          realFileId
+        )
+        window.location.href = `/api/download/${realFileId}`
         return
       }
 
       if (platinum && visibility === "platinum") {
-        void logEvent("premium_auto_download", {
-          visibility,
-          monetization_enabled: foundFile.monetization_enabled !== false,
-        })
-        window.location.href = `/api/download/${fileId}`
+        void logEvent(
+          "premium_auto_download",
+          {
+            visibility,
+            monetization_enabled: foundFile.monetization_enabled !== false,
+          },
+          realFileId
+        )
+        window.location.href = `/api/download/${realFileId}`
         return
       }
 
@@ -232,15 +249,19 @@ export default function DownloadGatePage() {
   }
 
   function handleDirectDownload() {
-    if (startingDownload) return
+    if (startingDownload || !file?.id) return
 
     setStartingDownload(true)
 
-    void logEvent("download_click", {
-      source: unlockedFromQuery ? "gate_after_unlock" : "direct_button",
-    })
+    void logEvent(
+      "download_click",
+      {
+        source: unlockedFromQuery ? "gate_after_unlock" : "direct_button",
+      },
+      file.id
+    )
 
-    window.location.href = `/api/download/${fileId}`
+    window.location.href = `/api/download/${file.id}`
   }
 
   if (checking) {

@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import SiteHeader from "@/app/components/SiteHeader"
 
 type UserProfile = {
   id: string
@@ -27,13 +28,10 @@ export default function ProfilePageClient() {
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [authEmail, setAuthEmail] = useState("")
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const loadProfile = useCallback(
     async (showLoader = true) => {
-      if (showLoader) {
-        setLoading(true)
-      }
+      if (showLoader) setLoading(true)
 
       try {
         const {
@@ -41,13 +39,7 @@ export default function ProfilePageClient() {
           error: userError,
         } = await supabase.auth.getUser()
 
-        if (userError) {
-          console.error("Failed to get authenticated user:", userError)
-          router.replace("/login")
-          return
-        }
-
-        if (!user) {
+        if (userError || !user) {
           router.replace("/login")
           return
         }
@@ -63,9 +55,7 @@ export default function ProfilePageClient() {
           .eq("id", user.id)
           .maybeSingle()
 
-        if (error) {
-          console.error("Failed to load profile:", error)
-        }
+        if (error) console.error("Profile load error:", error)
 
         const fallbackProfile: UserProfile = {
           id: user.id,
@@ -84,12 +74,10 @@ export default function ProfilePageClient() {
         }
 
         setProfile(data ?? fallbackProfile)
-      } catch (error) {
-        console.error("Unexpected profile error:", error)
+      } catch (err) {
+        console.error("Unexpected error:", err)
       } finally {
-        if (showLoader) {
-          setLoading(false)
-        }
+        if (showLoader) setLoading(false)
       }
     },
     [router, supabase]
@@ -100,301 +88,148 @@ export default function ProfilePageClient() {
   }, [loadProfile])
 
   useEffect(() => {
-    function handleFocusRefresh() {
-      loadProfile(false)
-    }
+    const refresh = () => loadProfile(false)
 
-    function handleVisibilityChange() {
-      if (document.visibilityState === "visible") {
-        loadProfile(false)
-      }
-    }
+    window.addEventListener("focus", refresh)
 
-    window.addEventListener("focus", handleFocusRefresh)
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-
-    const interval = window.setInterval(() => {
-      loadProfile(false)
-    }, 30000)
+    const interval = setInterval(() => loadProfile(false), 30000)
 
     return () => {
-      window.removeEventListener("focus", handleFocusRefresh)
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
-      window.clearInterval(interval)
+      window.removeEventListener("focus", refresh)
+      clearInterval(interval)
     }
   }, [loadProfile])
 
   async function handleLogout() {
-    try {
-      setLoggingOut(true)
-      setMobileMenuOpen(false)
+    setLoggingOut(true)
 
-      const { error } = await supabase.auth.signOut()
+    await supabase.auth.signOut()
+    router.replace("/login")
+    router.refresh()
 
-      if (error) {
-        console.error("Logout failed:", error)
-        return
-      }
-
-      router.replace("/login")
-      router.refresh()
-    } catch (error) {
-      console.error("Unexpected logout error:", error)
-    } finally {
-      setLoggingOut(false)
-    }
+    setLoggingOut(false)
   }
 
   const successParam = searchParams?.get("success") ?? ""
   const errorParam = searchParams?.get("error") ?? ""
 
-  const successMessage = useMemo(() => {
-    if (successParam === "upgrade-requested") {
-      return "Your premium upgrade request was sent successfully. Please wait for admin review."
-    }
+  const successMessage =
+    successParam === "upgrade-requested"
+      ? "Your premium upgrade request was sent successfully. Please wait for admin review."
+      : ""
 
-    return ""
-  }, [successParam])
+  const errorMessage =
+    errorParam === "missing-message"
+      ? "Please enter a message."
+      : errorParam === "file-too-large"
+      ? "File too large (max 10MB)."
+      : errorParam === "invalid-file-type"
+      ? "Invalid file type."
+      : errorParam === "upload-failed"
+      ? "Upload failed."
+      : errorParam === "insert-failed"
+      ? "Save failed."
+      : errorParam === "unexpected"
+      ? "Something went wrong."
+      : ""
 
-  const errorMessage = useMemo(() => {
-    if (errorParam === "missing-message") {
-      return "Please enter a message before sending your upgrade request."
-    }
+  const displayName =
+    profile?.full_name ||
+    profile?.name ||
+    profile?.username ||
+    authEmail.split("@")[0] ||
+    "User"
 
-    if (errorParam === "file-too-large") {
-      return "The receipt file is too large. Please upload a file smaller than 10MB."
-    }
+  const displayEmail = profile?.email || authEmail || "No email"
 
-    if (errorParam === "invalid-file-type") {
-      return "Invalid receipt file type. Please upload JPG, PNG, WEBP, or PDF."
-    }
+  const isPremiumUser =
+    profile?.role === "admin" ||
+    profile?.is_premium ||
+    profile?.membership === "premium"
 
-    if (errorParam === "upload-failed") {
-      return "Receipt upload failed. Please try again."
-    }
+  const displayMembership = isPremiumUser
+    ? "Premium User"
+    : "Standard User"
 
-    if (errorParam === "insert-failed") {
-      return "Failed to save your upgrade request. Please try again."
-    }
-
-    if (errorParam === "unexpected") {
-      return "Something went wrong while sending your request. Please try again."
-    }
-
-    return ""
-  }, [errorParam])
-
-  const displayName = useMemo(() => {
-    return (
-      profile?.full_name ||
-      profile?.name ||
-      profile?.username ||
-      authEmail?.split("@")[0] ||
-      "User"
-    )
-  }, [profile, authEmail])
-
-  const displayEmail = useMemo(() => {
-    return profile?.email || authEmail || "No email"
-  }, [profile, authEmail])
-
-  const isPremiumUser = useMemo(() => {
-    const role = String(profile?.role || "").toLowerCase()
-    const membership = String(profile?.membership || "").toLowerCase()
-
-    if (role === "admin") return true
-
-    if (typeof profile?.is_premium === "boolean") {
-      return profile.is_premium
-    }
-
-    return membership === "premium"
-  }, [profile])
-
-  const displayMembership = useMemo(() => {
-    const role = String(profile?.role || "").toLowerCase()
-    const membership = String(profile?.membership || "").toLowerCase()
-
-    const premium =
-      typeof profile?.is_premium === "boolean"
-        ? profile.is_premium
-        : membership === "premium"
-
-    if (role === "admin") {
-      return "Premium User/Admin"
-    }
-
-    if (premium || membership === "premium") {
-      return "Premium User"
-    }
-
-    return "Standard User"
-  }, [profile])
-
-  const displayStatus = useMemo(() => {
-    return profile?.account_status || profile?.status || "Active"
-  }, [profile])
+  const displayStatus =
+    profile?.account_status || profile?.status || "Active"
 
   const membershipBadgeClasses = isPremiumUser
     ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
     : "bg-slate-100 text-slate-700 border border-slate-200"
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto w-full max-w-[1800px] px-4 py-6 lg:px-8">
-        <div className="mb-8 rounded-3xl bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 p-8 text-white">
-          <div className="flex items-center justify-between gap-4">
-            <h1 className="text-3xl font-black">Profile</h1>
+    <>
+      <SiteHeader />
 
-            <div className="hidden gap-3 lg:flex">
-              <Link
-                href="/dashboard"
-                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
-              >
-                Dashboard
-              </Link>
+      <div className="min-h-screen bg-slate-50 pt-20">
+        <div className="mx-auto w-full max-w-[1800px] px-4 py-6 lg:px-8">
 
-              <Link
-                href="/messages"
-                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
-              >
-                My Inbox
-              </Link>
-
-              <Link
-                href="/contact"
-                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
-              >
-                Message Admin
-              </Link>
-
-              <button
-                type="button"
-                onClick={handleLogout}
-                disabled={loggingOut}
-                className="rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-70"
-              >
-                {loggingOut ? "Logging out..." : "Logout"}
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen((prev) => !prev)}
-              className="rounded-xl bg-white/10 px-3 py-2 text-sm font-semibold text-white lg:hidden"
-            >
-              {mobileMenuOpen ? "Close" : "Menu"}
-            </button>
-          </div>
-
-          {mobileMenuOpen && (
-            <div className="mt-4 grid gap-3 lg:hidden">
-              <Link
-                href="/dashboard"
-                onClick={() => setMobileMenuOpen(false)}
-                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
-              >
-                Dashboard
-              </Link>
-
-              <Link
-                href="/messages"
-                onClick={() => setMobileMenuOpen(false)}
-                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
-              >
-                My Inbox
-              </Link>
-
-              <Link
-                href="/contact"
-                onClick={() => setMobileMenuOpen(false)}
-                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
-              >
-                Message Admin
-              </Link>
-
-              <button
-                type="button"
-                onClick={handleLogout}
-                disabled={loggingOut}
-                className="rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-70"
-              >
-                {loggingOut ? "Logging out..." : "Logout"}
-              </button>
+          {successMessage && (
+            <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+              {successMessage}
             </div>
           )}
-        </div>
 
-        {successMessage ? (
-          <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-            {successMessage}
-          </div>
-        ) : null}
-
-        {errorMessage ? (
-          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-            {errorMessage}
-          </div>
-        ) : null}
-
-        {!isPremiumUser && (
-          <div className="mb-8">
-            <Link
-              href="/upgrade"
-              className="inline-flex items-center rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-bold text-blue-700 transition hover:bg-blue-100"
-            >
-              Upgrade to Premium
-            </Link>
-          </div>
-        )}
-
-        <div className="mt-8 rounded-3xl border border-blue-100 bg-white p-6">
-          <h2 className="text-xl font-black text-slate-900">
-            Account Information
-          </h2>
-
-          {loading ? (
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="rounded-xl border p-4">
-                  <div className="h-4 w-24 animate-pulse rounded bg-slate-200" />
-                  <div className="mt-3 h-6 w-32 animate-pulse rounded bg-slate-200" />
-                </div>
-              ))}
+          {errorMessage && (
+            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              {errorMessage}
             </div>
-          ) : (
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl border p-4">
-                <p className="text-xs text-slate-400">Full Name</p>
-                <p className="text-lg font-semibold">{displayName}</p>
-              </div>
+          )}
 
-              <div className="rounded-xl border p-4">
-                <p className="text-xs text-slate-400">Email</p>
-                <p className="break-all text-lg font-semibold">{displayEmail}</p>
-              </div>
+          {!isPremiumUser && (
+            <div className="mb-8">
+              <Link
+                href="/upgrade"
+                className="inline-flex items-center rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-bold text-blue-700 hover:bg-blue-100"
+              >
+                Upgrade to Premium
+              </Link>
+            </div>
+          )}
 
-              <div className="rounded-xl border p-4">
-                <p className="text-xs text-slate-400">Membership</p>
-                <div className="mt-2">
-                  <span
-                    className={`inline-flex rounded-full px-3 py-1.5 text-sm font-bold ${membershipBadgeClasses}`}
-                  >
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-2xl font-black text-slate-900">
+              Account Information
+            </h2>
+
+            {loading ? (
+              <p className="mt-4">Loading...</p>
+            ) : (
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+
+                <div className="rounded-2xl border bg-slate-50 p-5">
+                  <p className="text-xs text-slate-400">Full Name</p>
+                  <p className="text-lg font-semibold">{displayName}</p>
+                </div>
+
+                <div className="rounded-2xl border bg-slate-50 p-5">
+                  <p className="text-xs text-slate-400">Email</p>
+                  <p className="text-lg font-semibold break-all">
+                    {displayEmail}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border bg-slate-50 p-5">
+                  <p className="text-xs text-slate-400">Membership</p>
+                  <span className={membershipBadgeClasses}>
                     {displayMembership}
                   </span>
                 </div>
-              </div>
 
-              <div className="rounded-xl border p-4">
-                <p className="text-xs text-slate-400">Status</p>
-                <p className="text-lg font-semibold text-emerald-600">
-                  {displayStatus}
-                </p>
+                <div className="rounded-2xl border bg-slate-50 p-5">
+                  <p className="text-xs text-slate-400">Status</p>
+                  <p className="text-lg font-semibold text-emerald-600">
+                    {displayStatus}
+                  </p>
+                </div>
+
               </div>
-            </div>
-          )}
+            )}
+          </div>
+
         </div>
       </div>
-    </div>
+    </>
   )
 }

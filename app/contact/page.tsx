@@ -2,331 +2,490 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
-import {
-  Mail,
-  Send,
-  User,
-  FileText,
-  LayoutDashboard,
-  Paperclip,
-  LogOut,
-  Inbox,
-} from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import PresenceTracker from "@/app/components/PresenceTracker"
+import SiteHeader from "@/app/components/SiteHeader"
 
-type Profile = {
+type Category = {
   id: string
-  full_name: string | null
-  email: string | null
+  name: string
+  description: string | null
+  image_url?: string | null
+  thumbnail_url?: string | null
+  cover_url?: string | null
 }
 
-type Conversation = {
+type FileRow = {
   id: string
-  user_id: string
-  subject: string | null
-  status: string
-  created_at: string
-  updated_at: string
+  category_id: string | null
 }
 
-const MAX_FILE_SIZE = 25 * 1024 * 1024
+type HomeFile = {
+  id: string
+  title?: string | null
+  name?: string | null
+  slug?: string | null
+  description?: string | null
+  thumbnail_url?: string | null
+  cover_url?: string | null
+  image_url?: string | null
+  downloads_count?: number | null
+  created_at?: string | null
+  visibility?: "free" | "premium" | "private" | null
+}
 
-export default function ContactPage() {
-  const supabase = createClient()
+type HomeSectionsResponse = {
+  trending?: HomeFile[]
+  top?: HomeFile[]
+  latest?: HomeFile[]
+}
+
+type CurrentUserProfile = {
+  id: string
+  role?: string | null
+}
+
+type MemberItem = {
+  id: string
+  full_name?: string | null
+  name?: string | null
+  username?: string | null
+  email?: string | null
+  avatar_url?: string | null
+  last_seen?: string | null
+  status?: string | null
+  account_status?: string | null
+  created_at?: string | null
+}
+
+type LiveStatsResponse = {
+  onlineUsers?: number
+  activeToday?: number
+  totalUsers?: number
+  newMembers?: MemberItem[]
+  onlineMembers?: MemberItem[]
+}
+
+function getCategoryImage(category: Category) {
+  return category.thumbnail_url || category.cover_url || category.image_url || null
+}
+
+function getFileImage(file: HomeFile) {
+  return file.thumbnail_url || file.cover_url || file.image_url || null
+}
+
+function getCategoryIcon(name: string) {
+  const value = name.toLowerCase()
+
+  if (value.includes("book")) return "📚"
+  if (value.includes("media")) return "🎬"
+  if (value.includes("software")) return "💻"
+  if (value.includes("template")) return "🧩"
+  return "📁"
+}
+
+function getFileIcon(name: string) {
+  const value = name.toLowerCase()
+
+  if (value.includes("book")) return "📚"
+  if (value.includes("movie") || value.includes("video")) return "🎬"
+  if (value.includes("music") || value.includes("audio")) return "🎵"
+  if (value.includes("software") || value.includes("app")) return "💻"
+  if (value.includes("game")) return "🎮"
+  if (value.includes("template")) return "🧩"
+  if (value.includes("document") || value.includes("reviewer")) return "📝"
+  return "📦"
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat().format(value)
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "Recently added"
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "Recently added"
+
+  return date.toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
+}
+
+function formatShortDate(value?: string | null) {
+  if (!value) return "Recently joined"
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "Recently joined"
+
+  return date.toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
+}
+
+function getFileTitle(file: HomeFile) {
+  return file.title?.trim() || file.name?.trim() || "Untitled File"
+}
+
+function getFileHref(file: HomeFile) {
+  return `/download/${file.id}`
+}
+
+function getVisibilityBadge(file: HomeFile) {
+  if (file.visibility === "premium") {
+    return {
+      label: "Premium",
+      className: "bg-amber-100 text-amber-800",
+    }
+  }
+
+  if (file.visibility === "private") {
+    return {
+      label: "Private",
+      className: "bg-slate-200 text-slate-700",
+    }
+  }
+
+  return {
+    label: "Free",
+    className: "bg-emerald-100 text-emerald-700",
+  }
+}
+
+function getMemberDisplayName(member: MemberItem) {
+  return (
+    member.full_name?.trim() ||
+    member.name?.trim() ||
+    member.username?.trim() ||
+    member.email?.trim() ||
+    "Unnamed User"
+  )
+}
+
+function HomeFileCard({ file }: { file: HomeFile }) {
+  const image = getFileImage(file)
+  const title = getFileTitle(file)
+  const badge = getVisibilityBadge(file)
+
+  return (
+    <div className="group overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
+      <div className="relative aspect-[4/2.6] overflow-hidden bg-slate-100">
+        {image ? (
+          <img
+            src={image}
+            alt={title}
+            className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-5xl">
+            {getFileIcon(title)}
+          </div>
+        )}
+
+        <div className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow">
+          {formatNumber(file.downloads_count || 0)} downloads
+        </div>
+
+        <div
+          className={`absolute right-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold shadow ${badge.className}`}
+        >
+          {badge.label}
+        </div>
+      </div>
+
+      <div className="p-3">
+        <h3 className="line-clamp-1 text-base font-bold text-slate-900">{title}</h3>
+
+        <p className="mt-1 min-h-[40px] text-xs leading-5 text-slate-600">
+          {file.description?.trim() || "Open this file to view details and download it."}
+        </p>
+
+        <div className="mt-2 text-[12px] font-medium text-slate-500">
+          {formatDate(file.created_at)}
+        </div>
+
+        <Link
+          href={getFileHref(file)}
+          className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+        >
+          View File
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+function StatCard({
+  label,
+  value,
+  onClick,
+}: {
+  label: string
+  value: string
+  onClick?: () => void
+}) {
+  const isClickable = typeof onClick === "function"
+
+  if (isClickable) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="rounded-2xl bg-slate-50 px-4 py-3 text-left transition hover:bg-slate-100"
+      >
+        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {label}
+        </div>
+        <div className="mt-1 text-2xl font-black text-slate-900">{value}</div>
+      </button>
+    )
+  }
+
+  return (
+    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </div>
+      <div className="mt-1 text-2xl font-black text-slate-900">{value}</div>
+    </div>
+  )
+}
+
+function FileSection({
+  title,
+  subtitle,
+  files,
+  loading,
+}: {
+  title: string
+  subtitle: string
+  files: HomeFile[]
+  loading: boolean
+}) {
+  return (
+    <section className="mt-8">
+      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+            {title}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+        </div>
+
+        <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm">
+          {formatNumber(files.length)} item{files.length === 1 ? "" : "s"}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="grid grid-cols-3 gap-3 md:grid-cols-6 lg:grid-cols-6 xl:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={index}
+              className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm"
+            >
+              <div className="aspect-[4/2.6] animate-pulse bg-slate-200" />
+              <div className="space-y-2 p-3">
+                <div className="h-4 w-2/3 animate-pulse rounded bg-slate-200" />
+                <div className="h-3 w-full animate-pulse rounded bg-slate-200" />
+                <div className="h-10 w-full animate-pulse rounded-2xl bg-slate-200" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : files.length === 0 ? (
+        <div className="rounded-[22px] border border-dashed border-slate-300 bg-white px-6 py-10 text-center text-sm font-medium text-slate-500">
+          No items available yet.
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-3 md:grid-cols-6 lg:grid-cols-6 xl:grid-cols-6">
+          {files.map((file) => (
+            <HomeFileCard key={file.id} file={file} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+export default function DashboardPage() {
+  const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
 
-  const [fullName, setFullName] = useState("")
-  const [email, setEmail] = useState("")
-  const [subject, setSubject] = useState("")
-  const [message, setMessage] = useState("")
-  const [attachment, setAttachment] = useState<File | null>(null)
-
-  const [conversations, setConversations] = useState<Conversation[]>([])
-  const [conversation, setConversation] = useState<Conversation | null>(null)
-
-  const [sending, setSending] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [success, setSuccess] = useState("")
-  const [error, setError] = useState("")
-  const [loadingUser, setLoadingUser] = useState(true)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [fileCounts, setFileCounts] = useState<Record<string, number>>({})
+  const [loading, setLoading] = useState(true)
   const [checkingAuth, setCheckingAuth] = useState(true)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  const [sectionsLoading, setSectionsLoading] = useState(true)
+  const [trendingFiles, setTrendingFiles] = useState<HomeFile[]>([])
+  const [topFiles, setTopFiles] = useState<HomeFile[]>([])
+  const [latestFiles, setLatestFiles] = useState<HomeFile[]>([])
+
+  const [currentUserProfile, setCurrentUserProfile] = useState<CurrentUserProfile | null>(null)
+  const [onlineMembers, setOnlineMembers] = useState<MemberItem[]>([])
+  const [newMembers, setNewMembers] = useState<MemberItem[]>([])
+  const [showOnlineMembers, setShowOnlineMembers] = useState(false)
+
+  const [liveStats, setLiveStats] = useState({
+    onlineUsers: 0,
+    activeToday: 0,
+    totalUsers: 0,
+  })
 
   useEffect(() => {
-    loadUserDetails()
+    checkUserAndLoad()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function loadUserDetails() {
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null
+
+    fetchLiveStats()
+
+    intervalId = setInterval(() => {
+      fetchLiveStats()
+    }, 20000)
+
+    return () => {
+      if (intervalId) clearInterval(intervalId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function checkUserAndLoad() {
     try {
-      setLoadingUser(true)
+      setLoading(true)
       setCheckingAuth(true)
 
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser()
 
-      if (!user) {
+      if (userError || !user) {
         router.replace("/login")
         return
       }
 
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("id, full_name, email")
+        .select("id, role")
         .eq("id", user.id)
-        .single<Profile>()
+        .maybeSingle()
 
-      const displayName = profileData?.full_name || user.email?.split("@")[0] || ""
-      const displayEmail = profileData?.email || user.email || ""
+      setCurrentUserProfile((profileData as CurrentUserProfile | null) || null)
 
-      setFullName(displayName)
-      setEmail(displayEmail)
-
-      const { data: existingConversations, error: conversationError } = await supabase
-        .from("conversations")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("updated_at", { ascending: false })
-
-      if (conversationError) {
-        console.error("Failed to load conversations:", conversationError)
-      } else {
-        const rows = (existingConversations as Conversation[]) || []
-        setConversations(rows)
-        const latest = rows[0] || null
-        setConversation(latest)
-        setSubject(latest?.subject || "")
-      }
-    } catch (err) {
-      console.error("Failed to load user details:", err)
+      await Promise.all([fetchDashboardData(), fetchHomeSections(), fetchLiveStats()])
+    } catch (error) {
+      console.error("Dashboard auth check failed:", error)
       router.replace("/login")
     } finally {
-      setLoadingUser(false)
       setCheckingAuth(false)
+      setLoading(false)
+      setSectionsLoading(false)
     }
   }
 
-  async function uploadAttachment(file: File) {
-    const safeName = file.name.replace(/\s+/g, "-")
-    const fileName = `conversation-${Date.now()}-${safeName}`
+  async function fetchDashboardData() {
+    const [{ data: categoriesData, error: categoriesError }, { data: filesData, error: filesError }] =
+      await Promise.all([
+        supabase.from("categories").select("*").order("name", { ascending: true }),
+        supabase.from("files").select("id, category_id"),
+      ])
 
-    const { data, error } = await supabase.storage
-      .from("message-attachments")
-      .upload(fileName, file, {
-        upsert: false,
+    if (categoriesError) {
+      console.error("Error fetching categories:", categoriesError)
+      setCategories([])
+    } else {
+      setCategories(categoriesData || [])
+    }
+
+    if (filesError) {
+      console.error("Error fetching files:", filesError)
+      setFileCounts({})
+    } else {
+      const counts: Record<string, number> = {}
+
+      ;((filesData as FileRow[]) || []).forEach((file) => {
+        if (!file.category_id) return
+        counts[file.category_id] = (counts[file.category_id] || 0) + 1
       })
 
-    if (error) {
-      throw new Error(`Attachment upload failed: ${error.message}`)
+      setFileCounts(counts)
     }
-
-    const { data: publicUrlData } = supabase.storage
-      .from("message-attachments")
-      .getPublicUrl(data.path)
-
-    return publicUrlData.publicUrl
   }
 
-  function handleAttachmentChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0] || null
-
-    if (!file) {
-      setAttachment(null)
-      return
-    }
-
-    if (file.size > MAX_FILE_SIZE) {
-      setAttachment(null)
-      setError("Attachment must be 25MB or below.")
-      setSuccess("")
-      return
-    }
-
-    setError("")
-    setAttachment(file)
-  }
-
-  function startNewConversation() {
-    setConversation(null)
-    setSubject("")
-    setMessage("")
-    setAttachment(null)
-    setError("")
-    setSuccess("")
-    const fileInput = document.getElementById("attachment-input") as HTMLInputElement | null
-    if (fileInput) fileInput.value = ""
-  }
-
-  function selectConversation(item: Conversation) {
-    setConversation(item)
-    setSubject(item.subject || "")
-    setSuccess("")
-    setError("")
-  }
-
-  const normalizedSubject = subject.trim().toLowerCase()
-
-  const matchingConversation = useMemo(() => {
-    if (!normalizedSubject) return null
-
-    return (
-      conversations.find(
-        (item) => (item.subject || "").trim().toLowerCase() === normalizedSubject
-      ) || null
-    )
-  }, [conversations, normalizedSubject])
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-
-    if (!fullName.trim() || !email.trim()) {
-      setError("Please complete your name and email.")
-      setSuccess("")
-      return
-    }
-
-    if (!subject.trim()) {
-      setError("Please enter a subject.")
-      setSuccess("")
-      return
-    }
-
-    if (!message.trim() && !attachment) {
-      setError("Please write a message or attach a file.")
-      setSuccess("")
-      return
-    }
-
+  async function fetchHomeSections() {
     try {
-      setSending(true)
-      setUploading(false)
-      setError("")
-      setSuccess("")
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) {
-        router.replace("/login")
-        return
-      }
-
-      let activeConversation: Conversation | null = null
-      let attachmentUrl: string | null = null
-      let uploadWarning = ""
-
-      if (attachment) {
-        try {
-          setUploading(true)
-          attachmentUrl = await uploadAttachment(attachment)
-        } catch (uploadErr) {
-          uploadWarning =
-            uploadErr instanceof Error
-              ? uploadErr.message
-              : "Attachment upload failed."
-        } finally {
-          setUploading(false)
-        }
-      }
-
-      if (matchingConversation) {
-        activeConversation = matchingConversation
-      } else {
-        const { data: newConversation, error: createConversationError } = await supabase
-          .from("conversations")
-          .insert({
-            user_id: user.id,
-            subject: subject.trim(),
-            status: "open",
-          })
-          .select()
-          .single()
-
-        if (createConversationError) {
-          throw new Error(`Conversation creation failed: ${createConversationError.message}`)
-        }
-
-        activeConversation = newConversation as Conversation
-      }
-
-      if (!activeConversation) {
-        throw new Error("Conversation ID is missing.")
-      }
-
-      const { error: insertError } = await supabase.from("conversation_messages").insert({
-        conversation_id: activeConversation.id,
-        sender_id: user.id,
-        sender_role: "user",
-        body: message.trim() || null,
-        attachment_url: attachmentUrl,
+      const response = await fetch("/api/home/sections", {
+        method: "GET",
+        cache: "no-store",
       })
 
-      if (insertError) {
-        throw new Error(`Message send failed: ${insertError.message}`)
+      if (!response.ok) {
+        throw new Error("Failed to load homepage sections")
       }
 
-      const { data: updatedConversation, error: updateConversationError } = await supabase
-        .from("conversations")
-        .update({
-          updated_at: new Date().toISOString(),
-          status: "open",
-          subject: subject.trim(),
-        })
-        .eq("id", activeConversation.id)
-        .select()
-        .single()
+      const data = (await response.json()) as HomeSectionsResponse
 
-      if (updateConversationError) {
-        throw new Error(`Conversation update failed: ${updateConversationError.message}`)
-      }
-
-      setConversation(updatedConversation as Conversation)
-      setMessage("")
-      setAttachment(null)
-
-      const fileInput = document.getElementById("attachment-input") as HTMLInputElement | null
-      if (fileInput) fileInput.value = ""
-
-      await loadUserDetails()
-
-      if (uploadWarning) {
-        setSuccess("Your message was sent, but the attachment could not be uploaded.")
-        setError("")
-      } else {
-        setSuccess(
-          matchingConversation
-            ? "Your message was added to the matching conversation."
-            : "Your message has been sent successfully."
-        )
-        setError("")
-      }
-    } catch (err) {
-      const messageText =
-        err instanceof Error
-          ? err.message
-          : "Something went wrong while sending your message."
-
-      setError(messageText)
-      setSuccess("")
-    } finally {
-      setSending(false)
-      setUploading(false)
+      setTrendingFiles(Array.isArray(data.trending) ? data.trending : [])
+      setTopFiles(Array.isArray(data.top) ? data.top : [])
+      setLatestFiles(Array.isArray(data.latest) ? data.latest : [])
+    } catch (error) {
+      console.error("Error fetching homepage sections:", error)
+      setTrendingFiles([])
+      setTopFiles([])
+      setLatestFiles([])
     }
   }
 
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push("/login")
+  async function fetchLiveStats() {
+    try {
+      const response = await fetch("/api/site/live-stats", {
+        method: "GET",
+        cache: "no-store",
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to load live stats")
+      }
+
+      const data = (await response.json()) as LiveStatsResponse
+
+      setLiveStats({
+        onlineUsers: Number(data.onlineUsers || 0),
+        activeToday: Number(data.activeToday || 0),
+        totalUsers: Number(data.totalUsers || 0),
+      })
+
+      setOnlineMembers(Array.isArray(data.onlineMembers) ? data.onlineMembers : [])
+      setNewMembers(Array.isArray(data.newMembers) ? data.newMembers : [])
+    } catch (error) {
+      console.error("Error fetching live stats:", error)
+      setLiveStats({
+        onlineUsers: 0,
+        activeToday: 0,
+        totalUsers: 0,
+      })
+      setOnlineMembers([])
+      setNewMembers([])
+    }
   }
+
+  const totalFiles = Object.values(fileCounts).reduce((sum, count) => sum + count, 0)
+  const isAdmin = currentUserProfile?.role === "admin"
 
   if (checkingAuth) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 px-4">
-        <div className="rounded-[24px] border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
-          <p className="text-lg font-bold text-slate-800">Checking your account...</p>
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="rounded-3xl border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
+          <p className="text-lg font-semibold text-slate-800">Checking your account...</p>
           <p className="mt-2 text-sm text-slate-500">Please wait.</p>
         </div>
       </div>
@@ -334,325 +493,226 @@ export default function ContactPage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-      <div className="absolute left-[-80px] top-[-80px] h-72 w-72 rounded-full bg-blue-200/40 blur-3xl" />
-      <div className="absolute bottom-[-80px] right-[-80px] h-80 w-80 rounded-full bg-indigo-200/40 blur-3xl" />
+    <>
+      <PresenceTracker />
 
-      <div className="relative mx-auto max-w-7xl">
-        <div className="mb-6 overflow-hidden rounded-[24px] bg-gradient-to-r from-cyan-600 via-sky-500 to-violet-600 p-5 shadow-2xl shadow-slate-300/40 sm:rounded-[30px] sm:p-8">
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-xs font-bold uppercase tracking-[0.3em] text-white/90 sm:text-sm sm:tracking-[0.45em]">
-              JB Collections
-            </p>
+      <div className="min-h-screen bg-slate-50">
+        <SiteHeader />
 
-            <div className="hidden items-center gap-3 lg:flex">
-              <Link
-                href="/dashboard"
-                className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-[20px] bg-gradient-to-b from-blue-600 to-blue-700 px-5 text-sm font-bold text-white shadow-lg shadow-blue-900/20 transition hover:-translate-y-0.5 hover:shadow-xl"
-              >
-                <LayoutDashboard size={18} />
-                Dashboard
-              </Link>
+        <div className="mx-auto w-full max-w-[1800px] px-4 pb-4 pt-24 sm:px-6 sm:pb-6 sm:pt-28 lg:px-8">
+          <FileSection
+            title="🔥 Trending Now"
+            subtitle="Popular files getting attention right now."
+            files={trendingFiles}
+            loading={sectionsLoading}
+          />
 
-              <Link
-                href="/profile"
-                className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-[20px] bg-gradient-to-b from-blue-600 to-blue-700 px-5 text-sm font-bold text-white shadow-lg shadow-blue-900/20 transition hover:-translate-y-0.5 hover:shadow-xl"
-              >
-                <User size={18} />
-                Profile
-              </Link>
+          <FileSection
+            title="📈 Most Downloaded"
+            subtitle="Top files based on overall download activity."
+            files={topFiles}
+            loading={sectionsLoading}
+          />
 
-              <Link
-                href="/dashboard/inbox"
-                className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-[20px] bg-gradient-to-b from-blue-600 to-blue-700 px-5 text-sm font-bold text-white shadow-lg shadow-blue-900/20 transition hover:-translate-y-0.5 hover:shadow-xl"
-              >
-                <Inbox size={18} />
-                Inbox
-              </Link>
+          <FileSection
+            title="🆕 New Uploads"
+            subtitle="Fresh files recently added to your website."
+            files={latestFiles}
+            loading={sectionsLoading}
+          />
 
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-[20px] bg-gradient-to-b from-red-500 to-red-600 px-5 text-sm font-bold text-white shadow-lg shadow-red-900/20 transition hover:-translate-y-0.5 hover:shadow-xl"
-              >
-                <LogOut size={18} />
-                Logout
-              </button>
-            </div>
+          <section className="mt-8">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl lg:text-4xl">
+                  Categories
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Explore premium-ready downloadable collections.
+                </p>
+              </div>
 
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen((prev) => !prev)}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-xl text-white backdrop-blur lg:hidden"
-              aria-label="Toggle menu"
-            >
-              {mobileMenuOpen ? "✕" : "☰"}
-            </button>
-          </div>
-
-          {mobileMenuOpen && (
-            <div className="mt-4 grid grid-cols-1 gap-3 lg:hidden">
-              <Link
-                href="/dashboard"
-                onClick={() => setMobileMenuOpen(false)}
-                className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-blue-600 to-blue-700 px-4 text-sm font-bold text-white shadow-lg shadow-blue-900/20"
-              >
-                <LayoutDashboard size={18} />
-                Dashboard
-              </Link>
-
-              <Link
-                href="/profile"
-                onClick={() => setMobileMenuOpen(false)}
-                className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-blue-600 to-blue-700 px-4 text-sm font-bold text-white shadow-lg shadow-blue-900/20"
-              >
-                <User size={18} />
-                Profile
-              </Link>
-
-              <Link
-                href="/dashboard/inbox"
-                onClick={() => setMobileMenuOpen(false)}
-                className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-blue-600 to-blue-700 px-4 text-sm font-bold text-white shadow-lg shadow-blue-900/20"
-              >
-                <Inbox size={18} />
-                Inbox
-              </Link>
-
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-red-500 to-red-600 px-4 text-sm font-bold text-white shadow-lg shadow-red-900/20"
-              >
-                <LogOut size={18} />
-                Logout
-              </button>
-            </div>
-          )}
-
-          <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-            <div className="max-w-md">
-              <h1 className="text-3xl font-extrabold leading-tight text-white sm:text-5xl lg:text-[56px]">
-                Message Admin
-              </h1>
-
-              <p className="mt-4 max-w-sm text-sm leading-7 text-white/90 sm:text-base lg:text-lg">
-                Send your concern, request, or question to the admin in one place.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <div className="overflow-hidden rounded-[24px] border border-white/60 bg-white/75 shadow-2xl shadow-slate-200/50 backdrop-blur-xl">
-            <div className="border-b border-slate-200 px-5 py-4">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-lg font-extrabold text-slate-900">Conversations</h3>
-                <button
-                  type="button"
-                  onClick={startNewConversation}
-                  className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700"
-                >
-                  New
-                </button>
+              <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm">
+                Total files: {formatNumber(totalFiles)}
               </div>
             </div>
 
-            <div className="max-h-[700px] overflow-y-auto">
-              {conversations.length === 0 ? (
-                <div className="px-5 py-6 text-sm text-slate-500">
-                  No conversations yet.
-                </div>
-              ) : (
-                conversations.map((item) => {
-                  const activeId = conversation?.id
-                  const isActive = activeId === item.id
+            {loading ? (
+              <div className="grid grid-cols-3 gap-3 md:grid-cols-6 lg:grid-cols-6 xl:grid-cols-6">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm"
+                  >
+                    <div className="aspect-[4/2.6] animate-pulse bg-slate-200" />
+                    <div className="space-y-2 p-3">
+                      <div className="h-4 w-2/3 animate-pulse rounded bg-slate-200" />
+                      <div className="h-3 w-full animate-pulse rounded bg-slate-200" />
+                      <div className="h-10 w-full animate-pulse rounded-2xl bg-slate-200" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : categories.length === 0 ? (
+              <div className="rounded-[22px] border border-dashed border-slate-300 bg-white px-6 py-10 text-center text-sm font-medium text-slate-500">
+                No categories available yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3 md:grid-cols-6 lg:grid-cols-6 xl:grid-cols-6">
+                {categories.map((category) => {
+                  const previewImage = getCategoryImage(category)
+                  const icon = getCategoryIcon(category.name)
+                  const fileCount = fileCounts[category.id] || 0
 
                   return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => selectConversation(item)}
-                      className={`w-full border-b border-slate-100 px-5 py-4 text-left transition ${
-                        isActive ? "bg-blue-50" : "bg-white hover:bg-slate-50"
-                      }`}
+                    <div
+                      key={category.id}
+                      className="group overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
                     >
-                      <div className="truncate text-sm font-extrabold text-slate-900">
-                        {item.subject || "No subject"}
+                      <div className="relative aspect-[4/2.6] overflow-hidden bg-slate-100">
+                        {previewImage ? (
+                          <img
+                            src={previewImage}
+                            alt={category.name}
+                            className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-4xl">
+                            {icon}
+                          </div>
+                        )}
+
+                        <div className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow">
+                          {formatNumber(fileCount)} files
+                        </div>
                       </div>
-                      <div className="mt-1 flex items-center justify-between gap-3 text-xs text-slate-500">
-                        <span className="capitalize">{item.status || "open"}</span>
-                        <span>
-                          {new Date(item.updated_at || item.created_at).toLocaleDateString()}
-                        </span>
+
+                      <div className="p-3">
+                        <h3 className="line-clamp-1 text-base font-bold text-slate-900">
+                          {category.name}
+                        </h3>
+
+                        <p className="mt-1 min-h-[40px] text-xs leading-5 text-slate-600">
+                          {category.description ||
+                            "Open this category to browse downloadable files."}
+                        </p>
+
+                        <Link
+                          href={`/categories/${category.id}`}
+                          className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+                        >
+                          Open Category
+                        </Link>
                       </div>
-                    </button>
+                    </div>
                   )
-                })
-              )}
-            </div>
-          </div>
+                })}
+              </div>
+            )}
+          </section>
 
-          <div className="overflow-hidden rounded-[24px] border border-white/60 bg-white/75 shadow-2xl shadow-slate-200/50 backdrop-blur-xl lg:rounded-[32px]">
-            <div className="p-5 sm:p-8 lg:p-12">
-              <div className="mx-auto max-w-xl">
-                <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-                  {conversation ? "Continue or Edit Conversation" : "Start a Conversation"}
-                </h2>
-                <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
-                  {conversation
-                    ? "Edit the subject or send another message. If the subject is different, a new conversation will be created automatically."
-                    : "Fill out the form below to start a conversation with the admin."}
-                </p>
+          <section className="mt-10">
+            <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+              <div
+                className={`grid gap-3 ${
+                  isAdmin
+                    ? "grid-cols-2 lg:grid-cols-4"
+                    : "grid-cols-3"
+                }`}
+              >
+                <StatCard label="Total Members" value={formatNumber(liveStats.totalUsers)} />
 
-                {(success || error) && (
-                  <div
-                    className={`mt-6 rounded-2xl border px-4 py-3 text-sm font-medium ${
-                      success
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-red-200 bg-red-50 text-red-700"
-                    }`}
-                  >
-                    {success || error}
-                  </div>
-                )}
+                <StatCard
+                  label="Online Users"
+                  value={`🔥 ${formatNumber(liveStats.onlineUsers)}`}
+                  onClick={isAdmin ? () => setShowOnlineMembers((prev) => !prev) : undefined}
+                />
 
-                <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Full Name
-                    </label>
-                    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
-                      <User size={18} className="text-slate-400" />
-                      <input
-                        type="text"
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        placeholder={loadingUser ? "Loading your name..." : "Your full name"}
-                        className="h-14 w-full rounded-2xl bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                      />
+                <StatCard label="Active Today" value={formatNumber(liveStats.activeToday)} />
+
+                {isAdmin ? (
+                  <StatCard label="New Member/s" value={formatNumber(newMembers.length)} />
+                ) : null}
+              </div>
+
+              {isAdmin && showOnlineMembers ? (
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">Online Users</h3>
+                      <p className="text-xs text-slate-500">Click a member to view profile.</p>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowOnlineMembers(false)}
+                      className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+                    >
+                      Close
+                    </button>
                   </div>
 
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Email
-                    </label>
-                    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
-                      <Mail size={18} className="text-slate-400" />
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder={loadingUser ? "Loading your email..." : "you@example.com"}
-                        className="h-14 w-full rounded-2xl bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                      />
+                  {onlineMembers.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                      No users online right now.
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Subject
-                    </label>
-                    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
-                      <FileText size={18} className="text-slate-400" />
-                      <input
-                        type="text"
-                        value={subject}
-                        onChange={(e) => setSubject(e.target.value)}
-                        placeholder="Enter subject"
-                        className="h-14 w-full rounded-2xl bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                      />
-                    </div>
-                  </div>
-
-                  {conversation && (
-                    <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-                      <span className="font-bold">Selected conversation:</span>{" "}
-                      {conversation.subject || "No subject"}
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {onlineMembers.map((member) => (
+                        <Link
+                          key={member.id}
+                          href={`/admin/users/${member.id}`}
+                          className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-sm"
+                        >
+                          <div className="text-sm font-bold text-slate-900">
+                            {getMemberDisplayName(member)}
+                          </div>
+                          <div className="mt-1 text-xs text-emerald-600">Online now</div>
+                          <div className="mt-2 text-xs text-slate-500">
+                            Joined: {formatShortDate(member.created_at)}
+                          </div>
+                        </Link>
+                      ))}
                     </div>
                   )}
+                </div>
+              ) : null}
 
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Message
-                    </label>
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
-                      <textarea
-                        value={message}
-                        onChange={(e) => setMessage(e.target.value)}
-                        placeholder="Write your message here..."
-                        rows={7}
-                        className="w-full resize-none bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                      />
+              {isAdmin ? (
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3">
+                    <h3 className="text-sm font-bold text-slate-900">New Member/s</h3>
+                    <p className="text-xs text-slate-500">Users who joined today.</p>
+                  </div>
+
+                  {newMembers.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                      No new members yet today.
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Attachment (optional)
-                    </label>
-
-                    <label className="flex cursor-pointer flex-col items-start justify-between gap-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-4 transition hover:border-blue-400 hover:bg-blue-50 sm:flex-row sm:items-center">
-                      <div className="flex items-center gap-3">
-                        <div className="rounded-xl bg-slate-100 p-2">
-                          <Paperclip size={18} className="text-slate-700" />
-                        </div>
-
-                        <div>
-                          <p className="break-all text-sm font-semibold text-slate-800">
-                            {attachment ? attachment.name : "Choose a file"}
-                          </p>
-                          <p className="text-xs text-slate-500">Max file size: 25MB</p>
-                        </div>
-                      </div>
-
-                      <div className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">
-                        Browse
-                      </div>
-
-                      <input
-                        id="attachment-input"
-                        type="file"
-                        onChange={handleAttachmentChange}
-                        className="hidden"
-                      />
-                    </label>
-
-                    {attachment && (
-                      <p className="mt-2 break-all text-xs text-slate-500">
-                        Selected file: {attachment.name}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <button
-                      type="submit"
-                      disabled={sending || uploading}
-                      className="inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <Send size={18} />
-                      {sending || uploading
-                        ? "Sending..."
-                        : matchingConversation
-                          ? "Send to Matching Conversation"
-                          : "Start New Conversation"}
-                    </button>
-
-                    <Link
-                      href="/dashboard/inbox"
-                      className="inline-flex h-14 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-                    >
-                      Open Chat
-                    </Link>
-                  </div>
-                </form>
-              </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      {newMembers.map((member) => (
+                        <Link
+                          key={member.id}
+                          href={`/admin/users/${member.id}`}
+                          className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-sm"
+                        >
+                          <div className="text-sm font-bold text-slate-900">
+                            {getMemberDisplayName(member)}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            Joined: {formatShortDate(member.created_at)}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
-          </div>
+          </section>
         </div>
       </div>
-    </main>
+    </>
   )
 }

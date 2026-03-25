@@ -7,7 +7,7 @@ export default function PresenceTracker() {
   useEffect(() => {
     const supabase = createClient()
 
-    let cancelled = false
+    let stopped = false
     let intervalId: ReturnType<typeof setInterval> | null = null
 
     async function touch() {
@@ -16,7 +16,7 @@ export default function PresenceTracker() {
           data: { session },
         } = await supabase.auth.getSession()
 
-        if (!session?.user || cancelled) return
+        if (!session?.user || stopped) return
 
         await supabase.rpc("touch_last_seen")
       } catch (error) {
@@ -27,19 +27,23 @@ export default function PresenceTracker() {
     touch()
     intervalId = setInterval(touch, 60 * 1000)
 
+    const handleFocus = () => touch()
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         touch()
       }
     }
 
-    window.addEventListener("focus", touch)
+    window.addEventListener("focus", handleFocus)
     document.addEventListener("visibilitychange", handleVisibilityChange)
 
     return () => {
-      cancelled = true
+      stopped = true
+
       if (intervalId) clearInterval(intervalId)
-      window.removeEventListener("focus", touch)
+
+      window.removeEventListener("focus", handleFocus)
       document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
   }, [])

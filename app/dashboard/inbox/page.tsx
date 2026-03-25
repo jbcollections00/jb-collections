@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import SiteHeader from "@/app/components/SiteHeader"
 
 type Conversation = {
   id: string
@@ -91,7 +92,6 @@ export default function DashboardInboxPage() {
   const [loading, setLoading] = useState(true)
   const [replyBody, setReplyBody] = useState("")
   const [sendingReply, setSendingReply] = useState(false)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
     loadInbox(true)
@@ -461,452 +461,358 @@ export default function DashboardInboxPage() {
   }, [items, search, filter])
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        {/* HEADER */}
-        <div className="mb-6 overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm sm:mb-8 sm:rounded-[30px]">
-          <div className="relative overflow-hidden bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 px-4 py-5 text-white sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-            <div className="absolute inset-0 opacity-20">
-              <div className="absolute -left-10 top-0 h-40 w-40 rounded-full bg-white blur-3xl" />
-              <div className="absolute right-0 top-6 h-48 w-48 rounded-full bg-white blur-3xl" />
-            </div>
+    <>
+      <SiteHeader />
 
-            <div className="relative">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/80 sm:text-sm">
-                    JB Collections
-                  </p>
-                </div>
-
-                <div className="hidden items-center gap-3 lg:flex">
-                  <Link
-                    href="/dashboard"
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-                  >
-                    🏠 Dashboard
-                  </Link>
-
-                  <Link
-                    href="/profile"
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-                  >
-                    👤 Profile
-                  </Link>
-
-                  <Link
-                    href="/contact"
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-                  >
-                    💬 Message Admin
-                  </Link>
-
-                  <button
-                    onClick={handleLogout}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-500 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600"
-                  >
-                    🚪 Logout
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setMobileMenuOpen((prev) => !prev)}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-xl text-white backdrop-blur lg:hidden"
-                  aria-label="Toggle menu"
-                >
-                  {mobileMenuOpen ? "✕" : "☰"}
-                </button>
-              </div>
-
-              {mobileMenuOpen && (
-                <div className="mt-4 grid grid-cols-1 gap-3 lg:hidden">
-                  <Link
-                    href="/dashboard"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm"
-                  >
-                    🏠 Dashboard
-                  </Link>
-
-                  <Link
-                    href="/profile"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm"
-                  >
-                    👤 Profile
-                  </Link>
-
-                  <Link
-                    href="/contact"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm"
-                  >
-                    💬 Message Admin
-                  </Link>
-
-                  <button
-                    onClick={handleLogout}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-red-500 px-4 py-3 text-sm font-semibold text-white shadow-sm"
-                  >
-                    🚪 Logout
-                  </button>
-                </div>
-              )}
-
-              <div className="mt-6">
-                <h1 className="text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
-                  My Inbox
-                </h1>
-                <p className="mt-3 max-w-2xl text-sm text-white/90 sm:text-base">
-                  Messages and upgrade updates in one place.
-                </p>
-              </div>
-            </div>
+      <div className="min-h-screen bg-slate-50 pt-20 sm:pt-24">
+        <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+          <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <h1 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
+              My Inbox
+            </h1>
+            <p className="mt-2 text-sm text-slate-600 sm:text-base">
+              Messages and upgrade updates in one place.
+            </p>
           </div>
-        </div>
 
-        {/* SEARCH / FILTER */}
-        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mb-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search inbox"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
-            />
+          <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mb-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search inbox"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+              />
 
-            <div className="flex flex-wrap gap-2">
-              {(["all", "messages", "upgrades"] as FilterType[]).map((item) => {
-                const active = filter === item
-
-                return (
-                  <button
-                    key={item}
-                    onClick={() => setFilter(item)}
-                    className={`rounded-xl px-4 py-3 text-sm font-bold capitalize transition ${
-                      active
-                        ? "border border-blue-600 bg-blue-600 text-white"
-                        : "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50"
-                    }`}
-                  >
-                    {item}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* CONTENT */}
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-          {/* LIST */}
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-4 py-4 font-extrabold text-slate-900">
-              Inbox
-            </div>
-
-            <div className="max-h-[650px] overflow-y-auto">
-              {loading ? (
-                <div className="px-4 py-5 text-slate-500">Loading inbox...</div>
-              ) : filteredItems.length === 0 ? (
-                <div className="px-4 py-5 text-slate-500">No items found.</div>
-              ) : (
-                filteredItems.map((item) => {
-                  const active = selectedItem?.id === item.id
+              <div className="flex flex-wrap gap-2">
+                {(["all", "messages", "upgrades"] as FilterType[]).map((item) => {
+                  const active = filter === item
 
                   return (
                     <button
-                      key={item.id}
-                      onClick={() => setSelectedItem(item)}
-                      className={`flex w-full items-start gap-3 border-b border-slate-100 px-4 py-4 text-left transition ${
-                        active ? "bg-blue-50" : "bg-white hover:bg-slate-50"
+                      key={item}
+                      onClick={() => setFilter(item)}
+                      className={`rounded-xl px-4 py-3 text-sm font-bold capitalize transition ${
+                        active
+                          ? "border border-blue-600 bg-blue-600 text-white"
+                          : "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50"
                       }`}
                     >
-                      <div
-                        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${
-                          item.kind === "message"
-                            ? "bg-violet-100 text-violet-700"
-                            : "bg-blue-100 text-blue-700"
-                        }`}
-                      >
-                        {getInitial(item)}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="mb-1 flex items-start justify-between gap-3">
-                          <div className="truncate text-sm font-extrabold text-slate-900 sm:text-[15px]">
-                            {item.title}
-                          </div>
-
-                          <div className="shrink-0 whitespace-nowrap text-xs text-slate-500">
-                            {formatDate(item.created_at)}
-                          </div>
-                        </div>
-
-                        <div className="mb-2 truncate text-xs text-slate-500 sm:text-[13px]">
-                          {item.preview}
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold capitalize ${getStatusClasses(
-                              item.status
-                            )}`}
-                          >
-                            {item.status.replace("_", " ")}
-                          </span>
-
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold capitalize ${
-                              item.kind === "message"
-                                ? "bg-violet-100 text-violet-700"
-                                : "bg-sky-100 text-sky-700"
-                            }`}
-                          >
-                            {item.kind}
-                          </span>
-                        </div>
-                      </div>
+                      {item}
                     </button>
                   )
-                })
-              )}
+                })}
+              </div>
             </div>
           </div>
 
-          {/* DETAILS */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
-            {!selectedItem ? (
-              <div className="text-slate-500">Select an item to view details.</div>
-            ) : selectedItem.kind === "message" ? (
-              <>
-                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h2 className="text-2xl font-extrabold text-slate-900 sm:text-[28px]">
-                      {selectedItem.conversation.subject || "No subject"}
-                    </h2>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 px-4 py-4 font-extrabold text-slate-900">
+                Inbox
+              </div>
 
-                    <div className="mt-2 text-sm leading-7 text-slate-600">
-                      <div>
-                        <strong>Status:</strong> {selectedItem.status.replace("_", " ")}
-                      </div>
-                      <div>
-                        <strong>Date:</strong>{" "}
-                        {new Date(selectedItem.created_at).toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Link
-                      href="/contact"
-                      className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
-                    >
-                      Open Chat
-                    </Link>
-
-                    <button
-                      type="button"
-                      onClick={() => deleteConversationThread(selectedItem.conversation.id)}
-                      className="inline-flex items-center justify-center rounded-xl border border-red-300 bg-white px-4 py-3 text-sm font-bold text-red-600 transition hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-
-                <h3 className="mb-3 text-lg font-extrabold text-slate-900">Conversation</h3>
-
-                {selectedItem.messages.length === 0 ? (
-                  <div className="mb-4 rounded-xl border border-dashed border-slate-300 bg-white p-4 text-slate-500">
-                    No messages yet.
-                  </div>
+              <div className="max-h-[650px] overflow-y-auto">
+                {loading ? (
+                  <div className="px-4 py-5 text-slate-500">Loading inbox...</div>
+                ) : filteredItems.length === 0 ? (
+                  <div className="px-4 py-5 text-slate-500">No items found.</div>
                 ) : (
-                  <div className="mb-5 grid gap-3">
-                    {selectedItem.messages.map((message) => {
-                      const isUser = message.sender_role === "user"
+                  filteredItems.map((item) => {
+                    const active = selectedItem?.id === item.id
 
-                      return (
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setSelectedItem(item)}
+                        className={`flex w-full items-start gap-3 border-b border-slate-100 px-4 py-4 text-left transition ${
+                          active ? "bg-blue-50" : "bg-white hover:bg-slate-50"
+                        }`}
+                      >
                         <div
-                          key={message.id}
-                          className={`rounded-xl border p-4 ${
-                            isUser
-                              ? "border-slate-200 bg-slate-50"
-                              : "border-blue-200 bg-blue-50"
+                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${
+                            item.kind === "message"
+                              ? "bg-violet-100 text-violet-700"
+                              : "bg-blue-100 text-blue-700"
                           }`}
                         >
-                          <div
-                            className={`mb-2 flex flex-wrap items-center justify-between gap-2 text-xs font-bold ${
-                              isUser ? "text-slate-600" : "text-blue-700"
-                            }`}
-                          >
-                            <span>
-                              {isUser ? "You" : "Admin"} •{" "}
-                              {new Date(message.created_at).toLocaleString()}
+                          {getInitial(item)}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="mb-1 flex items-start justify-between gap-3">
+                            <div className="truncate text-sm font-extrabold text-slate-900 sm:text-[15px]">
+                              {item.title}
+                            </div>
+
+                            <div className="shrink-0 whitespace-nowrap text-xs text-slate-500">
+                              {formatDate(item.created_at)}
+                            </div>
+                          </div>
+
+                          <div className="mb-2 truncate text-xs text-slate-500 sm:text-[13px]">
+                            {item.preview}
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold capitalize ${getStatusClasses(
+                                item.status
+                              )}`}
+                            >
+                              {item.status.replace("_", " ")}
                             </span>
 
-                            {isUser && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  deleteConversationMessage(message.id, message.sender_id)
-                                }
-                                className="text-red-500 hover:underline"
-                              >
-                                Delete
-                              </button>
-                            )}
-                          </div>
-
-                          {message.body && (
-                            <div className="whitespace-pre-wrap text-sm leading-7 text-slate-800">
-                              {message.body}
-                            </div>
-                          )}
-
-                          {message.attachment_url && (
-                            <a
-                              href={message.attachment_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="mt-3 inline-flex rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-600"
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold capitalize ${
+                                item.kind === "message"
+                                  ? "bg-violet-100 text-violet-700"
+                                  : "bg-sky-100 text-sky-700"
+                              }`}
                             >
-                              📎 {getAttachmentName(message.attachment_url)}
-                            </a>
-                          )}
+                              {item.kind}
+                            </span>
+                          </div>
                         </div>
-                      )
-                    })}
-                  </div>
+                      </button>
+                    )
+                  })
                 )}
+              </div>
+            </div>
 
-                <div className="mt-5 border-t border-slate-200 pt-5">
-                  <h3 className="mb-3 text-lg font-extrabold text-slate-900">Reply</h3>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
+              {!selectedItem ? (
+                <div className="text-slate-500">Select an item to view details.</div>
+              ) : selectedItem.kind === "message" ? (
+                <>
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h2 className="text-2xl font-extrabold text-slate-900 sm:text-[28px]">
+                        {selectedItem.conversation.subject || "No subject"}
+                      </h2>
 
-                  <textarea
-                    value={replyBody}
-                    onChange={(e) => setReplyBody(e.target.value)}
-                    placeholder="Write your reply here..."
-                    rows={5}
-                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
-                  />
-
-                  <div className="mt-4">
-                    <button
-                      onClick={sendReply}
-                      disabled={sendingReply || !replyBody.trim()}
-                      className="inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
-                    >
-                      {sendingReply ? "Sending..." : "Send Reply"}
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h2 className="text-2xl font-extrabold text-slate-900 sm:text-[28px]">
-                      {selectedItem.upgrade.subject || "Premium upgrade request"}
-                    </h2>
-
-                    <div className="mt-2 text-sm leading-7 text-slate-600">
-                      <div>
-                        <strong>Status:</strong> {selectedItem.status.replace("_", " ")}
-                      </div>
-                      <div>
-                        <strong>Date:</strong>{" "}
-                        {new Date(selectedItem.upgrade.created_at).toLocaleString()}
+                      <div className="mt-2 text-sm leading-7 text-slate-600">
+                        <div>
+                          <strong>Status:</strong> {selectedItem.status.replace("_", " ")}
+                        </div>
+                        <div>
+                          <strong>Date:</strong>{" "}
+                          {new Date(selectedItem.created_at).toLocaleString()}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
 
-                <div className="mb-5 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-7 text-slate-700">
-                  {selectedItem.upgrade.body || "No message"}
-                </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        href="/contact"
+                        className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
+                      >
+                        Open Chat
+                      </Link>
 
-                <h3 className="mb-3 text-lg font-extrabold text-slate-900">Conversation</h3>
-
-                {selectedItem.replies.length === 0 && selectedItem.upgrade.admin_reply ? (
-                  <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
-                    <div className="mb-2 text-xs font-bold text-blue-700">Admin</div>
-                    <div className="whitespace-pre-wrap text-sm leading-7 text-slate-800">
-                      {selectedItem.upgrade.admin_reply}
+                      <button
+                        type="button"
+                        onClick={() => deleteConversationThread(selectedItem.conversation.id)}
+                        className="inline-flex items-center justify-center rounded-xl border border-red-300 bg-white px-4 py-3 text-sm font-bold text-red-600 transition hover:bg-red-50"
+                      >
+                        Delete
+                      </button>
                     </div>
                   </div>
-                ) : selectedItem.replies.length === 0 ? (
-                  <div className="mb-4 rounded-xl border border-dashed border-slate-300 bg-white p-4 text-slate-500">
-                    No replies yet.
-                  </div>
-                ) : (
-                  <div className="mb-5 grid gap-3">
-                    {selectedItem.replies.map((reply) => {
-                      const isUser = reply.sender === "user"
 
-                      return (
-                        <div
-                          key={reply.id}
-                          className={`rounded-xl border p-4 ${
-                            isUser
-                              ? "border-slate-200 bg-slate-50"
-                              : "border-blue-200 bg-blue-50"
-                          }`}
-                        >
+                  <h3 className="mb-3 text-lg font-extrabold text-slate-900">Conversation</h3>
+
+                  {selectedItem.messages.length === 0 ? (
+                    <div className="mb-4 rounded-xl border border-dashed border-slate-300 bg-white p-4 text-slate-500">
+                      No messages yet.
+                    </div>
+                  ) : (
+                    <div className="mb-5 grid gap-3">
+                      {selectedItem.messages.map((message) => {
+                        const isUser = message.sender_role === "user"
+
+                        return (
                           <div
-                            className={`mb-2 text-xs font-bold ${
-                              isUser ? "text-slate-600" : "text-blue-700"
+                            key={message.id}
+                            className={`rounded-xl border p-4 ${
+                              isUser
+                                ? "border-slate-200 bg-slate-50"
+                                : "border-blue-200 bg-blue-50"
                             }`}
                           >
-                            {isUser ? "You" : "Admin"} •{" "}
-                            {new Date(reply.created_at).toLocaleString()}
-                          </div>
+                            <div
+                              className={`mb-2 flex flex-wrap items-center justify-between gap-2 text-xs font-bold ${
+                                isUser ? "text-slate-600" : "text-blue-700"
+                              }`}
+                            >
+                              <span>
+                                {isUser ? "You" : "Admin"} •{" "}
+                                {new Date(message.created_at).toLocaleString()}
+                              </span>
 
-                          <div className="whitespace-pre-wrap text-sm leading-7 text-slate-800">
-                            {reply.body}
+                              {isUser && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    deleteConversationMessage(message.id, message.sender_id)
+                                  }
+                                  className="text-red-500 hover:underline"
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+
+                            {message.body && (
+                              <div className="whitespace-pre-wrap text-sm leading-7 text-slate-800">
+                                {message.body}
+                              </div>
+                            )}
+
+                            {message.attachment_url && (
+                              <a
+                                href={message.attachment_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-3 inline-flex rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-600"
+                              >
+                                📎 {getAttachmentName(message.attachment_url)}
+                              </a>
+                            )}
                           </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  <div className="mt-5 border-t border-slate-200 pt-5">
+                    <h3 className="mb-3 text-lg font-extrabold text-slate-900">Reply</h3>
+
+                    <textarea
+                      value={replyBody}
+                      onChange={(e) => setReplyBody(e.target.value)}
+                      placeholder="Write your reply here..."
+                      rows={5}
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+                    />
+
+                    <div className="mt-4">
+                      <button
+                        onClick={sendReply}
+                        disabled={sendingReply || !replyBody.trim()}
+                        className="inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                      >
+                        {sendingReply ? "Sending..." : "Send Reply"}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h2 className="text-2xl font-extrabold text-slate-900 sm:text-[28px]">
+                        {selectedItem.upgrade.subject || "Premium upgrade request"}
+                      </h2>
+
+                      <div className="mt-2 text-sm leading-7 text-slate-600">
+                        <div>
+                          <strong>Status:</strong> {selectedItem.status.replace("_", " ")}
                         </div>
-                      )
-                    })}
+                        <div>
+                          <strong>Date:</strong>{" "}
+                          {new Date(selectedItem.upgrade.created_at).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                )}
 
-                {(selectedItem.status === "awaiting_payment" ||
-                  selectedItem.status === "approved") && (
-                  <PaymentProofUploader
-                    upgrade={selectedItem.upgrade}
-                    onUploaded={() => loadInbox(false)}
-                  />
-                )}
-
-                <div className="mt-5 border-t border-slate-200 pt-5">
-                  <h3 className="mb-3 text-lg font-extrabold text-slate-900">Reply</h3>
-
-                  <textarea
-                    value={replyBody}
-                    onChange={(e) => setReplyBody(e.target.value)}
-                    placeholder="Write your reply here..."
-                    rows={5}
-                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
-                  />
-
-                  <div className="mt-4">
-                    <button
-                      onClick={sendReply}
-                      disabled={sendingReply || !replyBody.trim()}
-                      className="inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
-                    >
-                      {sendingReply ? "Sending..." : "Send Reply"}
-                    </button>
+                  <div className="mb-5 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-7 text-slate-700">
+                    {selectedItem.upgrade.body || "No message"}
                   </div>
-                </div>
-              </>
-            )}
+
+                  <h3 className="mb-3 text-lg font-extrabold text-slate-900">Conversation</h3>
+
+                  {selectedItem.replies.length === 0 && selectedItem.upgrade.admin_reply ? (
+                    <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                      <div className="mb-2 text-xs font-bold text-blue-700">Admin</div>
+                      <div className="whitespace-pre-wrap text-sm leading-7 text-slate-800">
+                        {selectedItem.upgrade.admin_reply}
+                      </div>
+                    </div>
+                  ) : selectedItem.replies.length === 0 ? (
+                    <div className="mb-4 rounded-xl border border-dashed border-slate-300 bg-white p-4 text-slate-500">
+                      No replies yet.
+                    </div>
+                  ) : (
+                    <div className="mb-5 grid gap-3">
+                      {selectedItem.replies.map((reply) => {
+                        const isUser = reply.sender === "user"
+
+                        return (
+                          <div
+                            key={reply.id}
+                            className={`rounded-xl border p-4 ${
+                              isUser
+                                ? "border-slate-200 bg-slate-50"
+                                : "border-blue-200 bg-blue-50"
+                            }`}
+                          >
+                            <div
+                              className={`mb-2 text-xs font-bold ${
+                                isUser ? "text-slate-600" : "text-blue-700"
+                              }`}
+                            >
+                              {isUser ? "You" : "Admin"} •{" "}
+                              {new Date(reply.created_at).toLocaleString()}
+                            </div>
+
+                            <div className="whitespace-pre-wrap text-sm leading-7 text-slate-800">
+                              {reply.body}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {(selectedItem.status === "awaiting_payment" ||
+                    selectedItem.status === "approved") && (
+                    <PaymentProofUploader
+                      upgrade={selectedItem.upgrade}
+                      onUploaded={() => loadInbox(false)}
+                    />
+                  )}
+
+                  <div className="mt-5 border-t border-slate-200 pt-5">
+                    <h3 className="mb-3 text-lg font-extrabold text-slate-900">Reply</h3>
+
+                    <textarea
+                      value={replyBody}
+                      onChange={(e) => setReplyBody(e.target.value)}
+                      placeholder="Write your reply here..."
+                      rows={5}
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+                    />
+
+                    <div className="mt-4">
+                      <button
+                        onClick={sendReply}
+                        disabled={sendingReply || !replyBody.trim()}
+                        className="inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                      >
+                        {sendingReply ? "Sending..." : "Send Reply"}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -935,7 +841,9 @@ function PaymentProofUploader({
       const extension = file.name.split(".").pop() || "png"
       const fileName = `${upgrade.id}-${Date.now()}.${extension}`
 
-      const { error: uploadError } = await supabase.storage.from("payment-proofs").upload(fileName, file)
+      const { error: uploadError } = await supabase.storage
+        .from("payment-proofs")
+        .upload(fileName, file)
 
       if (uploadError) {
         console.error(uploadError)

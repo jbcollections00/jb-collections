@@ -1,9 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import PresenceTracker from "@/app/components/PresenceTracker"
+import SiteHeader from "@/app/components/SiteHeader"
 
 type Category = {
   id: string
@@ -19,8 +21,58 @@ type FileRow = {
   category_id: string | null
 }
 
+type HomeFile = {
+  id: string
+  title?: string | null
+  name?: string | null
+  slug?: string | null
+  description?: string | null
+  thumbnail_url?: string | null
+  cover_url?: string | null
+  image_url?: string | null
+  downloads_count?: number | null
+  created_at?: string | null
+  visibility?: "free" | "premium" | "private" | null
+}
+
+type HomeSectionsResponse = {
+  trending?: HomeFile[]
+  top?: HomeFile[]
+  latest?: HomeFile[]
+}
+
+type CurrentUserProfile = {
+  id: string
+  role?: string | null
+}
+
+type MemberItem = {
+  id: string
+  full_name?: string | null
+  name?: string | null
+  username?: string | null
+  email?: string | null
+  avatar_url?: string | null
+  last_seen?: string | null
+  status?: string | null
+  account_status?: string | null
+  created_at?: string | null
+}
+
+type LiveStatsResponse = {
+  onlineUsers?: number
+  activeToday?: number
+  totalUsers?: number
+  newMembers?: MemberItem[]
+  onlineMembers?: MemberItem[]
+}
+
 function getCategoryImage(category: Category) {
   return category.thumbnail_url || category.cover_url || category.image_url || null
+}
+
+function getFileImage(file: HomeFile) {
+  return file.thumbnail_url || file.cover_url || file.image_url || null
 }
 
 function getCategoryIcon(name: string) {
@@ -33,23 +85,277 @@ function getCategoryIcon(name: string) {
   return "📁"
 }
 
+function getFileIcon(name: string) {
+  const value = name.toLowerCase()
+
+  if (value.includes("book")) return "📚"
+  if (value.includes("movie") || value.includes("video")) return "🎬"
+  if (value.includes("music") || value.includes("audio")) return "🎵"
+  if (value.includes("software") || value.includes("app")) return "💻"
+  if (value.includes("game")) return "🎮"
+  if (value.includes("template")) return "🧩"
+  if (value.includes("document") || value.includes("reviewer")) return "📝"
+  return "📦"
+}
+
 function formatNumber(value: number) {
   return new Intl.NumberFormat().format(value)
 }
 
+function formatDate(value?: string | null) {
+  if (!value) return "Recently added"
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "Recently added"
+
+  return date.toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
+}
+
+function formatShortDate(value?: string | null) {
+  if (!value) return "Recently joined"
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "Recently joined"
+
+  return date.toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
+}
+
+function getFileTitle(file: HomeFile) {
+  return file.title?.trim() || file.name?.trim() || "Untitled File"
+}
+
+function getFileHref(file: HomeFile) {
+  return `/download/${file.id}`
+}
+
+function getVisibilityBadge(file: HomeFile) {
+  if (file.visibility === "premium") {
+    return {
+      label: "Premium",
+      className: "bg-amber-100 text-amber-800",
+    }
+  }
+
+  if (file.visibility === "private") {
+    return {
+      label: "Private",
+      className: "bg-slate-200 text-slate-700",
+    }
+  }
+
+  return {
+    label: "Free",
+    className: "bg-emerald-100 text-emerald-700",
+  }
+}
+
+function getMemberDisplayName(member: MemberItem) {
+  return (
+    member.full_name?.trim() ||
+    member.name?.trim() ||
+    member.username?.trim() ||
+    member.email?.trim() ||
+    "Unnamed User"
+  )
+}
+
+function HomeFileCard({ file }: { file: HomeFile }) {
+  const image = getFileImage(file)
+  const title = getFileTitle(file)
+  const badge = getVisibilityBadge(file)
+
+  return (
+    <div className="group overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
+      <div className="relative aspect-[4/2.6] overflow-hidden bg-slate-100">
+        {image ? (
+          <img
+            src={image}
+            alt={title}
+            className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-5xl">
+            {getFileIcon(title)}
+          </div>
+        )}
+
+        <div className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow">
+          {formatNumber(file.downloads_count || 0)} downloads
+        </div>
+
+        <div
+          className={`absolute right-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold shadow ${badge.className}`}
+        >
+          {badge.label}
+        </div>
+      </div>
+
+      <div className="p-3">
+        <h3 className="line-clamp-1 text-base font-bold text-slate-900">{title}</h3>
+
+        <p className="mt-1 min-h-[40px] text-xs leading-5 text-slate-600">
+          {file.description?.trim() || "Open this file to view details and download it."}
+        </p>
+
+        <div className="mt-2 text-[12px] font-medium text-slate-500">
+          {formatDate(file.created_at)}
+        </div>
+
+        <Link
+          href={getFileHref(file)}
+          className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+        >
+          View File
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+function StatCard({
+  label,
+  value,
+  onClick,
+}: {
+  label: string
+  value: string
+  onClick?: () => void
+}) {
+  const isClickable = typeof onClick === "function"
+
+  if (isClickable) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="rounded-2xl bg-slate-50 px-4 py-3 text-left transition hover:bg-slate-100"
+      >
+        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {label}
+        </div>
+        <div className="mt-1 text-2xl font-black text-slate-900">{value}</div>
+      </button>
+    )
+  }
+
+  return (
+    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </div>
+      <div className="mt-1 text-2xl font-black text-slate-900">{value}</div>
+    </div>
+  )
+}
+
+function FileSection({
+  title,
+  subtitle,
+  files,
+  loading,
+}: {
+  title: string
+  subtitle: string
+  files: HomeFile[]
+  loading: boolean
+}) {
+  return (
+    <section className="mt-8">
+      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+            {title}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+        </div>
+
+        <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm">
+          {formatNumber(files.length)} item{files.length === 1 ? "" : "s"}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="grid grid-cols-3 gap-3 md:grid-cols-6 lg:grid-cols-6 xl:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={index}
+              className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm"
+            >
+              <div className="aspect-[4/2.6] animate-pulse bg-slate-200" />
+              <div className="space-y-2 p-3">
+                <div className="h-4 w-2/3 animate-pulse rounded bg-slate-200" />
+                <div className="h-3 w-full animate-pulse rounded bg-slate-200" />
+                <div className="h-10 w-full animate-pulse rounded-2xl bg-slate-200" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : files.length === 0 ? (
+        <div className="rounded-[22px] border border-dashed border-slate-300 bg-white px-6 py-10 text-center text-sm font-medium text-slate-500">
+          No items available yet.
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-3 md:grid-cols-6 lg:grid-cols-6 xl:grid-cols-6">
+          {files.map((file) => (
+            <HomeFileCard key={file.id} file={file} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
 export default function DashboardPage() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
 
   const [categories, setCategories] = useState<Category[]>([])
   const [fileCounts, setFileCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
-  const [loggingOut, setLoggingOut] = useState(false)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
+
+  const [sectionsLoading, setSectionsLoading] = useState(true)
+  const [trendingFiles, setTrendingFiles] = useState<HomeFile[]>([])
+  const [topFiles, setTopFiles] = useState<HomeFile[]>([])
+  const [latestFiles, setLatestFiles] = useState<HomeFile[]>([])
+
+  const [currentUserProfile, setCurrentUserProfile] = useState<CurrentUserProfile | null>(null)
+  const [onlineMembers, setOnlineMembers] = useState<MemberItem[]>([])
+  const [newMembers, setNewMembers] = useState<MemberItem[]>([])
+  const [showOnlineMembers, setShowOnlineMembers] = useState(false)
+
+  const [liveStats, setLiveStats] = useState({
+    onlineUsers: 0,
+    activeToday: 0,
+    totalUsers: 0,
+  })
 
   useEffect(() => {
     checkUserAndLoad()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null
+
+    fetchLiveStats()
+
+    intervalId = setInterval(() => {
+      fetchLiveStats()
+    }, 20000)
+
+    return () => {
+      if (intervalId) clearInterval(intervalId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function checkUserAndLoad() {
@@ -67,13 +373,22 @@ export default function DashboardPage() {
         return
       }
 
-      await fetchDashboardData()
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("id, role")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      setCurrentUserProfile((profileData as CurrentUserProfile | null) || null)
+
+      await Promise.all([fetchDashboardData(), fetchHomeSections(), fetchLiveStats()])
     } catch (error) {
       console.error("Dashboard auth check failed:", error)
       router.replace("/login")
     } finally {
       setCheckingAuth(false)
       setLoading(false)
+      setSectionsLoading(false)
     }
   }
 
@@ -106,29 +421,65 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleLogout() {
+  async function fetchHomeSections() {
     try {
-      setLoggingOut(true)
+      const response = await fetch("/api/home/sections", {
+        method: "GET",
+        cache: "no-store",
+      })
 
-      const { error } = await supabase.auth.signOut()
-
-      if (error) {
-        console.error("Logout error:", error)
-        alert("Failed to log out.")
-        return
+      if (!response.ok) {
+        throw new Error("Failed to load homepage sections")
       }
 
-      router.replace("/login")
-      router.refresh()
+      const data = (await response.json()) as HomeSectionsResponse
+
+      setTrendingFiles(Array.isArray(data.trending) ? data.trending : [])
+      setTopFiles(Array.isArray(data.top) ? data.top : [])
+      setLatestFiles(Array.isArray(data.latest) ? data.latest : [])
     } catch (error) {
-      console.error("Logout failed:", error)
-      alert("Failed to log out.")
-    } finally {
-      setLoggingOut(false)
+      console.error("Error fetching homepage sections:", error)
+      setTrendingFiles([])
+      setTopFiles([])
+      setLatestFiles([])
     }
   }
 
-  const totalDownloads = Object.values(fileCounts).reduce((sum, count) => sum + count, 0)
+  async function fetchLiveStats() {
+    try {
+      const response = await fetch("/api/site/live-stats", {
+        method: "GET",
+        cache: "no-store",
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to load live stats")
+      }
+
+      const data = (await response.json()) as LiveStatsResponse
+
+      setLiveStats({
+        onlineUsers: Number(data.onlineUsers || 0),
+        activeToday: Number(data.activeToday || 0),
+        totalUsers: Number(data.totalUsers || 0),
+      })
+
+      setOnlineMembers(Array.isArray(data.onlineMembers) ? data.onlineMembers : [])
+      setNewMembers(Array.isArray(data.newMembers) ? data.newMembers : [])
+    } catch (error) {
+      console.error("Error fetching live stats:", error)
+      setLiveStats({
+        onlineUsers: 0,
+        activeToday: 0,
+        totalUsers: 0,
+      })
+      setOnlineMembers([])
+      setNewMembers([])
+    }
+  }
+
+  const totalFiles = Object.values(fileCounts).reduce((sum, count) => sum + count, 0)
+  const isAdmin = currentUserProfile?.role === "admin"
 
   if (checkingAuth) {
     return (
@@ -142,207 +493,226 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto w-full max-w-[1800px] px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <div className="mb-6 overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm sm:mb-8 sm:rounded-[30px]">
-          <div className="relative overflow-hidden bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 px-4 py-5 text-white sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-            <div className="relative">
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/80 sm:text-sm">
-                  JB Collections
+    <>
+      <PresenceTracker />
+
+      <div className="min-h-screen bg-slate-50">
+        <SiteHeader />
+
+        <div className="mx-auto w-full max-w-[1800px] px-4 pt-24 pb-4 sm:px-6 sm:pt-28 sm:pb-6 lg:px-8">
+          <FileSection
+            title="🔥 Trending Now"
+            subtitle="Popular files getting attention right now."
+            files={trendingFiles}
+            loading={sectionsLoading}
+          />
+
+          <FileSection
+            title="📈 Most Downloaded"
+            subtitle="Top files based on overall download activity."
+            files={topFiles}
+            loading={sectionsLoading}
+          />
+
+          <FileSection
+            title="🆕 New Uploads"
+            subtitle="Fresh files recently added to your website."
+            files={latestFiles}
+            loading={sectionsLoading}
+          />
+
+          <section className="mt-8">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl lg:text-4xl">
+                  Categories
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Explore premium-ready downloadable collections.
                 </p>
-
-                <div className="hidden items-center gap-3 lg:flex">
-                  <Link
-                    href="/dashboard"
-                    className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-2 text-sm font-semibold text-sky-700 shadow-sm transition hover:bg-slate-100"
-                  >
-                    Dashboard
-                  </Link>
-
-                  <Link
-                    href="/profile"
-                    className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-                  >
-                    👤 Profile
-                  </Link>
-
-                  <Link
-                    href="/dashboard/inbox"
-                    className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-                  >
-                    📥 Inbox
-                  </Link>
-
-                  <Link
-                    href="/contact"
-                    className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-                  >
-                    💬 Message Admin
-                  </Link>
-
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    disabled={loggingOut}
-                    className="inline-flex items-center justify-center rounded-2xl bg-red-500 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    🚪 {loggingOut ? "Logging out..." : "Logout"}
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setMobileMenuOpen((prev) => !prev)}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-xl text-white backdrop-blur lg:hidden"
-                  aria-label="Toggle menu"
-                >
-                  {mobileMenuOpen ? "✕" : "☰"}
-                </button>
               </div>
 
-              {mobileMenuOpen && (
-                <div className="mt-4 grid grid-cols-1 gap-3 lg:hidden">
-                  <Link
-                    href="/dashboard"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="inline-flex w-full items-center justify-center rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-sky-700 shadow-sm"
-                  >
-                    Dashboard
-                  </Link>
-
-                  <Link
-                    href="/profile"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="inline-flex w-full items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm"
-                  >
-                    👤 Profile
-                  </Link>
-
-                  <Link
-                    href="/dashboard/inbox"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="inline-flex w-full items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm"
-                  >
-                    📥 Inbox
-                  </Link>
-
-                  <Link
-                    href="/contact"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="inline-flex w-full items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm"
-                  >
-                    💬 Message Admin
-                  </Link>
-
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    disabled={loggingOut}
-                    className="inline-flex w-full items-center justify-center rounded-2xl bg-red-500 px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    🚪 {loggingOut ? "Logging out..." : "Logout"}
-                  </button>
-                </div>
-              )}
-
-              <div className="mt-6">
-                <h1 className="text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
-                  Dashboard
-                </h1>
-
-                <p className="mt-3 max-w-2xl text-sm text-white/90 sm:text-base">
-                  Browse categories, access downloads, and manage your account in one place.
-                </p>
+              <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm">
+                Total files: {formatNumber(totalFiles)}
               </div>
             </div>
-          </div>
-        </div>
 
-        <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl lg:text-4xl">
-              Categories
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Explore premium-ready downloadable collections.
-            </p>
-          </div>
-
-          <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm">
-            Total files: {formatNumber(totalDownloads)}
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {Array.from({ length: 10 }).map((_, index) => (
-              <div
-                key={index}
-                className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm"
-              >
-                <div className="aspect-[4/2.6] animate-pulse bg-slate-200" />
-                <div className="space-y-2 p-3">
-                  <div className="h-4 w-2/3 animate-pulse rounded bg-slate-200" />
-                  <div className="h-3 w-full animate-pulse rounded bg-slate-200" />
-                  <div className="h-10 w-full animate-pulse rounded-2xl bg-slate-200" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {categories.map((category) => {
-              const previewImage = getCategoryImage(category)
-              const icon = getCategoryIcon(category.name)
-              const fileCount = fileCounts[category.id] || 0
-
-              return (
-                <div
-                  key={category.id}
-                  className="group overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
-                >
-                  <div className="relative aspect-[4/2.6] overflow-hidden bg-slate-100">
-                    {previewImage ? (
-                      <img
-                        src={previewImage}
-                        alt={category.name}
-                        className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-4xl">
-                        {icon}
-                      </div>
-                    )}
-
-                    <div className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow">
-                      {formatNumber(fileCount)} files
+            {loading ? (
+              <div className="grid grid-cols-3 gap-3 md:grid-cols-6 lg:grid-cols-6 xl:grid-cols-6">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm"
+                  >
+                    <div className="aspect-[4/2.6] animate-pulse bg-slate-200" />
+                    <div className="space-y-2 p-3">
+                      <div className="h-4 w-2/3 animate-pulse rounded bg-slate-200" />
+                      <div className="h-3 w-full animate-pulse rounded bg-slate-200" />
+                      <div className="h-10 w-full animate-pulse rounded-2xl bg-slate-200" />
                     </div>
                   </div>
+                ))}
+              </div>
+            ) : categories.length === 0 ? (
+              <div className="rounded-[22px] border border-dashed border-slate-300 bg-white px-6 py-10 text-center text-sm font-medium text-slate-500">
+                No categories available yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3 md:grid-cols-6 lg:grid-cols-6 xl:grid-cols-6">
+                {categories.map((category) => {
+                  const previewImage = getCategoryImage(category)
+                  const icon = getCategoryIcon(category.name)
+                  const fileCount = fileCounts[category.id] || 0
 
-                  <div className="p-3">
-                    <h3 className="line-clamp-1 text-base font-bold text-slate-900">
-                      {category.name}
-                    </h3>
-
-                    <p className="mt-1 min-h-[40px] text-xs leading-5 text-slate-600">
-                      {category.description ||
-                        "Open this category to browse downloadable files."}
-                    </p>
-
-                    <Link
-                      href={`/categories/${category.id}`}
-                      className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+                  return (
+                    <div
+                      key={category.id}
+                      className="group overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
                     >
-                      Open Category
-                    </Link>
+                      <div className="relative aspect-[4/2.6] overflow-hidden bg-slate-100">
+                        {previewImage ? (
+                          <img
+                            src={previewImage}
+                            alt={category.name}
+                            className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-4xl">
+                            {icon}
+                          </div>
+                        )}
+
+                        <div className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow">
+                          {formatNumber(fileCount)} files
+                        </div>
+                      </div>
+
+                      <div className="p-3">
+                        <h3 className="line-clamp-1 text-base font-bold text-slate-900">
+                          {category.name}
+                        </h3>
+
+                        <p className="mt-1 min-h-[40px] text-xs leading-5 text-slate-600">
+                          {category.description ||
+                            "Open this category to browse downloadable files."}
+                        </p>
+
+                        <Link
+                          href={`/categories/${category.id}`}
+                          className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+                        >
+                          Open Category
+                        </Link>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className="mt-10">
+            <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+              <div
+                className={`grid gap-3 ${
+                  isAdmin
+                    ? "grid-cols-2 md:grid-cols-2 xl:grid-cols-4"
+                    : "grid-cols-3 md:grid-cols-3 xl:grid-cols-3"
+                }`}
+              >
+                <StatCard label="Total Members" value={formatNumber(liveStats.totalUsers)} />
+
+                <StatCard
+                  label="Online Users"
+                  value={`🔥 ${formatNumber(liveStats.onlineUsers)}`}
+                  onClick={isAdmin ? () => setShowOnlineMembers((prev) => !prev) : undefined}
+                />
+
+                <StatCard label="Active Today" value={formatNumber(liveStats.activeToday)} />
+
+                {isAdmin ? (
+                  <StatCard label="New Member/s" value={formatNumber(newMembers.length)} />
+                ) : null}
+              </div>
+
+              {isAdmin && showOnlineMembers ? (
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">Online Users</h3>
+                      <p className="text-xs text-slate-500">Click a member to view profile.</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowOnlineMembers(false)}
+                      className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+                    >
+                      Close
+                    </button>
                   </div>
+
+                  {onlineMembers.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                      No users online right now.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {onlineMembers.map((member) => (
+                        <Link
+                          key={member.id}
+                          href={`/admin/users/${member.id}`}
+                          className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-sm"
+                        >
+                          <div className="text-sm font-bold text-slate-900">
+                            {getMemberDisplayName(member)}
+                          </div>
+                          <div className="mt-1 text-xs text-emerald-600">Online now</div>
+                          <div className="mt-2 text-xs text-slate-500">
+                            Joined: {formatShortDate(member.created_at)}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )
-            })}
-          </div>
-        )}
+              ) : null}
+
+              {isAdmin ? (
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3">
+                    <h3 className="text-sm font-bold text-slate-900">New Member/s</h3>
+                    <p className="text-xs text-slate-500">Users who joined today.</p>
+                  </div>
+
+                  {newMembers.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                      No new members yet today.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      {newMembers.map((member) => (
+                        <Link
+                          key={member.id}
+                          href={`/admin/users/${member.id}`}
+                          className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-sm"
+                        >
+                          <div className="text-sm font-bold text-slate-900">
+                            {getMemberDisplayName(member)}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            Joined: {formatShortDate(member.created_at)}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </section>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
