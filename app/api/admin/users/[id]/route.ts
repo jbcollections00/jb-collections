@@ -5,7 +5,7 @@ export const runtime = "nodejs"
 
 export async function GET(
   _req: Request,
-  context: { params: { id: string } }
+  context: RouteContext<"/api/admin/users/[id]">
 ) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -25,7 +25,7 @@ export async function GET(
       },
     })
 
-    const userId = context.params.id
+    const { id: userId } = await context.params
 
     if (!userId) {
       return NextResponse.json({ error: "Missing user id." }, { status: 400 })
