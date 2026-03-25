@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { createClient } from "@/lib/supabase/client"
 import SiteHeader from "@/app/components/SiteHeader"
 
 const PREMIUM_PRICE = "₱300 / year"
@@ -10,8 +9,6 @@ const GCASH_NUMBER = "09685289257"
 const GCASH_QR = "/gcash-qr.jpg"
 
 export default function PremiumMembershipPage() {
-  const supabase = createClient()
-
   const [message, setMessage] = useState(
     "I already sent the payment. Please review and upgrade my account to premium."
   )
@@ -61,17 +58,22 @@ export default function PremiumMembershipPage() {
     <>
       <SiteHeader />
 
-      <div className="min-h-screen bg-slate-100 px-4 py-6 pt-24 md:px-6 sm:pt-28">
-        <div className="mx-auto max-w-6xl space-y-6">
+      <div className="min-h-screen bg-slate-100 px-4 pt-24 pb-6 md:px-6 sm:pt-28">
+        <div className="mx-auto max-w-6xl">
+
           <section className="rounded-2xl bg-white p-6 shadow">
             <div className="mb-6">
-              <h1 className="mb-2 text-3xl font-bold text-slate-900">Premium Membership</h1>
-              <p className="text-slate-600">
+              <h1 className="text-3xl font-bold text-slate-900">
+                Premium Membership
+              </h1>
+              <p className="mt-1 text-slate-600">
                 Send your payment proof and request premium access.
               </p>
             </div>
 
             <div className="grid gap-6 md:grid-cols-2">
+
+              {/* PAYMENT INFO */}
               <div className="rounded-xl border p-5">
                 <h2 className="mb-3 text-xl font-bold">GCash Payment</h2>
 
@@ -96,17 +98,23 @@ export default function PremiumMembershipPage() {
                 />
               </div>
 
+              {/* FORM */}
               <form onSubmit={handleSubmit} className="rounded-xl border p-5">
-                <label className="mb-2 block font-semibold">Message to Admin</label>
+                <label className="mb-2 block font-semibold">
+                  Message to Admin
+                </label>
 
                 <textarea
+                  required
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   rows={4}
                   className="mb-4 w-full rounded-lg border p-3"
                 />
 
-                <label className="mb-2 block font-semibold">Upload Receipt</label>
+                <label className="mb-2 block font-semibold">
+                  Upload Receipt
+                </label>
 
                 <input
                   id="receipt-upload"
@@ -125,13 +133,15 @@ export default function PremiumMembershipPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="rounded-lg bg-blue-600 px-5 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+                  className="w-full rounded-lg bg-blue-600 px-5 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {submitting ? "Sending..." : "Send Request"}
                 </button>
               </form>
+
             </div>
           </section>
+
         </div>
       </div>
     </>
