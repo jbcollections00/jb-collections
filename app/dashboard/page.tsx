@@ -44,6 +44,8 @@ type HomeSectionsResponse = {
 type CurrentUserProfile = {
   id: string
   role?: string | null
+  membership?: string | null
+  is_premium?: boolean | null
 }
 
 type MemberItem = {
@@ -236,22 +238,22 @@ function StatCard({
       <button
         type="button"
         onClick={onClick}
-        className="rounded-2xl bg-slate-50 px-4 py-3 text-left transition hover:bg-slate-100"
+        className="rounded-2xl bg-slate-50 px-4 py-4 text-left transition hover:bg-slate-100"
       >
         <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
           {label}
         </div>
-        <div className="mt-1 text-2xl font-black text-slate-900">{value}</div>
+        <div className="mt-2 text-2xl font-black leading-none text-slate-900">{value}</div>
       </button>
     )
   }
 
   return (
-    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+    <div className="rounded-2xl bg-slate-50 px-4 py-4 text-left">
       <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
         {label}
       </div>
-      <div className="mt-1 text-2xl font-black text-slate-900">{value}</div>
+      <div className="mt-2 text-2xl font-black leading-none text-slate-900">{value}</div>
     </div>
   )
 }
@@ -375,7 +377,7 @@ export default function DashboardPage() {
 
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("id, role")
+        .select("id, role, membership, is_premium")
         .eq("id", user.id)
         .maybeSingle()
 
@@ -479,7 +481,17 @@ export default function DashboardPage() {
   }
 
   const totalFiles = Object.values(fileCounts).reduce((sum, count) => sum + count, 0)
-  const isAdmin = currentUserProfile?.role === "admin"
+  const membership = String(currentUserProfile?.membership || "").toLowerCase()
+  const isPremiumFlag = currentUserProfile?.is_premium === true
+  const role = String(currentUserProfile?.role || "").toLowerCase()
+
+  const canSeeNewMembers =
+    role === "admin" ||
+    membership === "premium" ||
+    membership === "platinum" ||
+    isPremiumFlag
+
+  const canToggleOnlineUsers = role === "admin"
 
   if (checkingAuth) {
     return (
@@ -500,28 +512,7 @@ export default function DashboardPage() {
         <SiteHeader />
 
         <div className="mx-auto w-full max-w-[1800px] px-4 pt-24 pb-4 sm:px-6 sm:pt-28 sm:pb-6 lg:px-8">
-          <FileSection
-            title="🔥 Trending Now"
-            subtitle="Popular files getting attention right now."
-            files={trendingFiles}
-            loading={sectionsLoading}
-          />
-
-          <FileSection
-            title="📈 Most Downloaded"
-            subtitle="Top files based on overall download activity."
-            files={topFiles}
-            loading={sectionsLoading}
-          />
-
-          <FileSection
-            title="🆕 New Uploads"
-            subtitle="Fresh files recently added to your website."
-            files={latestFiles}
-            loading={sectionsLoading}
-          />
-
-          <section className="mt-8">
+          <section className="mt-2">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl lg:text-4xl">
@@ -538,8 +529,8 @@ export default function DashboardPage() {
             </div>
 
             {loading ? (
-              <div className="grid grid-cols-3 gap-3 md:grid-cols-6 lg:grid-cols-6 xl:grid-cols-6">
-                {Array.from({ length: 6 }).map((_, index) => (
+              <div className="grid grid-cols-4 gap-4">
+                {Array.from({ length: 4 }).map((_, index) => (
                   <div
                     key={index}
                     className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm"
@@ -558,7 +549,7 @@ export default function DashboardPage() {
                 No categories available yet.
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-3 md:grid-cols-6 lg:grid-cols-6 xl:grid-cols-6">
+              <div className="grid grid-cols-4 gap-4">
                 {categories.map((category) => {
                   const previewImage = getCategoryImage(category)
                   const icon = getCategoryIcon(category.name)
@@ -592,7 +583,7 @@ export default function DashboardPage() {
                           {category.name}
                         </h3>
 
-                        <p className="mt-1 min-h-[40px] text-xs leading-5 text-slate-600">
+                        <p className="mt-1 min-h-[48px] text-sm leading-6 text-slate-600">
                           {category.description ||
                             "Open this category to browse downloadable files."}
                         </p>
@@ -611,31 +602,48 @@ export default function DashboardPage() {
             )}
           </section>
 
+          <FileSection
+            title="🔥 Trending Now"
+            subtitle="Popular files getting attention right now."
+            files={trendingFiles}
+            loading={sectionsLoading}
+          />
+
+          <FileSection
+            title="📈 Most Downloaded"
+            subtitle="Top files based on overall download activity."
+            files={topFiles}
+            loading={sectionsLoading}
+          />
+
+          <FileSection
+            title="🆕 New Uploads"
+            subtitle="Fresh files recently added to your website."
+            files={latestFiles}
+            loading={sectionsLoading}
+          />
+
           <section className="mt-10">
             <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-              <div
-                className={`grid gap-3 ${
-                  isAdmin
-                    ? "grid-cols-2 md:grid-cols-2 xl:grid-cols-4"
-                    : "grid-cols-3 md:grid-cols-3 xl:grid-cols-3"
-                }`}
-              >
+              <div className="grid grid-cols-4 gap-3">
                 <StatCard label="Total Members" value={formatNumber(liveStats.totalUsers)} />
 
                 <StatCard
                   label="Online Users"
                   value={`🔥 ${formatNumber(liveStats.onlineUsers)}`}
-                  onClick={isAdmin ? () => setShowOnlineMembers((prev) => !prev) : undefined}
+                  onClick={
+                    canToggleOnlineUsers
+                      ? () => setShowOnlineMembers((prev) => !prev)
+                      : undefined
+                  }
                 />
 
                 <StatCard label="Active Today" value={formatNumber(liveStats.activeToday)} />
 
-                {isAdmin ? (
-                  <StatCard label="New Member/s" value={formatNumber(newMembers.length)} />
-                ) : null}
+                <StatCard label="New Member/s" value={formatNumber(newMembers.length)} />
               </div>
 
-              {isAdmin && showOnlineMembers ? (
+              {canToggleOnlineUsers && showOnlineMembers ? (
                 <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
@@ -678,7 +686,7 @@ export default function DashboardPage() {
                 </div>
               ) : null}
 
-              {isAdmin ? (
+              {canSeeNewMembers ? (
                 <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <div className="mb-3">
                     <h3 className="text-sm font-bold text-slate-900">New Member/s</h3>
@@ -694,8 +702,10 @@ export default function DashboardPage() {
                       {newMembers.map((member) => (
                         <Link
                           key={member.id}
-                          href={`/admin/users/${member.id}`}
-                          className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-sm"
+                          href={role === "admin" ? `/admin/users/${member.id}` : "#"}
+                          className={`rounded-2xl border border-slate-200 bg-white p-4 transition ${
+                            role === "admin" ? "hover:-translate-y-0.5 hover:shadow-sm" : ""
+                          }`}
                         >
                           <div className="text-sm font-bold text-slate-900">
                             {getMemberDisplayName(member)}

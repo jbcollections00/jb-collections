@@ -50,20 +50,16 @@ export default function SiteHeader() {
   return (
     <div className="fixed inset-x-0 top-0 z-50 border-b border-slate-200 bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 text-white shadow-sm">
       <div className="mx-auto flex w-full max-w-[1800px] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-        <Link
-  href="/dashboard"
-  className="flex items-center gap-3 text-white"
->
-  <img
-    src="/logo.png" // <-- put your logo file in /public/logo.png
-    alt="JB Collections"
-    className="h-8 w-8 object-contain"
-  />
-
-  <span className="text-sm font-black uppercase tracking-[0.22em] sm:text-base">
-    JB COLLECTIONS
-  </span>
-</Link>
+        <Link href="/dashboard" className="flex items-center gap-3 text-white">
+          <img
+            src="/logo.png"
+            alt="JB Collections"
+            className="h-8 w-8 object-contain"
+          />
+          <span className="text-sm font-black uppercase tracking-[0.22em] sm:text-base">
+            JB COLLECTIONS
+          </span>
+        </Link>
 
         <div className="hidden items-center gap-3 lg:flex">
           <Link href="/dashboard" className={getNavClass("/dashboard")}>
@@ -74,12 +70,8 @@ export default function SiteHeader() {
             👤 Profile
           </Link>
 
-          <Link href="/dashboard/inbox" className={getNavClass("/dashboard/inbox")}>
-            📥 Inbox
-          </Link>
-
           <Link href="/contact" className={getNavClass("/contact")}>
-            💬 Message Admin
+            💬 Messages
           </Link>
 
           <button
@@ -122,19 +114,11 @@ export default function SiteHeader() {
             </Link>
 
             <Link
-              href="/dashboard/inbox"
-              onClick={() => setMobileMenuOpen(false)}
-              className={getNavClass("/dashboard/inbox")}
-            >
-              📥 Inbox
-            </Link>
-
-            <Link
               href="/contact"
               onClick={() => setMobileMenuOpen(false)}
               className={getNavClass("/contact")}
             >
-              💬 Message Admin
+              💬 Messages
             </Link>
 
             <button
