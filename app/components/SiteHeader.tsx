@@ -2,8 +2,21 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
+
+type UserProfile = {
+  full_name?: string | null
+  name?: string | null
+  username?: string | null
+  role?: string | null
+}
+
+const navItems = [
+  { label: "Dashboard", href: "/dashboard", icon: "🏠" },
+  { label: "Profile", href: "/profile", icon: "👤" },
+  { label: "Messages", href: "/messages", icon: "💬" },
+]
 
 export default function SiteHeader() {
   const pathname = usePathname()
@@ -12,126 +25,143 @@ export default function SiteHeader() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+
+  useEffect(() => {
+    let active = true
+
+    async function loadProfile() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user || !active) return
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name, name, username, role")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      if (active) {
+        setProfile((data as UserProfile | null) || null)
+      }
+    }
+
+    loadProfile()
+
+    return () => {
+      active = false
+    }
+  }, [supabase])
 
   function isActive(href: string) {
-    return pathname === href
-  }
-
-  function getNavClass(href: string) {
-    return `inline-flex items-center justify-center rounded-2xl px-5 py-2 text-sm font-semibold shadow-sm transition ${
-      isActive(href)
-        ? "bg-white text-sky-700"
-        : "bg-blue-600 text-white hover:bg-blue-700"
-    }`
+    if (href === "/dashboard") return pathname === "/dashboard"
+    return pathname === href || pathname.startsWith(`${href}/`)
   }
 
   async function handleLogout() {
     try {
       setLoggingOut(true)
-
-      const { error } = await supabase.auth.signOut()
-
-      if (error) {
-        console.error("Logout error:", error)
-        alert("Failed to log out.")
-        return
-      }
-
+      await supabase.auth.signOut()
       router.replace("/login")
       router.refresh()
     } catch (error) {
       console.error("Logout failed:", error)
-      alert("Failed to log out.")
+      router.replace("/login")
     } finally {
       setLoggingOut(false)
+      setMobileMenuOpen(false)
     }
   }
 
   return (
-    <div className="fixed inset-x-0 top-0 z-50 border-b border-slate-200 bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 text-white shadow-sm">
-      <div className="mx-auto flex w-full max-w-[1800px] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-        <Link href="/dashboard" className="flex items-center gap-3 text-white">
-          <img
-            src="/logo.png"
-            alt="JB Collections"
-            className="h-8 w-8 object-contain"
-          />
-          <span className="text-sm font-black uppercase tracking-[0.22em] sm:text-base">
-            JB COLLECTIONS
-          </span>
-        </Link>
+    <header className="fixed inset-x-0 top-0 z-50 bg-transparent px-3 pt-3 sm:px-4 sm:pt-4">
+      <div className="mx-auto w-full max-w-[1800px] overflow-hidden rounded-[24px] bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 shadow-[0_12px_30px_rgba(37,99,235,0.22)]">
+        
+        {/* HEADER CONTENT */}
+        <div className="flex items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
 
-        <div className="hidden items-center gap-3 lg:flex">
-          <Link href="/dashboard" className={getNavClass("/dashboard")}>
-            Dashboard
+          {/* LEFT (LOGO + NAME) */}
+          <Link href="/dashboard" className="flex items-center gap-3">
+            <img
+              src="/jb-logo.png"
+              alt="JB Collections"
+              className="h-10 w-10 object-contain"
+            />
+
+            {/* ✅ FIX: removed truncate so full name shows */}
+            <div className="text-[18px] font-black tracking-[0.15em] text-white sm:text-[20px] lg:text-[22px] whitespace-nowrap">
+              JB COLLECTIONS
+            </div>
           </Link>
 
-          <Link href="/profile" className={getNavClass("/profile")}>
-            👤 Profile
-          </Link>
-
-          <Link href="/contact" className={getNavClass("/contact")}>
-            💬 Messages
-          </Link>
-
+          {/* MOBILE MENU BUTTON */}
           <button
             type="button"
-            onClick={handleLogout}
-            disabled={loggingOut}
-            className="inline-flex items-center justify-center rounded-2xl bg-red-500 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            className="inline-flex h-12 w-12 items-center justify-center rounded-[14px] border border-white/20 bg-white/10 text-2xl text-white backdrop-blur md:hidden"
           >
-            🚪 {loggingOut ? "Logging out..." : "Logout"}
+            ☰
           </button>
-        </div>
 
-        <button
-          type="button"
-          onClick={() => setMobileMenuOpen((prev) => !prev)}
-          className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-xl text-white backdrop-blur lg:hidden"
-          aria-label="Toggle menu"
-        >
-          {mobileMenuOpen ? "✕" : "☰"}
-        </button>
-      </div>
+          {/* RIGHT NAV */}
+          <div className="hidden items-center gap-2 lg:flex">
+            {navItems.map((item) => {
+              const active = isActive(item.href)
 
-      {mobileMenuOpen ? (
-        <div className="border-t border-white/10 px-4 pb-4 lg:hidden">
-          <div className="grid grid-cols-1 gap-3 pt-3">
-            <Link
-              href="/dashboard"
-              onClick={() => setMobileMenuOpen(false)}
-              className={getNavClass("/dashboard")}
-            >
-              Dashboard
-            </Link>
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition ${
+                    active
+                      ? "bg-white text-blue-700 shadow-sm"
+                      : "bg-white/10 text-white hover:bg-white/20"
+                  }`}
+                >
+                  <span>{item.icon}</span>
+                  <span>{item.label}</span>
+                </Link>
+              )
+            })}
 
-            <Link
-              href="/profile"
-              onClick={() => setMobileMenuOpen(false)}
-              className={getNavClass("/profile")}
-            >
-              👤 Profile
-            </Link>
-
-            <Link
-              href="/contact"
-              onClick={() => setMobileMenuOpen(false)}
-              className={getNavClass("/contact")}
-            >
-              💬 Messages
-            </Link>
-
+            {/* LOGOUT */}
             <button
-              type="button"
               onClick={handleLogout}
               disabled={loggingOut}
-              className="inline-flex w-full items-center justify-center rounded-2xl bg-red-500 px-4 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex items-center rounded-full bg-red-500 px-5 py-2 text-xs font-bold text-white hover:bg-red-600"
             >
-              🚪 {loggingOut ? "Logging out..." : "Logout"}
+              {loggingOut ? "..." : "Logout"}
             </button>
           </div>
         </div>
-      ) : null}
-    </div>
+
+        {/* MOBILE MENU */}
+        {mobileMenuOpen && (
+          <div className="border-t border-white/15 px-4 pb-4 pt-3 lg:hidden">
+            <div className="grid gap-2">
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  {item.icon} {item.label}
+                </Link>
+              ))}
+
+              <button
+                onClick={handleLogout}
+                className="rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </header>
   )
 }

@@ -104,19 +104,6 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat().format(value)
 }
 
-function formatDate(value?: string | null) {
-  if (!value) return "Recently added"
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Recently added"
-
-  return date.toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  })
-}
-
 function formatShortDate(value?: string | null) {
   if (!value) return "Recently joined"
 
@@ -138,27 +125,6 @@ function getFileHref(file: HomeFile) {
   return `/download/${file.id}`
 }
 
-function getVisibilityBadge(file: HomeFile) {
-  if (file.visibility === "premium") {
-    return {
-      label: "Premium",
-      className: "bg-amber-100 text-amber-800",
-    }
-  }
-
-  if (file.visibility === "private") {
-    return {
-      label: "Private",
-      className: "bg-slate-200 text-slate-700",
-    }
-  }
-
-  return {
-    label: "Free",
-    className: "bg-emerald-100 text-emerald-700",
-  }
-}
-
 function getMemberDisplayName(member: MemberItem) {
   return (
     member.full_name?.trim() ||
@@ -172,7 +138,7 @@ function getMemberDisplayName(member: MemberItem) {
 function HomeFileCard({ file }: { file: HomeFile }) {
   const image = getFileImage(file)
   const title = getFileTitle(file)
-  const badge = getVisibilityBadge(file)
+  const downloadCount = Number(file.downloads_count || 0)
 
   return (
     <div className="group overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
@@ -188,35 +154,27 @@ function HomeFileCard({ file }: { file: HomeFile }) {
             {getFileIcon(title)}
           </div>
         )}
-
-        <div className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow">
-          {formatNumber(file.downloads_count || 0)} downloads
-        </div>
-
-        <div
-          className={`absolute right-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold shadow ${badge.className}`}
-        >
-          {badge.label}
-        </div>
       </div>
 
       <div className="p-3">
-        <h3 className="line-clamp-1 text-base font-bold text-slate-900">{title}</h3>
+        <h3 className="text-sm font-bold leading-5 text-slate-900 sm:text-base sm:leading-6">
+          {title}
+        </h3>
 
-        <p className="mt-1 min-h-[40px] text-xs leading-5 text-slate-600">
+        <p className="hidden">
           {file.description?.trim() || "Open this file to view details and download it."}
         </p>
-
-        <div className="mt-2 text-[12px] font-medium text-slate-500">
-          {formatDate(file.created_at)}
-        </div>
 
         <Link
           href={getFileHref(file)}
           className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
         >
-          View File
+          Download
         </Link>
+
+        <div className="mt-2 text-center text-xs font-medium text-slate-500">
+          {formatNumber(downloadCount)} download{downloadCount === 1 ? "" : "s"}
+        </div>
       </div>
     </div>
   )
@@ -285,7 +243,7 @@ function FileSection({
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-3 gap-3 md:grid-cols-6 lg:grid-cols-6 xl:grid-cols-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: 6 }).map((_, index) => (
             <div
               key={index}
@@ -294,8 +252,8 @@ function FileSection({
               <div className="aspect-[4/2.6] animate-pulse bg-slate-200" />
               <div className="space-y-2 p-3">
                 <div className="h-4 w-2/3 animate-pulse rounded bg-slate-200" />
-                <div className="h-3 w-full animate-pulse rounded bg-slate-200" />
                 <div className="h-10 w-full animate-pulse rounded-2xl bg-slate-200" />
+                <div className="h-3 w-1/2 animate-pulse rounded bg-slate-200" />
               </div>
             </div>
           ))}
@@ -305,7 +263,7 @@ function FileSection({
           No items available yet.
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-3 md:grid-cols-6 lg:grid-cols-6 xl:grid-cols-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {files.map((file) => (
             <HomeFileCard key={file.id} file={file} />
           ))}
@@ -511,7 +469,7 @@ export default function DashboardPage() {
       <div className="min-h-screen bg-slate-50">
         <SiteHeader />
 
-        <div className="mx-auto w-full max-w-[1800px] px-4 pt-24 pb-4 sm:px-6 sm:pt-28 sm:pb-6 lg:px-8">
+        <div className="mx-auto w-full max-w-[1800px] px-4 pb-4 pt-24 sm:px-6 sm:pb-6 sm:pt-28 lg:px-8">
           <section className="mt-2">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -529,7 +487,7 @@ export default function DashboardPage() {
             </div>
 
             {loading ? (
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
                 {Array.from({ length: 4 }).map((_, index) => (
                   <div
                     key={index}
@@ -538,7 +496,6 @@ export default function DashboardPage() {
                     <div className="aspect-[4/2.6] animate-pulse bg-slate-200" />
                     <div className="space-y-2 p-3">
                       <div className="h-4 w-2/3 animate-pulse rounded bg-slate-200" />
-                      <div className="h-3 w-full animate-pulse rounded bg-slate-200" />
                       <div className="h-10 w-full animate-pulse rounded-2xl bg-slate-200" />
                     </div>
                   </div>
@@ -549,7 +506,7 @@ export default function DashboardPage() {
                 No categories available yet.
               </div>
             ) : (
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
                 {categories.map((category) => {
                   const previewImage = getCategoryImage(category)
                   const icon = getCategoryIcon(category.name)
@@ -573,17 +530,17 @@ export default function DashboardPage() {
                           </div>
                         )}
 
-                        <div className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow">
+                        <div className="absolute left-2 top-2 rounded-full bg-white/95 px-2 py-1 text-[10px] font-semibold text-slate-700 shadow">
                           {formatNumber(fileCount)} files
                         </div>
                       </div>
 
                       <div className="p-3">
-                        <h3 className="line-clamp-1 text-base font-bold text-slate-900">
+                        <h3 className="line-clamp-2 text-sm font-bold leading-5 text-slate-900">
                           {category.name}
                         </h3>
 
-                        <p className="mt-1 min-h-[48px] text-sm leading-6 text-slate-600">
+                        <p className="hidden">
                           {category.description ||
                             "Open this category to browse downloadable files."}
                         </p>
@@ -592,7 +549,7 @@ export default function DashboardPage() {
                           href={`/categories/${category.id}`}
                           className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
                         >
-                          Open Category
+                          Download
                         </Link>
                       </div>
                     </div>

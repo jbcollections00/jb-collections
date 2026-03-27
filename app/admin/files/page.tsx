@@ -613,7 +613,15 @@ export default function FilesPage() {
     return "bg-green-100 text-green-700"
   }
 
+  const shouldShowFiles =
+    searchTerm.trim() !== "" ||
+    filterCategory !== "all" ||
+    filterVisibility !== "all" ||
+    filterStatus !== "all"
+
   const filteredFiles = useMemo(() => {
+    if (!shouldShowFiles) return []
+
     const keyword = searchTerm.trim().toLowerCase()
 
     return files.filter((file) => {
@@ -635,7 +643,7 @@ export default function FilesPage() {
 
       return matchesSearch && matchesCategory && matchesVisibility && matchesStatus
     })
-  }, [files, searchTerm, filterCategory, filterVisibility, filterStatus, categories])
+  }, [files, searchTerm, filterCategory, filterVisibility, filterStatus, shouldShowFiles, categories])
 
   if (checkingAdmin) {
     return (
@@ -894,14 +902,16 @@ export default function FilesPage() {
               </h2>
 
               <div className="inline-flex w-fit rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 sm:text-sm">
-                Showing {filteredFiles.length} of {files.length}
+                {shouldShowFiles
+                  ? `Showing ${filteredFiles.length} of ${files.length}`
+                  : "Hidden until search/filter"}
               </div>
             </div>
 
             <div className="grid gap-3 lg:grid-cols-4">
               <input
                 type="text"
-                placeholder="Search title, description, or category..."
+                placeholder="Search..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 lg:col-span-1"
@@ -912,7 +922,7 @@ export default function FilesPage() {
                 onChange={(e) => setFilterCategory(e.target.value)}
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
               >
-                <option value="all">All categories</option>
+                <option value="all">Select category</option>
                 {categories.map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.name}
@@ -927,7 +937,7 @@ export default function FilesPage() {
                 }
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
               >
-                <option value="all">All visibility</option>
+                <option value="all">Select visibility</option>
                 <option value="free">Free</option>
                 <option value="premium">Premium</option>
                 <option value="platinum">Platinum</option>
@@ -939,7 +949,7 @@ export default function FilesPage() {
                 onChange={(e) => setFilterStatus(e.target.value as FileStatus | "all")}
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
               >
-                <option value="all">All status</option>
+                <option value="all">Select status</option>
                 <option value="draft">Draft</option>
                 <option value="review">Review</option>
                 <option value="published">Published</option>
@@ -951,12 +961,16 @@ export default function FilesPage() {
 
           {loading ? (
             <p className="text-sm text-slate-500">Loading files...</p>
+          ) : !shouldShowFiles ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm font-bold text-slate-500">
+              Files are hidden by default. Use Search or Filters to display files.
+            </div>
           ) : filteredFiles.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm font-bold text-slate-500">
               No files matched your search or filters.
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-5">
               {filteredFiles.map((file) => {
                 const displayThumbnail = getDisplayThumbnail(file)
                 const monetizationIsOn = file.monetization_enabled !== false

@@ -1,18 +1,9 @@
 "use client"
 
-import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import AdminHeader from "@/app/components/AdminHeader"
 import { createClient } from "@/lib/supabase/client"
-
-type StatItem = {
-  label: string
-  value: string
-  icon: string
-  color: string
-  helper?: string
-}
 
 type AdminProfile = {
   role: string | null
@@ -40,48 +31,17 @@ type DashboardResponse = {
   recentUsers?: RecentUser[]
 }
 
-const cards = [
-  {
-    title: "Categories",
-    description: "Manage categories used for organizing files.",
-    href: "/admin/categories",
-    icon: "🗂️",
-  },
-  {
-    title: "Files",
-    description: "Upload and manage downloadable files.",
-    href: "/admin/files",
-    icon: "📁",
-  },
-  {
-    title: "Messages",
-    description: "Read contact messages and user concerns.",
-    href: "/admin/messages",
-    icon: "💬",
-  },
-  {
-    title: "Upgrades",
-    description: "Review premium upgrade requests.",
-    href: "/admin/upgrades",
-    icon: "⬆️",
-  },
-  {
-    title: "Users",
-    description: "View registered users and manage profiles.",
-    href: "/admin/users",
-    icon: "👥",
-  },
-]
+type NotificationItem = {
+  id: string
+  type: "user" | "message"
+  title: string
+  subtitle: string
+  meta?: string
+  rawDate?: string | null
+}
 
-const defaultStats: StatItem[] = [
-  { label: "Categories", value: "0", icon: "📂", color: "#2563eb" },
-  { label: "Files", value: "0", icon: "📁", color: "#0f172a" },
-  { label: "Messages", value: "0", icon: "💬", color: "#dc2626" },
-  { label: "Upgrades", value: "0", icon: "⬆️", color: "#16a34a" },
-  { label: "Total Users", value: "0", icon: "👥", color: "#7c3aed" },
-  { label: "Using Website", value: "0", icon: "🌐", color: "#ea580c" },
-  { label: "Online Users", value: "0", icon: "🟢", color: "#059669" },
-]
+const DISMISSED_USER_NOTIFICATIONS_KEY = "jb_admin_dismissed_user_notifications"
+const DISMISSED_MESSAGE_NOTIFICATIONS_KEY = "jb_admin_dismissed_message_notifications"
 
 function getDisplayName(user: RecentUser) {
   return (
@@ -91,13 +51,6 @@ function getDisplayName(user: RecentUser) {
     user.email?.trim() ||
     "Unknown User"
   )
-}
-
-function getInitials(value: string) {
-  const parts = value.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return "U"
-  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase()
-  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase()
 }
 
 function formatDate(value?: string | null) {
@@ -124,17 +77,58 @@ function isUserOnline(lastSeen?: string | null) {
   return Date.now() - time <= 5 * 60 * 1000
 }
 
+function readDismissedIds(key: string) {
+  if (typeof window === "undefined") return [] as string[]
+
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return []
+
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+
+    return parsed.filter((value): value is string => typeof value === "string")
+  } catch {
+    return []
+  }
+}
+
+function writeDismissedIds(key: string, ids: string[]) {
+  if (typeof window === "undefined") return
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify(Array.from(new Set(ids))))
+  } catch {
+    // ignore localStorage write errors
+  }
+}
+
 export default function AdminPage() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
 
   const [checkingAdmin, setCheckingAdmin] = useState(true)
-  const [stats, setStats] = useState<StatItem[]>(defaultStats)
-  const [recentUsers, setRecentUsers] = useState<RecentUser[]>([])
-  const [loadingRecent, setLoadingRecent] = useState(true)
+  const [loadingData, setLoadingData] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
-  const loadStats = useCallback(async (): Promise<{
-    stats: StatItem[]
+  const [messageCount, setMessageCount] = useState(0)
+  const [upgradeCount, setUpgradeCount] = useState(0)
+  const [userNotifications, setUserNotifications] = useState<NotificationItem[]>([])
+  const [messageNotifications, setMessageNotifications] = useState<NotificationItem[]>([])
+
+  const [dismissedUserNotificationIds, setDismissedUserNotificationIds] = useState<string[]>([])
+  const [dismissedMessageNotificationIds, setDismissedMessageNotificationIds] = useState<string[]>([])
+  const [storageReady, setStorageReady] = useState(false)
+
+  useEffect(() => {
+    setDismissedUserNotificationIds(readDismissedIds(DISMISSED_USER_NOTIFICATIONS_KEY))
+    setDismissedMessageNotificationIds(readDismissedIds(DISMISSED_MESSAGE_NOTIFICATIONS_KEY))
+    setStorageReady(true)
+  }, [])
+
+  const loadDashboard = useCallback(async (): Promise<{
+    messageCount: number
+    upgradeCount: number
     recentUsers: RecentUser[]
   }> => {
     try {
@@ -152,71 +146,85 @@ export default function AdminPage() {
       }
 
       return {
-        stats: [
-          {
-            label: "Categories",
-            value: String(data.categories ?? 0),
-            icon: "📂",
-            color: "#2563eb",
-          },
-          {
-            label: "Files",
-            value: String(data.files ?? 0),
-            icon: "📁",
-            color: "#0f172a",
-          },
-          {
-            label: "Messages",
-            value: String(data.messages ?? 0),
-            icon: "💬",
-            color: "#dc2626",
-          },
-          {
-            label: "Upgrades",
-            value: String(data.upgrades ?? 0),
-            icon: "⬆️",
-            color: "#16a34a",
-          },
-          {
-            label: "Total Users",
-            value: String(data.users ?? 0),
-            icon: "👥",
-            color: "#7c3aed",
-          },
-          {
-            label: "Using Website",
-            value: String(data.activeToday ?? 0),
-            icon: "🌐",
-            color: "#ea580c",
-            helper: "Active within 24 hours",
-          },
-          {
-            label: "Online Users",
-            value: String(data.onlineUsers ?? 0),
-            icon: "🟢",
-            color: "#059669",
-            helper: "Active within 5 minutes",
-          },
-        ],
+        messageCount: Number(data.messages ?? 0),
+        upgradeCount: Number(data.upgrades ?? 0),
         recentUsers: Array.isArray(data.recentUsers) ? data.recentUsers : [],
       }
     } catch (error) {
-      console.error("Failed to load admin stats:", error)
+      console.error("Failed to load admin dashboard:", error)
       return {
-        stats: defaultStats,
+        messageCount: 0,
+        upgradeCount: 0,
         recentUsers: [],
       }
     }
   }, [])
 
+  const applyNotifications = useCallback(
+    (loaded: { messageCount: number; upgradeCount: number; recentUsers: RecentUser[] }) => {
+      const nextUserNotifications: NotificationItem[] = loaded.recentUsers
+        .map((userItem) => {
+          const displayName = getDisplayName(userItem)
+          const online = isUserOnline(userItem.last_seen)
+
+          return {
+            id: userItem.id,
+            type: "user" as const,
+            title: displayName,
+            subtitle: online ? "User is online now." : "New registered user.",
+            meta: `Registered: ${formatDate(userItem.created_at)}`,
+            rawDate: userItem.created_at || null,
+          }
+        })
+        .filter((item) => !dismissedUserNotificationIds.includes(item.id))
+
+      const rawMessageNotifications: NotificationItem[] = [
+        {
+          id: `messages-count-${loaded.messageCount}`,
+          type: "message",
+          title: `${loaded.messageCount} message notification${loaded.messageCount === 1 ? "" : "s"}`,
+          subtitle: "User contact messages waiting for review.",
+        },
+        {
+          id: `upgrades-count-${loaded.upgradeCount}`,
+          type: "message",
+          title: `${loaded.upgradeCount} upgrade notification${loaded.upgradeCount === 1 ? "" : "s"}`,
+          subtitle: "Premium upgrade requests merged into Messages.",
+        },
+      ]
+
+      const nextMessageNotifications = rawMessageNotifications.filter(
+        (item) => !dismissedMessageNotificationIds.includes(item.id)
+      )
+
+      setMessageCount(loaded.messageCount)
+      setUpgradeCount(loaded.upgradeCount)
+      setUserNotifications(nextUserNotifications)
+      setMessageNotifications(nextMessageNotifications)
+    },
+    [dismissedMessageNotificationIds, dismissedUserNotificationIds]
+  )
+
+  const refreshDashboard = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      const loaded = await loadDashboard()
+      applyNotifications(loaded)
+    } finally {
+      setRefreshing(false)
+      setLoadingData(false)
+    }
+  }, [applyNotifications, loadDashboard])
+
   useEffect(() => {
+    if (!storageReady) return
+
     let isMounted = true
-    let refreshInterval: ReturnType<typeof setInterval> | null = null
 
     async function init() {
       try {
         setCheckingAdmin(true)
-        setLoadingRecent(true)
+        setLoadingData(true)
 
         const {
           data: { user },
@@ -247,21 +255,12 @@ export default function AdminPage() {
           return
         }
 
-        const loaded = await loadStats()
+        const loaded = await loadDashboard()
 
         if (isMounted) {
-          setStats(loaded.stats)
-          setRecentUsers(loaded.recentUsers)
-          setLoadingRecent(false)
+          applyNotifications(loaded)
+          setLoadingData(false)
         }
-
-        refreshInterval = setInterval(async () => {
-          const refreshed = await loadStats()
-          if (isMounted) {
-            setStats(refreshed.stats)
-            setRecentUsers(refreshed.recentUsers)
-          }
-        }, 5000)
       } catch (error) {
         console.error("Admin auth check failed:", error)
         router.replace("/secure-admin-portal-7X9?error=failed")
@@ -274,38 +273,30 @@ export default function AdminPage() {
 
     init()
 
-    const channel = supabase
-      .channel("admin-dashboard-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "profiles" },
-        async () => {
-          const refreshed = await loadStats()
-          if (isMounted) {
-            setStats(refreshed.stats)
-            setRecentUsers(refreshed.recentUsers)
-            setLoadingRecent(false)
-          }
-        }
-      )
-      .subscribe()
-
     return () => {
       isMounted = false
-      if (refreshInterval) {
-        clearInterval(refreshInterval)
-      }
-      supabase.removeChannel(channel)
     }
-  }, [router, supabase, loadStats])
+  }, [applyNotifications, loadDashboard, router, storageReady, supabase])
+
+  function removeUserNotification(id: string) {
+    const nextIds = Array.from(new Set([...dismissedUserNotificationIds, id]))
+    setDismissedUserNotificationIds(nextIds)
+    writeDismissedIds(DISMISSED_USER_NOTIFICATIONS_KEY, nextIds)
+    setUserNotifications((prev) => prev.filter((item) => item.id !== id))
+  }
+
+  function removeMessageNotification(id: string) {
+    const nextIds = Array.from(new Set([...dismissedMessageNotificationIds, id]))
+    setDismissedMessageNotificationIds(nextIds)
+    writeDismissedIds(DISMISSED_MESSAGE_NOTIFICATIONS_KEY, nextIds)
+    setMessageNotifications((prev) => prev.filter((item) => item.id !== id))
+  }
 
   if (checkingAdmin) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-[#eef4ff] via-[#f8fbff] to-white px-4">
-        <div className="rounded-[24px] border border-slate-200 bg-white px-8 py-6 text-center shadow-[0_12px_28px_rgba(0,0,0,0.05)]">
-          <p className="text-lg font-bold text-slate-800">
-            Checking admin access.
-          </p>
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="rounded-[24px] border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
+          <p className="text-lg font-bold text-slate-800">Checking admin access.</p>
           <p className="mt-2 text-sm text-slate-500">Please wait.</p>
         </div>
       </div>
@@ -313,170 +304,152 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#eef4ff] via-[#f8fbff] to-white px-4 py-5 text-slate-900 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+    <div className="min-h-screen bg-slate-50 px-4 py-4 text-slate-900 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       <div className="mx-auto w-full max-w-7xl">
         <AdminHeader />
 
-        <div className="mb-6 rounded-[24px] bg-gradient-to-br from-slate-900 via-blue-900 to-blue-600 px-5 py-6 text-white shadow-[0_20px_45px_rgba(37,99,235,0.18)] sm:mb-7 sm:rounded-[28px] sm:px-7 sm:py-8 lg:mb-8 lg:px-8 lg:py-9">
-          <div className="text-xs font-extrabold uppercase tracking-[0.16em] text-white/90 sm:text-sm">
-            ADMIN OVERVIEW
-          </div>
-
-          <h1 className="mt-3 text-3xl font-extrabold leading-tight sm:text-4xl lg:mt-4 lg:text-[46px]">
-            Welcome to your admin workspace
-          </h1>
-
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-blue-100 sm:text-base lg:text-lg">
-            Manage categories, files, messages, users, upgrade requests, and live
-            user activity from one clean dashboard.
-          </p>
-        </div>
-
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 lg:gap-5">
-          {stats.map((item) => (
-            <div
-              key={item.label}
-              className="rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(0,0,0,0.05)] sm:rounded-[22px] sm:p-6"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-bold text-slate-500">
-                    {item.label}
-                  </div>
-                  <div
-                    className="mt-2 text-3xl font-extrabold sm:text-4xl lg:text-[42px]"
-                    style={{ color: item.color }}
-                  >
-                    {item.value}
-                  </div>
-                  {item.helper ? (
-                    <div className="mt-2 text-xs font-medium text-slate-400">
-                      {item.helper}
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-blue-50 text-3xl sm:h-[58px] sm:w-[58px]">
-                  {item.icon}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-          {cards.map((card) => (
-            <Link
-              key={card.title}
-              href={card.href}
-              className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-[0_12px_28px_rgba(0,0,0,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(0,0,0,0.08)]"
-            >
-              <div className="flex h-20 w-20 items-center justify-center rounded-[26px] bg-blue-50 text-4xl">
-                {card.icon}
-              </div>
-
-              <h2 className="mt-7 text-2xl font-extrabold text-slate-900">
-                {card.title}
-              </h2>
-
-              <p className="mt-5 text-lg leading-10 text-slate-600">
-                {card.description}
-              </p>
-
-              <div className="mt-8 text-xl font-extrabold text-blue-600">
-                Open page →
-              </div>
-            </Link>
-          ))}
-        </div>
-
-        <div className="mt-8 rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(0,0,0,0.05)] sm:rounded-[28px] sm:p-6">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-5 rounded-[24px] border border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-2xl font-extrabold text-slate-900">
-                Recent Registered Users
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Latest users who signed up, with their current activity status.
+              <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-slate-500">
+                Admin Panel
+              </div>
+              <h1 className="mt-2 text-2xl font-black text-slate-950 sm:text-3xl">
+                Notifications Dashboard
+              </h1>
+              <p className="mt-2 text-sm text-slate-500">
+                Review new user activity and merged message notifications in one place.
               </p>
             </div>
 
-            <div className="rounded-full bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700">
-              {recentUsers.length} recent user{recentUsers.length === 1 ? "" : "s"}
-            </div>
+            <button
+              type="button"
+              onClick={refreshDashboard}
+              disabled={refreshing}
+              className="inline-flex w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70 md:w-auto"
+            >
+              {refreshing ? "Refreshing..." : "Refresh"}
+            </button>
           </div>
+        </div>
 
-          <div className="mt-5">
-            {loadingRecent ? (
-              <div className="rounded-[20px] bg-slate-50 px-4 py-10 text-center text-sm font-semibold text-slate-500">
-                Loading recent users...
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+          <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-black text-slate-950 sm:text-2xl">
+                  User Notifications
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  New user registrations and current activity.
+                </p>
               </div>
-            ) : recentUsers.length === 0 ? (
+
+              <div className="inline-flex w-fit items-center rounded-full bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700">
+                {userNotifications.length} notification{userNotifications.length === 1 ? "" : "s"}
+              </div>
+            </div>
+
+            {loadingData ? (
               <div className="rounded-[20px] bg-slate-50 px-4 py-10 text-center text-sm font-semibold text-slate-500">
-                No recent users found.
+                Loading user notifications...
+              </div>
+            ) : userNotifications.length === 0 ? (
+              <div className="rounded-[20px] border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm font-semibold text-slate-500">
+                No user notifications.
               </div>
             ) : (
-              <div className="overflow-hidden rounded-[20px] border border-slate-200">
-                <div className="hidden grid-cols-[1.4fr_1.2fr_1fr_0.8fr] gap-4 bg-slate-50 px-5 py-4 text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500 md:grid">
-                  <div>User</div>
-                  <div>Email</div>
-                  <div>Registered</div>
-                  <div>Status</div>
-                </div>
-
-                <div className="divide-y divide-slate-200">
-                  {recentUsers.map((user) => {
-                    const displayName = getDisplayName(user)
-                    const online = isUserOnline(user.last_seen)
-
-                    return (
-                      <div
-                        key={user.id}
-                        className="grid grid-cols-1 gap-4 px-4 py-4 sm:px-5 md:grid-cols-[1.4fr_1.2fr_1fr_0.8fr] md:items-center"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-extrabold text-blue-700">
-                            {getInitials(displayName)}
+              <div className="space-y-3">
+                {userNotifications.map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-[20px] border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="text-base font-extrabold text-slate-900">
+                          {item.title}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-600">{item.subtitle}</div>
+                        {item.meta ? (
+                          <div className="mt-2 text-xs font-medium text-slate-500">
+                            {item.meta}
                           </div>
-
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-extrabold text-slate-900 sm:text-base">
-                              {displayName}
-                            </div>
-                            <div className="mt-1 text-xs font-medium text-slate-500">
-                              Role: {user.role || "user"}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="truncate text-sm font-medium text-slate-600">
-                          {user.email || "—"}
-                        </div>
-
-                        <div className="text-sm font-medium text-slate-600">
-                          {formatDate(user.created_at)}
-                        </div>
-
-                        <div>
-                          {online ? (
-                            <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-extrabold text-emerald-700">
-                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                              Online
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-extrabold text-slate-600">
-                              <span className="h-2.5 w-2.5 rounded-full bg-slate-400" />
-                              Offline
-                            </span>
-                          )}
-                        </div>
+                        ) : null}
                       </div>
-                    )
-                  })}
-                </div>
+
+                      <button
+                        type="button"
+                        onClick={() => removeUserNotification(item.id)}
+                        className="shrink-0 rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-100"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-          </div>
+          </section>
+
+          <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="mb-5">
+              <h2 className="text-xl font-black text-slate-950 sm:text-2xl">
+                Message Notifications
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Contact messages and upgrade requests are merged here.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-[20px] bg-slate-50 p-4">
+                <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                  Messages
+                </div>
+                <div className="mt-2 text-3xl font-black text-slate-950">{messageCount}</div>
+              </div>
+
+              <div className="rounded-[20px] bg-slate-50 p-4">
+                <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                  Upgrades
+                </div>
+                <div className="mt-2 text-3xl font-black text-slate-950">{upgradeCount}</div>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {messageNotifications.length === 0 ? (
+                <div className="rounded-[20px] border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm font-semibold text-slate-500">
+                  No message notifications.
+                </div>
+              ) : (
+                messageNotifications.map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-[20px] border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="text-base font-extrabold text-slate-900">
+                          {item.title}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-600">{item.subtitle}</div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => removeMessageNotification(item.id)}
+                        className="shrink-0 rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-100"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
         </div>
       </div>
     </div>
