@@ -14,7 +14,9 @@ const navItems = [
 ]
 
 export default function AdminHeader() {
-  const pathname = usePathname()
+  const rawPathname = usePathname()
+  const pathname = rawPathname ?? "" // ✅ FIX HERE
+
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
 
