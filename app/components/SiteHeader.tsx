@@ -19,7 +19,9 @@ const navItems = [
 ]
 
 export default function SiteHeader() {
-  const pathname = usePathname()
+  const rawPathname = usePathname()
+  const pathname = rawPathname ?? "" // ✅ FIX HERE
+
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
 
@@ -82,21 +84,19 @@ export default function SiteHeader() {
         {/* HEADER CONTENT */}
         <div className="flex items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
 
-          {/* LEFT (LOGO + NAME) */}
+          {/* LEFT */}
           <Link href="/dashboard" className="flex items-center gap-3">
             <img
               src="/jb-logo.png"
               alt="JB Collections"
               className="h-10 w-10 object-contain"
             />
-
-            {/* ✅ FIX: removed truncate so full name shows */}
             <div className="text-[18px] font-black tracking-[0.15em] text-white sm:text-[20px] lg:text-[22px] whitespace-nowrap">
               JB COLLECTIONS
             </div>
           </Link>
 
-          {/* MOBILE MENU BUTTON */}
+          {/* MOBILE BUTTON */}
           <button
             type="button"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
@@ -105,7 +105,7 @@ export default function SiteHeader() {
             ☰
           </button>
 
-          {/* RIGHT NAV */}
+          {/* NAV */}
           <div className="hidden items-center gap-2 lg:flex">
             {navItems.map((item) => {
               const active = isActive(item.href)
@@ -126,7 +126,6 @@ export default function SiteHeader() {
               )
             })}
 
-            {/* LOGOUT */}
             <button
               onClick={handleLogout}
               disabled={loggingOut}
