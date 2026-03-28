@@ -1,6 +1,13 @@
 import "./globals.css"
 import type { Metadata } from "next"
 import Link from "next/link"
+import { headers } from "next/headers"
+import AdSlot from "@/app/components/AdSlot"
+
+// 🔥 PUT YOUR REAL AD CODES HERE
+const TOP_AD = `<!-- top banner ad code -->`
+const MIDDLE_AD = `<!-- in content ad code -->`
+const BOTTOM_AD = `<!-- bottom ad code -->`
 
 export const metadata: Metadata = {
   title: "JB Collections",
@@ -31,6 +38,13 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  const pathname = headers().get("x-pathname") || ""
+
+  const hideAds =
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/signup")
+
   return (
     <html lang="en">
       <head>
@@ -43,10 +57,35 @@ export default function RootLayout({
       </head>
 
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased flex flex-col">
-        
+
+        {/* 🔝 TOP AD */}
+        {!hideAds && (
+          <div className="w-full bg-white border-b">
+            <div className="max-w-6xl mx-auto px-4 py-3">
+              <AdSlot code={TOP_AD} />
+            </div>
+          </div>
+        )}
+
         {/* MAIN CONTENT */}
         <main className="flex-1">
+
+          {/* 🔹 MIDDLE AD (before content) */}
+          {!hideAds && (
+            <div className="max-w-6xl mx-auto px-4 pt-4">
+              <AdSlot code={MIDDLE_AD} />
+            </div>
+          )}
+
           {children}
+
+          {/* 🔻 BOTTOM AD */}
+          {!hideAds && (
+            <div className="max-w-6xl mx-auto px-4 py-6">
+              <AdSlot code={BOTTOM_AD} />
+            </div>
+          )}
+
         </main>
 
         {/* FOOTER */}

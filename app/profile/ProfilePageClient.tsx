@@ -19,6 +19,40 @@ type UserProfile = {
   role?: string | null
 }
 
+function normalizeMembership(profile: UserProfile | null) {
+  const role = String(profile?.role || "").trim().toLowerCase()
+  const membership = String(profile?.membership || "").trim().toLowerCase()
+
+  if (role === "admin") return "admin"
+  if (membership === "platinum") return "platinum"
+  if (membership === "premium") return "premium"
+  if (profile?.is_premium) return "premium"
+  return "standard"
+}
+
+function getMembershipLabel(level: string) {
+  if (level === "admin") return "Administrator"
+  if (level === "platinum") return "Platinum User"
+  if (level === "premium") return "Premium User"
+  return "Standard User"
+}
+
+function getMembershipBadgeClasses(level: string) {
+  if (level === "admin") {
+    return "inline-flex items-center rounded-xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-bold text-violet-700"
+  }
+
+  if (level === "platinum") {
+    return "inline-flex items-center rounded-xl border border-fuchsia-200 bg-fuchsia-50 px-3 py-1.5 text-sm font-bold text-fuchsia-700"
+  }
+
+  if (level === "premium") {
+    return "inline-flex items-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-bold text-emerald-700"
+  }
+
+  return "inline-flex items-center rounded-xl border border-slate-200 bg-slate-100 px-3 py-1.5 text-sm font-bold text-slate-700"
+}
+
 export default function ProfilePageClient() {
   const supabase = createClient()
   const router = useRouter()
@@ -142,21 +176,16 @@ export default function ProfilePageClient() {
 
   const displayEmail = profile?.email || authEmail || "No email"
 
-  const isPremiumUser =
-    profile?.role === "admin" ||
-    profile?.is_premium ||
-    profile?.membership === "premium"
+  const membershipLevel = useMemo(() => normalizeMembership(profile), [profile])
+  const displayMembership = getMembershipLabel(membershipLevel)
+  const membershipBadgeClasses = getMembershipBadgeClasses(membershipLevel)
 
-  const displayMembership = isPremiumUser
-    ? "Premium User"
-    : "Standard User"
+  const canUpgrade =
+    membershipLevel !== "premium" &&
+    membershipLevel !== "platinum" &&
+    membershipLevel !== "admin"
 
-  const displayStatus =
-    profile?.account_status || profile?.status || "Active"
-
-  const membershipBadgeClasses = isPremiumUser
-    ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
-    : "bg-slate-100 text-slate-700 border border-slate-200"
+  const displayStatus = profile?.account_status || profile?.status || "Active"
 
   return (
     <>
@@ -164,7 +193,6 @@ export default function ProfilePageClient() {
 
       <div className="min-h-screen bg-slate-50 pt-20">
         <div className="mx-auto w-full max-w-[1800px] px-4 py-6 lg:px-8">
-
           {successMessage && (
             <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
               {successMessage}
@@ -177,27 +205,35 @@ export default function ProfilePageClient() {
             </div>
           )}
 
-          {!isPremiumUser && (
+          {canUpgrade && (
             <div className="mb-8">
               <Link
                 href="/upgrade"
                 className="inline-flex items-center rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-bold text-blue-700 hover:bg-blue-100"
               >
-                Upgrade to Premium
+                Upgrade Membership
               </Link>
             </div>
           )}
 
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-2xl font-black text-slate-900">
-              Account Information
-            </h2>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-2xl font-black text-slate-900">Account Information</h2>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="inline-flex w-full items-center justify-center rounded-xl bg-red-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-red-600 disabled:opacity-70 sm:w-auto"
+              >
+                {loggingOut ? "Logging out..." : "Logout"}
+              </button>
+            </div>
 
             {loading ? (
               <p className="mt-4">Loading...</p>
             ) : (
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
-
                 <div className="rounded-2xl border bg-slate-50 p-5">
                   <p className="text-xs text-slate-400">Full Name</p>
                   <p className="text-lg font-semibold">{displayName}</p>
@@ -205,29 +241,23 @@ export default function ProfilePageClient() {
 
                 <div className="rounded-2xl border bg-slate-50 p-5">
                   <p className="text-xs text-slate-400">Email</p>
-                  <p className="text-lg font-semibold break-all">
-                    {displayEmail}
-                  </p>
+                  <p className="break-all text-lg font-semibold">{displayEmail}</p>
                 </div>
 
                 <div className="rounded-2xl border bg-slate-50 p-5">
                   <p className="text-xs text-slate-400">Membership</p>
-                  <span className={membershipBadgeClasses}>
-                    {displayMembership}
-                  </span>
+                  <div className="mt-2">
+                    <span className={membershipBadgeClasses}>{displayMembership}</span>
+                  </div>
                 </div>
 
                 <div className="rounded-2xl border bg-slate-50 p-5">
                   <p className="text-xs text-slate-400">Status</p>
-                  <p className="text-lg font-semibold text-emerald-600">
-                    {displayStatus}
-                  </p>
+                  <p className="text-lg font-semibold text-emerald-600">{displayStatus}</p>
                 </div>
-
               </div>
             )}
           </div>
-
         </div>
       </div>
     </>
