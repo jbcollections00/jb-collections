@@ -33,12 +33,14 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const pathname = headers().get("x-pathname") || ""
+  // ✅ FIX HERE
+  const headerList = await headers()
+  const pathname = headerList.get("x-pathname") || ""
 
   const hideAds =
     pathname.startsWith("/admin") ||
@@ -70,7 +72,7 @@ export default function RootLayout({
         {/* MAIN CONTENT */}
         <main className="flex-1">
 
-          {/* 🔹 MIDDLE AD (before content) */}
+          {/* 🔹 MIDDLE AD */}
           {!hideAds && (
             <div className="max-w-6xl mx-auto px-4 pt-4">
               <AdSlot code={MIDDLE_AD} />
@@ -93,18 +95,10 @@ export default function RootLayout({
           <div className="max-w-6xl mx-auto px-4 flex flex-col items-center gap-3 text-sm text-slate-500">
 
             <div className="flex flex-wrap justify-center gap-4">
-              <Link href="/terms" className="hover:text-slate-900">
-                Terms
-              </Link>
-              <Link href="/privacy" className="hover:text-slate-900">
-                Privacy Policy
-              </Link>
-              <Link href="/disclaimer" className="hover:text-slate-900">
-                Disclaimer
-              </Link>
-              <Link href="/refund-policy" className="hover:text-slate-900">
-                Refund Policy
-              </Link>
+              <Link href="/terms" className="hover:text-slate-900">Terms</Link>
+              <Link href="/privacy" className="hover:text-slate-900">Privacy Policy</Link>
+              <Link href="/disclaimer" className="hover:text-slate-900">Disclaimer</Link>
+              <Link href="/refund-policy" className="hover:text-slate-900">Refund Policy</Link>
             </div>
 
             <div className="text-xs text-slate-400">
