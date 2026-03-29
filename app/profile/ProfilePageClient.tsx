@@ -24,9 +24,15 @@ type UserProfile = {
 type UsernameStatus =
   | { state: "idle"; message: "" }
   | { state: "checking"; message: "Checking username..." }
-  | { state: "available"; message: "Username is available." }
+  | {
+      state: "available"
+      message: "Username is available." | "This is your current username."
+    }
   | { state: "taken"; message: "Username is already taken." }
-  | { state: "invalid"; message: "Username must be 3-30 characters and only use letters, numbers, dot, underscore, or dash." }
+  | {
+      state: "invalid"
+      message: "Username must be 3-30 characters and only use letters, numbers, dot, underscore, or dash."
+    }
   | { state: "error"; message: "Could not check username right now." }
 
 function normalizeMembership(profile: UserProfile | null) {
@@ -245,7 +251,10 @@ export default function ProfilePageClient() {
       }
 
       if (normalized === (profile?.username || "")) {
-        setUsernameStatus({ state: "available", message: "This is your current username." })
+        setUsernameStatus({
+          state: "available",
+          message: "This is your current username.",
+        })
         return
       }
 
@@ -730,7 +739,11 @@ export default function ProfilePageClient() {
                 </button>
 
                 <span className="text-sm text-slate-500">
-                  {saving ? "Saving changes..." : hasUnsavedChanges ? "Unsaved changes detected." : "All changes saved."}
+                  {saving
+                    ? "Saving changes..."
+                    : hasUnsavedChanges
+                    ? "Unsaved changes detected."
+                    : "All changes saved."}
                 </span>
               </div>
             </section>
