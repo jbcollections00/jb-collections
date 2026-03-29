@@ -955,35 +955,6 @@ function UpgradePageContent() {
             >
               Choose the membership level that matches the content you want to unlock.
             </p>
-
-            <div
-              style={{
-                display: "flex",
-                gap: "12px",
-                justifyContent: "center",
-                flexWrap: "wrap",
-                marginTop: "16px",
-              }}
-            >
-              <Link
-                href="/categories"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "12px 20px",
-                  borderRadius: "14px",
-                  background: "#ffffff",
-                  color: "#0f172a",
-                  textDecoration: "none",
-                  fontWeight: 700,
-                  fontSize: "15px",
-                  border: "1px solid #cbd5e1",
-                }}
-              >
-                Back to Categories
-              </Link>
-            </div>
           </footer>
         </div>
       </div>
