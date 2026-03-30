@@ -14,7 +14,7 @@ export default function LayoutShell({
 }: {
   children: React.ReactNode
 }) {
-  const pathname = usePathname()
+  const pathname = usePathname() ?? ""
 
   const hideAds =
     pathname.startsWith("/admin") ||
