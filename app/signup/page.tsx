@@ -318,7 +318,12 @@ function SignupPageContent() {
             </span>
           ) : (
             <>
-              <span style={{ fontSize: "20px", fontWeight: 800 }}>G</span>
+              <Image
+                src="/google.svg"
+                alt="Google"
+                width={20}
+                height={20}
+              />
               Continue with Google
             </>
           )}
@@ -490,7 +495,7 @@ function PasswordInput({
             onClick={onToggleShow}
             style={showButton}
           >
-            {show ? "Hide" : "Show"}
+            {show ? "🙈" : "👁️"}
           </button>
         </div>
 

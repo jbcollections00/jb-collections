@@ -183,7 +183,7 @@ export default function LoginPage() {
                 onClick={() => setShowPassword((p) => !p)}
                 style={showButton}
               >
-                {showPassword ? "Hide" : "Show"}
+                {showPassword ? "🙈" : "👁️"}
               </button>
             </div>
           </div>
@@ -246,7 +246,12 @@ export default function LoginPage() {
               </span>
             ) : (
               <>
-                <span style={{ fontSize: "20px", fontWeight: 800 }}>G</span>
+                <Image
+                  src="/google.svg"
+                  alt="Google"
+                  width={20}
+                  height={20}
+                />
                 Continue with Google
               </>
             )}

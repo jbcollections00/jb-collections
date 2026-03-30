@@ -1,16 +1,16 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   LayoutDashboard,
   User,
-  Inbox,
+  MessageSquare,
   LogOut,
   Send,
   Paperclip,
-  MessageSquare,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 
@@ -356,195 +356,199 @@ export default function MessagesPage() {
   const hasMessages = useMemo(() => messages.length > 0, [messages])
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-6 overflow-hidden rounded-[36px] bg-gradient-to-r from-cyan-600 via-sky-500 to-violet-600 p-6 shadow-2xl shadow-slate-300/40 sm:p-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-            <div className="max-w-2xl">
-              <p className="text-sm font-bold uppercase tracking-[0.45em] text-white/90 sm:text-[15px]">
-                J B Collections
-              </p>
-
-              <h1 className="mt-4 text-4xl font-extrabold leading-tight text-white sm:text-5xl">
-                Messages
-              </h1>
-
-              <p className="mt-4 max-w-xl text-base leading-7 text-white/90 sm:text-lg">
-                Chat with the admin in one continuous conversation, just like a messenger thread.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-              <Link
-                href="/dashboard"
-                className="inline-flex min-h-[56px] items-center justify-center gap-2 rounded-[22px] bg-gradient-to-b from-blue-600 to-blue-700 px-6 text-sm font-bold text-white shadow-lg"
-              >
-                <LayoutDashboard size={18} />
-                Dashboard
-              </Link>
-
-              <Link
-                href="/profile"
-                className="inline-flex min-h-[56px] items-center justify-center gap-2 rounded-[22px] bg-gradient-to-b from-blue-600 to-blue-700 px-6 text-sm font-bold text-white shadow-lg"
-              >
-                <User size={18} />
-                Profile
-              </Link>
-
-              <Link
-                href="/dashboard/inbox"
-                className="inline-flex min-h-[56px] items-center justify-center gap-2 rounded-[22px] bg-gradient-to-b from-blue-600 to-blue-700 px-6 text-sm font-bold text-white shadow-lg"
-              >
-                <Inbox size={18} />
-                Inbox
-              </Link>
-
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="inline-flex min-h-[56px] items-center justify-center gap-2 rounded-[22px] bg-gradient-to-b from-red-500 to-red-600 px-6 text-sm font-bold text-white shadow-lg"
-              >
-                <LogOut size={18} />
-                Logout
-              </button>
+    <main className="min-h-screen bg-[#f0f2f5]">
+      <div className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-3">
+            <Image
+              src="/jb-logo.png"
+              alt="JB Collections"
+              width={42}
+              height={42}
+              priority
+              className="h-[42px] w-[42px] rounded-full object-contain"
+            />
+            <div className="text-lg font-extrabold tracking-[0.14em] text-[#1877f2] sm:text-xl">
+              JB COLLECTIONS
             </div>
           </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/dashboard"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-slate-100 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+            >
+              <LayoutDashboard size={18} />
+              <span className="hidden sm:inline">Dashboard</span>
+            </Link>
+
+            <Link
+              href="/profile"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-slate-100 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+            >
+              <User size={18} />
+              <span className="hidden sm:inline">Profile</span>
+            </Link>
+
+            <Link
+              href="/messages"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#e7f3ff] px-4 text-sm font-bold text-[#1877f2]"
+            >
+              <MessageSquare size={18} />
+              <span className="hidden sm:inline">Messages</span>
+            </Link>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-red-500 px-4 text-sm font-bold text-white transition hover:bg-red-600"
+            >
+              <LogOut size={18} />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          </div>
         </div>
+      </div>
 
-        <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-          <section className="rounded-[30px] border border-white/60 bg-white/80 p-6 shadow-xl backdrop-blur">
-            <div className="rounded-[26px] bg-gradient-to-br from-blue-600 via-indigo-600 to-slate-900 p-6 text-white">
-              <div className="inline-flex items-center rounded-full bg-white/15 px-4 py-2 text-sm font-semibold backdrop-blur">
-                Support Chat
-              </div>
-
-              <h2 className="mt-5 text-3xl font-extrabold">Your Conversation</h2>
-
-              <p className="mt-3 text-sm leading-7 text-white/85">
-                Keep all your concerns, questions, and admin replies in one thread.
-              </p>
-
-              <div className="mt-6 rounded-2xl bg-white/10 p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.25em] text-white/70">
-                  Status
-                </p>
-                <p className="mt-2 text-lg font-bold capitalize">
-                  {conversation?.status || "No conversation yet"}
-                </p>
-              </div>
-
-              <div className="mt-4 rounded-2xl bg-white/10 p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.25em] text-white/70">
-                  Subject
-                </p>
-                <p className="mt-2 text-sm font-semibold text-white/90">
-                  {conversation?.subject || "Start your first conversation"}
-                </p>
+      <div className="mx-auto max-w-7xl px-0 sm:px-4 lg:px-8">
+        <div className="grid min-h-[calc(100vh-73px)] grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <aside className="hidden border-r border-slate-200 bg-white lg:flex lg:flex-col">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <div className="text-lg font-bold text-slate-900">Chats</div>
+              <div className="mt-1 text-sm text-slate-500">
+                {conversation?.subject || "Admin Support"}
               </div>
             </div>
-          </section>
 
-          <section className="flex min-h-[720px] flex-col overflow-hidden rounded-[30px] border border-white/60 bg-white/80 shadow-2xl backdrop-blur">
-            <div className="border-b border-slate-200 px-6 py-5 sm:px-8">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
-                  <MessageSquare size={22} />
+            <div className="flex-1 p-3">
+              <div className="flex items-center gap-3 rounded-2xl bg-[#e7f3ff] px-4 py-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#1877f2] text-white">
+                  <MessageSquare size={20} />
                 </div>
 
-                <div>
-                  <h2 className="text-2xl font-extrabold text-slate-900">
-                    {conversation?.subject || "New Conversation"}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-bold text-slate-900">
+                    Admin Support
+                  </div>
+                  <div className="truncate text-xs text-slate-500">
+                    {messages.length > 0
+                      ? messages[messages.length - 1]?.body || "Attachment sent"
+                      : "Start your conversation"}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <section className="flex min-h-[calc(100vh-73px)] flex-col bg-white">
+            <div className="border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#1877f2] text-white">
+                  <MessageSquare size={20} />
+                </div>
+
+                <div className="min-w-0">
+                  <h2 className="truncate text-base font-bold text-slate-900 sm:text-lg">
+                    Admin Support
                   </h2>
-                  <p className="text-sm text-slate-500">
+                  <p className="truncate text-xs text-slate-500 sm:text-sm">
                     {hasMessages
                       ? "Your messages and admin replies appear here."
-                      : "Send your first message to start chatting with the admin."}
+                      : "Start your conversation with the admin."}
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto bg-slate-50/70 px-4 py-6 sm:px-6">
+            <div className="flex-1 overflow-y-auto bg-[#f0f2f5] px-3 py-4 sm:px-5">
               {loading ? (
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
+                <div className="mx-auto max-w-3xl rounded-2xl bg-white p-4 text-sm text-slate-500 shadow-sm">
                   Loading conversation...
                 </div>
               ) : messages.length === 0 ? (
-                <div className="mx-auto max-w-xl rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center">
-                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                <div className="mx-auto mt-16 max-w-md rounded-3xl bg-white px-6 py-10 text-center shadow-sm">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#e7f3ff] text-[#1877f2]">
                     <MessageSquare size={28} />
                   </div>
-                  <h3 className="mt-4 text-xl font-extrabold text-slate-900">
-                    No messages yet
+                  <h3 className="mt-4 text-xl font-bold text-slate-900">
+                    Start a conversation
                   </h3>
-                  <p className="mt-2 text-sm leading-7 text-slate-500">
-                    Start the conversation below. The admin’s replies will appear here in the same thread.
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    Message the admin anytime. Replies will appear here like a Facebook chat thread.
                   </p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="mx-auto max-w-3xl space-y-3">
                   {messages.map((item) => {
                     const isUser = item.sender_role === "user"
 
                     return (
                       <div
                         key={item.id}
-                        className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+                        className={`flex items-end gap-2 ${isUser ? "justify-end" : "justify-start"}`}
                       >
-                        <div
-                          className={`max-w-[85%] rounded-[24px] px-4 py-3 shadow-sm sm:max-w-[72%] ${
-                            isUser
-                              ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white"
-                              : "border border-slate-200 bg-white text-slate-900"
-                          }`}
-                        >
-                          <div className="mb-1 text-xs font-bold uppercase tracking-wide opacity-80">
-                            {isUser ? "You" : "Admin"}
+                        {!isUser && (
+                          <div className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1877f2] text-white">
+                            <MessageSquare size={14} />
                           </div>
+                        )}
 
-                          {item.body && (
-                            <div className="whitespace-pre-wrap text-sm leading-7">
-                              {item.body}
-                            </div>
-                          )}
-
-                          {item.attachment_url && (
-                            <div className={`${item.body ? "mt-3" : ""}`}>
-                              <a
-                                href={item.attachment_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold ${
-                                  isUser
-                                    ? "bg-white/15 text-white"
-                                    : "border border-blue-200 bg-blue-50 text-blue-700"
-                                }`}
-                              >
-                                📎 {getAttachmentName(item.attachment_url)}
-                              </a>
-                            </div>
-                          )}
-
+                        <div className={`max-w-[85%] sm:max-w-[72%] ${isUser ? "order-1" : ""}`}>
                           <div
-                            className={`mt-2 text-[11px] ${
-                              isUser ? "text-white/75" : "text-slate-500"
+                            className={`rounded-3xl px-4 py-3 text-sm shadow-sm ${
+                              isUser
+                                ? "rounded-br-lg bg-[#1877f2] text-white"
+                                : "rounded-bl-lg bg-white text-slate-900"
                             }`}
                           >
-                            {formatTime(item.created_at)}
+                            {item.body && (
+                              <div className="whitespace-pre-wrap leading-6">
+                                {item.body}
+                              </div>
+                            )}
+
+                            {item.attachment_url && (
+                              <div className={`${item.body ? "mt-3" : ""}`}>
+                                <a
+                                  href={item.attachment_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold ${
+                                    isUser
+                                      ? "bg-white/15 text-white"
+                                      : "bg-[#e7f3ff] text-[#1877f2]"
+                                  }`}
+                                >
+                                  📎 {getAttachmentName(item.attachment_url)}
+                                </a>
+                              </div>
+                            )}
                           </div>
 
-                          {isUser && (
-                            <div className="mt-2 text-right">
+                          <div
+                            className={`mt-1 flex items-center gap-2 px-2 text-[11px] text-slate-500 ${
+                              isUser ? "justify-end" : "justify-start"
+                            }`}
+                          >
+                            <span>{formatTime(item.created_at)}</span>
+
+                            {isUser && (
                               <button
                                 type="button"
                                 onClick={() => deleteMyMessage(item.id, item.sender_id || "")}
-                                className="text-[11px] text-white/85 hover:underline"
+                                className="font-medium text-[#1877f2] hover:underline"
                               >
                                 Delete
                               </button>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
+
+                        {isUser && (
+                          <div className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-300 text-slate-700">
+                            <User size={14} />
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -553,94 +557,74 @@ export default function MessagesPage() {
               )}
             </div>
 
-            <div className="border-t border-slate-200 bg-white px-4 py-4 sm:px-6">
-              {(success || error) && (
-                <div
-                  className={`mb-4 rounded-2xl border px-4 py-3 text-sm font-medium ${
-                    success
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : "border-red-200 bg-red-50 text-red-700"
-                  }`}
-                >
-                  {success || error}
-                </div>
-              )}
-
-              <form onSubmit={handleSendMessage} className="space-y-4">
-                {!conversation && (
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Subject
-                    </label>
-                    <input
-                      value={subject}
-                      onChange={(e) => setSubject(e.target.value)}
-                      placeholder="What is this conversation about?"
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                    />
+            <div className="border-t border-slate-200 bg-white px-3 py-3 sm:px-5">
+              <div className="mx-auto max-w-3xl">
+                {(success || error) && (
+                  <div
+                    className={`mb-3 rounded-2xl border px-4 py-3 text-sm font-medium ${
+                      success
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-red-200 bg-red-50 text-red-700"
+                    }`}
+                  >
+                    {success || error}
                   </div>
                 )}
 
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Message
-                  </label>
-                  <textarea
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Write your message here..."
-                    rows={4}
-                    className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                  />
-                </div>
+                <form onSubmit={handleSendMessage} className="space-y-3">
+                  {!conversation && (
+                    <div>
+                      <input
+                        value={subject}
+                        onChange={(e) => setSubject(e.target.value)}
+                        placeholder="Subject of your first message..."
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1877f2] focus:bg-white focus:ring-4 focus:ring-[#e7f3ff]"
+                      />
+                    </div>
+                  )}
 
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Attachment (optional)
-                  </label>
+                  <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-2">
+                    <div className="flex items-end gap-2">
+                      <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#1877f2] transition hover:bg-[#e7f3ff]">
+                        <Paperclip size={20} />
+                        <input
+                          id="attachment-input"
+                          type="file"
+                          onChange={handleAttachmentChange}
+                          className="hidden"
+                        />
+                      </label>
 
-                  <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-4 transition hover:border-blue-400 hover:bg-blue-50">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-xl bg-slate-100 p-2">
-                        <Paperclip size={18} className="text-slate-700" />
-                      </div>
+                      <textarea
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        placeholder="Aa"
+                        rows={1}
+                        className="max-h-32 min-h-[44px] flex-1 resize-none bg-transparent px-2 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                      />
 
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">
-                          {attachment ? attachment.name : "Choose a file"}
-                        </p>
-                        <p className="text-xs text-slate-500">Max file size: 25MB</p>
-                      </div>
+                      <button
+                        type="submit"
+                        disabled={sending || uploading}
+                        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#1877f2] text-white transition hover:bg-[#166fe5] disabled:cursor-not-allowed disabled:opacity-60"
+                        title="Send message"
+                      >
+                        <Send size={18} />
+                      </button>
                     </div>
 
-                    <div className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">
-                      Browse
-                    </div>
-
-                    <input
-                      id="attachment-input"
-                      type="file"
-                      onChange={handleAttachmentChange}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-xs text-slate-500">
-                    {uploading ? "Uploading attachment..." : "Your messages stay in one thread."}
+                    {attachment && (
+                      <div className="mt-2 rounded-2xl bg-white px-3 py-2 text-xs font-medium text-slate-600">
+                        Attached: {attachment.name}
+                      </div>
+                    )}
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={sending || uploading}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <Send size={18} />
-                    {sending || uploading ? "Sending..." : "Send Message"}
-                  </button>
-                </div>
-              </form>
+                  <div className="px-1 text-xs text-slate-500">
+                    {uploading ? "Uploading attachment..." : "Messages stay in one continuous thread."}
+                  </div>
+                </form>
+              </div>
             </div>
           </section>
         </div>
