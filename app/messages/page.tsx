@@ -1,18 +1,18 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-  LayoutDashboard,
-  User,
   MessageSquare,
-  LogOut,
+  User,
   Send,
   Paperclip,
+  Trash2,
+  CornerDownLeft,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import SiteHeader from "@/app/components/SiteHeader"
 
 type Conversation = {
   id: string
@@ -56,6 +56,7 @@ export default function MessagesPage() {
   const [sending, setSending] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [deletingChat, setDeletingChat] = useState(false)
+  const [mobileChatsOpen, setMobileChatsOpen] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
 
@@ -258,6 +259,7 @@ export default function MessagesPage() {
       setMessage("")
       setAttachment(null)
       setSuccess("Conversation deleted.")
+      setMobileChatsOpen(false)
     } catch (err) {
       console.error("Delete conversation failed:", err)
       alert("Failed to delete conversation.")
@@ -387,6 +389,7 @@ export default function MessagesPage() {
       setMessage("")
       setAttachment(null)
       setSuccess("Message sent.")
+      setMobileChatsOpen(false)
 
       const fileInput = document.getElementById("attachment-input") as HTMLInputElement | null
       if (fileInput) fileInput.value = ""
@@ -427,296 +430,343 @@ export default function MessagesPage() {
 
   const hasMessages = useMemo(() => messages.length > 0, [messages])
 
+  const lastPreview = useMemo(() => {
+    if (messages.length === 0) return "Start your conversation"
+    const last = messages[messages.length - 1]
+    if (last.body?.trim()) return last.body
+    if (last.attachment_url) return "Attachment sent"
+    return "New message"
+  }, [messages])
+
   return (
-    <main className="min-h-screen bg-[#020617] text-white">
-      <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(99,102,241,0.18),_transparent_30%),linear-gradient(180deg,_#030712_0%,_#020617_45%,_#061229_100%)]" />
+    <>
+      <SiteHeader />
 
-      <div className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/75 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1800px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <Image
-              src="/jb-logo.png"
-              alt="JB Collections"
-              width={42}
-              height={42}
-              priority
-              className="h-[42px] w-[42px] rounded-full object-contain"
-            />
-            <div className="text-lg font-extrabold tracking-[0.14em] text-sky-400 sm:text-xl">
-              JB COLLECTIONS
-            </div>
-          </div>
+      <main className="min-h-screen bg-[#020617] pt-24 text-white sm:pt-28">
+        <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(99,102,241,0.18),_transparent_30%),linear-gradient(180deg,_#030712_0%,_#020617_45%,_#061229_100%)]" />
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/dashboard"
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-slate-200 transition hover:bg-white/[0.1]"
-            >
-              <LayoutDashboard size={18} />
-              <span className="hidden sm:inline">Dashboard</span>
-            </Link>
-
-            <Link
-              href="/profile"
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-slate-200 transition hover:bg-white/[0.1]"
-            >
-              <User size={18} />
-              <span className="hidden sm:inline">Profile</span>
-            </Link>
-
-            <Link
-              href="/messages"
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-sky-400/30 bg-sky-500/10 px-4 text-sm font-bold text-sky-300"
-            >
-              <MessageSquare size={18} />
-              <span className="hidden sm:inline">Messages</span>
-            </Link>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-red-500 px-4 text-sm font-bold text-white transition hover:bg-red-600"
-            >
-              <LogOut size={18} />
-              <span className="hidden sm:inline">Logout</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-[1800px] px-0 sm:px-4 lg:px-8">
-        <div className="grid min-h-[calc(100vh-73px)] grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-5 lg:py-5">
-          <aside className="hidden lg:flex lg:flex-col">
-            <div className="overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.04] shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-md">
-              <div className="border-b border-white/10 px-5 py-4">
-                <div className="text-lg font-black text-white">Chats</div>
-                <div className="mt-1 text-sm text-slate-300">
-                  {conversation?.subject || "Admin Support"}
-                </div>
-              </div>
-
-              <div className="p-3">
-                <div className="flex items-center gap-3 rounded-[22px] border border-sky-400/20 bg-sky-500/10 px-4 py-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white shadow-lg shadow-blue-950/40">
-                    <MessageSquare size={20} />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold text-white">Admin Support</div>
-                    <div className="truncate text-xs text-slate-300">
-                      {messages.length > 0
-                        ? messages[messages.length - 1]?.body || "Attachment sent"
-                        : "Start your conversation"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </aside>
-
-          <section className="flex min-h-[calc(100vh-73px)] flex-col overflow-hidden border-y border-white/10 bg-white/[0.03] shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-md sm:rounded-[30px] sm:border">
-            <div className="border-b border-white/10 bg-white/[0.03] px-4 py-3 sm:px-6">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white shadow-lg shadow-blue-950/40">
-                    <MessageSquare size={20} />
-                  </div>
-
-                  <div className="min-w-0">
-                    <h2 className="truncate text-base font-bold text-white sm:text-lg">
-                      Admin Support
-                    </h2>
-                    <p className="truncate text-xs text-slate-300 sm:text-sm">
-                      {hasMessages
-                        ? "Your messages and admin replies appear here."
-                        : "Start your conversation with the admin."}
-                    </p>
-                  </div>
-                </div>
-
-                {conversation && (
-                  <button
-                    type="button"
-                    onClick={deleteConversation}
-                    disabled={deletingChat}
-                    className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-red-400/20 bg-red-500/10 px-4 text-sm font-semibold text-red-300 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {deletingChat ? "Deleting..." : "Delete Chat"}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-5">
-              {loading ? (
-                <div className="mx-auto max-w-3xl rounded-[24px] border border-white/10 bg-white/[0.05] p-4 text-sm text-slate-300 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-                  Loading conversation...
-                </div>
-              ) : messages.length === 0 ? (
-                <div className="mx-auto mt-16 max-w-md rounded-[28px] border border-white/10 bg-white/[0.05] px-6 py-10 text-center shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-sky-500/10 text-sky-300">
-                    <MessageSquare size={28} />
-                  </div>
-                  <h3 className="mt-4 text-xl font-bold text-white">Start a conversation</h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">
-                    Message the admin anytime. Replies will appear here in one continuous thread.
+        <div className="mx-auto w-full max-w-[1800px] px-4 pb-6 sm:px-6 sm:pb-8 lg:px-8">
+          <section className="overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.04] shadow-[0_25px_80px_rgba(0,0,0,0.35)] backdrop-blur-md">
+            <div className="grid min-h-[calc(100vh-8rem)] grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
+              <aside className="hidden border-r border-white/10 bg-white/[0.03] lg:flex lg:flex-col">
+                <div className="border-b border-white/10 px-5 py-5">
+                  <h2 className="text-2xl font-black text-white">Chats</h2>
+                  <p className="mt-1 text-sm text-slate-300">
+                    {conversation?.subject || "Admin Support"}
                   </p>
                 </div>
-              ) : (
-                <div className="mx-auto max-w-3xl space-y-3">
-                  {messages.map((item) => {
-                    const isUser = item.sender_role === "user"
 
-                    return (
-                      <div
-                        key={item.id}
-                        className={`flex items-end gap-2 ${isUser ? "justify-end" : "justify-start"}`}
-                      >
-                        {!isUser && (
-                          <div className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white shadow-md">
-                            <MessageSquare size={14} />
-                          </div>
-                        )}
-
-                        <div className={`max-w-[85%] sm:max-w-[72%] ${isUser ? "order-1" : ""}`}>
-                          <div
-                            className={`rounded-3xl px-4 py-3 text-sm shadow-[0_10px_30px_rgba(0,0,0,0.18)] ${
-                              isUser
-                                ? "rounded-br-lg bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white"
-                                : "rounded-bl-lg border border-white/10 bg-white/[0.07] text-slate-100"
-                            }`}
-                          >
-                            {item.body && (
-                              <div className="whitespace-pre-wrap break-words leading-6">
-                                {item.body}
-                              </div>
-                            )}
-
-                            {item.attachment_url && (
-                              <div className={`${item.body ? "mt-3" : ""}`}>
-                                <a
-                                  href={item.attachment_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className={`inline-flex max-w-full items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold ${
-                                    isUser
-                                      ? "bg-white/15 text-white"
-                                      : "bg-sky-500/10 text-sky-300"
-                                  }`}
-                                >
-                                  <span className="shrink-0">📎</span>
-                                  <span className="truncate">
-                                    {getAttachmentName(item.attachment_url)}
-                                  </span>
-                                </a>
-                              </div>
-                            )}
-                          </div>
-
-                          <div
-                            className={`mt-1 flex items-center gap-2 px-2 text-[11px] text-slate-400 ${
-                              isUser ? "justify-end" : "justify-start"
-                            }`}
-                          >
-                            <span>{formatTime(item.created_at)}</span>
-
-                            {isUser && (
-                              <button
-                                type="button"
-                                onClick={() => deleteMyMessage(item.id, item.sender_id || "")}
-                                className="font-medium text-sky-300 hover:underline"
-                              >
-                                Delete
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {isUser && (
-                          <div className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-slate-200">
-                            <User size={14} />
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                  <div ref={bottomRef} />
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-white/10 bg-white/[0.03] px-3 py-3 sm:px-5">
-              <div className="mx-auto max-w-3xl">
-                {(success || error) && (
-                  <div
-                    className={`mb-3 rounded-2xl border px-4 py-3 text-sm font-medium ${
-                      success
-                        ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
-                        : "border-red-500/20 bg-red-500/10 text-red-300"
-                    }`}
+                <div className="p-4">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 rounded-[24px] border border-sky-400/20 bg-sky-500/10 px-4 py-4 text-left transition hover:bg-sky-500/15"
                   >
-                    {success || error}
-                  </div>
-                )}
-
-                <form onSubmit={handleSendMessage} className="space-y-3">
-                  {!conversation && (
-                    <div>
-                      <input
-                        value={subject}
-                        onChange={(e) => setSubject(e.target.value)}
-                        placeholder="Subject of your first message..."
-                        className="w-full rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:bg-white/[0.07] focus:ring-4 focus:ring-sky-500/10"
-                      />
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white shadow-lg shadow-blue-950/40">
+                      <MessageSquare size={22} />
                     </div>
-                  )}
 
-                  <div className="rounded-[28px] border border-white/10 bg-white/[0.05] p-2 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-                    <div className="flex items-end gap-2">
-                      <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-sky-300 transition hover:bg-white/[0.08]">
-                        <Paperclip size={20} />
-                        <input
-                          id="attachment-input"
-                          type="file"
-                          onChange={handleAttachmentChange}
-                          className="hidden"
-                        />
-                      </label>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-lg font-bold text-white">Admin Support</div>
+                      <div className="mt-1 truncate text-sm text-slate-300">{lastPreview}</div>
+                    </div>
+                  </button>
+                </div>
+              </aside>
 
-                      <textarea
-                        value={message}
-                        onChange={(e) => setMessage(e.target.value)}
-                        placeholder="Write your message..."
-                        rows={1}
-                        className="max-h-32 min-h-[44px] flex-1 resize-none bg-transparent px-2 py-3 text-sm text-white outline-none placeholder:text-slate-400"
-                      />
-
+              <section className="flex min-h-[calc(100vh-8rem)] flex-col">
+                <div className="border-b border-white/10 bg-white/[0.03] px-4 py-4 sm:px-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
                       <button
-                        type="submit"
-                        disabled={sending || uploading}
-                        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-                        title="Send message"
+                        type="button"
+                        onClick={() => setMobileChatsOpen(true)}
+                        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sky-300 transition hover:bg-white/[0.1] lg:hidden"
+                        aria-label="Open chats"
                       >
-                        <Send size={18} />
+                        <MessageSquare size={18} />
                       </button>
+
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white shadow-lg shadow-blue-950/40">
+                        <MessageSquare size={20} />
+                      </div>
+
+                      <div className="min-w-0">
+                        <h1 className="truncate text-xl font-black text-white sm:text-2xl">
+                          Admin Support
+                        </h1>
+                        <p className="truncate text-sm text-slate-300">
+                          {hasMessages
+                            ? "Your messages and admin replies appear here."
+                            : "Start your conversation with the admin."}
+                        </p>
+                      </div>
                     </div>
 
-                    {attachment && (
-                      <div className="mt-2 rounded-2xl bg-white/[0.06] px-3 py-2 text-xs font-medium text-slate-200">
-                        Attached: {attachment.name}
-                      </div>
+                    {conversation && (
+                      <button
+                        type="button"
+                        onClick={deleteConversation}
+                        disabled={deletingChat}
+                        className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-red-400/20 bg-red-500/10 px-4 text-sm font-semibold text-red-300 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Trash2 size={16} />
+                        <span className="hidden sm:inline">
+                          {deletingChat ? "Deleting..." : "Delete Chat"}
+                        </span>
+                      </button>
                     )}
                   </div>
+                </div>
 
-                  <div className="px-1 text-xs text-slate-400">
-                    {uploading ? "Uploading attachment..." : "Messages stay in one continuous thread."}
+                <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-5">
+                  {loading ? (
+                    <div className="mx-auto max-w-3xl rounded-[24px] border border-white/10 bg-white/[0.05] p-4 text-sm text-slate-300 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+                      Loading conversation...
+                    </div>
+                  ) : messages.length === 0 ? (
+                    <div className="mx-auto mt-14 max-w-xl rounded-[30px] border border-white/10 bg-white/[0.05] px-6 py-12 text-center shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+                      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-sky-500/10 text-sky-300">
+                        <MessageSquare size={34} />
+                      </div>
+                      <h3 className="mt-5 text-3xl font-black text-white">
+                        Start a conversation
+                      </h3>
+                      <p className="mx-auto mt-3 max-w-md text-base leading-7 text-slate-300">
+                        Message the admin anytime. Replies will appear here in one continuous thread.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mx-auto max-w-4xl space-y-4">
+                      {messages.map((item, index) => {
+                        const isUser = item.sender_role === "user"
+                        const previous = messages[index - 1]
+                        const showAvatar = !previous || previous.sender_role !== item.sender_role
+
+                        return (
+                          <div
+                            key={item.id}
+                            className={`flex items-end gap-2 ${isUser ? "justify-end" : "justify-start"}`}
+                          >
+                            {!isUser && (
+                              <div className="w-8 shrink-0">
+                                {showAvatar ? (
+                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white shadow-md">
+                                    <CornerDownLeft size={14} />
+                                  </div>
+                                ) : null}
+                              </div>
+                            )}
+
+                            <div className={`max-w-[88%] sm:max-w-[76%] ${isUser ? "order-1" : ""}`}>
+                              {!isUser && showAvatar ? (
+                                <div className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                  Admin
+                                </div>
+                              ) : null}
+
+                              <div
+                                className={`rounded-3xl px-4 py-3 text-sm shadow-[0_10px_30px_rgba(0,0,0,0.18)] ${
+                                  isUser
+                                    ? "rounded-br-lg bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white"
+                                    : "rounded-bl-lg border border-white/10 bg-white/[0.07] text-slate-100"
+                                }`}
+                              >
+                                {item.body && (
+                                  <div className="whitespace-pre-wrap break-words leading-6">
+                                    {item.body}
+                                  </div>
+                                )}
+
+                                {item.attachment_url && (
+                                  <div className={`${item.body ? "mt-3" : ""}`}>
+                                    <a
+                                      href={item.attachment_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={`inline-flex max-w-full items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold ${
+                                        isUser
+                                          ? "bg-white/15 text-white"
+                                          : "bg-sky-500/10 text-sky-300"
+                                      }`}
+                                    >
+                                      <Paperclip size={14} className="shrink-0" />
+                                      <span className="truncate">
+                                        {getAttachmentName(item.attachment_url)}
+                                      </span>
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div
+                                className={`mt-1 flex items-center gap-2 px-2 text-[11px] text-slate-400 ${
+                                  isUser ? "justify-end" : "justify-start"
+                                }`}
+                              >
+                                <span>{formatTime(item.created_at)}</span>
+
+                                {isUser && (
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteMyMessage(item.id, item.sender_id || "")}
+                                    className="font-medium text-sky-300 hover:underline"
+                                  >
+                                    Delete
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {isUser && (
+                              <div className="w-8 shrink-0">
+                                {showAvatar ? (
+                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-slate-200">
+                                    <User size={14} />
+                                  </div>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                      <div ref={bottomRef} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-white/10 bg-white/[0.03] px-3 py-3 sm:px-5">
+                  <div className="mx-auto max-w-4xl">
+                    {(success || error) && (
+                      <div
+                        className={`mb-3 rounded-2xl border px-4 py-3 text-sm font-medium ${
+                          success
+                            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                            : "border-red-500/20 bg-red-500/10 text-red-300"
+                        }`}
+                      >
+                        {success || error}
+                      </div>
+                    )}
+
+                    <form onSubmit={handleSendMessage} className="space-y-3">
+                      {!conversation && (
+                        <div>
+                          <input
+                            value={subject}
+                            onChange={(e) => setSubject(e.target.value)}
+                            placeholder="Subject of your first message..."
+                            className="w-full rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:bg-white/[0.07] focus:ring-4 focus:ring-sky-500/10"
+                          />
+                        </div>
+                      )}
+
+                      <div className="rounded-[28px] border border-white/10 bg-white/[0.05] p-2 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+                        <div className="flex items-end gap-2">
+                          <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-sky-300 transition hover:bg-white/[0.08]">
+                            <Paperclip size={20} />
+                            <input
+                              id="attachment-input"
+                              type="file"
+                              onChange={handleAttachmentChange}
+                              className="hidden"
+                            />
+                          </label>
+
+                          <textarea
+                            value={message}
+                            onChange={(e) => setMessage(e.target.value)}
+                            placeholder="Write your message..."
+                            rows={1}
+                            className="max-h-32 min-h-[44px] flex-1 resize-none bg-transparent px-2 py-3 text-sm text-white outline-none placeholder:text-slate-400"
+                          />
+
+                          <button
+                            type="submit"
+                            disabled={sending || uploading}
+                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                            title="Send message"
+                          >
+                            <Send size={18} />
+                          </button>
+                        </div>
+
+                        {attachment && (
+                          <div className="mt-2 rounded-2xl bg-white/[0.06] px-3 py-2 text-xs font-medium text-slate-200">
+                            Attached: {attachment.name}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="px-1 text-xs text-slate-400">
+                        {uploading ? "Uploading attachment..." : "Messages stay in one continuous thread."}
+                      </div>
+                    </form>
                   </div>
-                </form>
-              </div>
+                </div>
+              </section>
             </div>
           </section>
         </div>
-      </div>
-    </main>
+
+        {mobileChatsOpen && (
+          <div className="fixed inset-0 z-[70] lg:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileChatsOpen(false)}
+              className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
+              aria-label="Close chats"
+            />
+
+            <div className="absolute left-0 top-0 h-full w-[88%] max-w-sm border-r border-white/10 bg-[#020617] shadow-[0_25px_80px_rgba(0,0,0,0.45)]">
+              <div className="border-b border-white/10 px-5 py-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-2xl font-black text-white">Chats</h2>
+                    <p className="mt-1 text-sm text-slate-300">
+                      {conversation?.subject || "Admin Support"}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setMobileChatsOpen(false)}
+                    className="rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-sm font-semibold text-slate-200"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4">
+                <button
+                  type="button"
+                  onClick={() => setMobileChatsOpen(false)}
+                  className="flex w-full items-center gap-3 rounded-[24px] border border-sky-400/20 bg-sky-500/10 px-4 py-4 text-left transition hover:bg-sky-500/15"
+                >
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white shadow-lg shadow-blue-950/40">
+                    <MessageSquare size={22} />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-lg font-bold text-white">Admin Support</div>
+                    <div className="mt-1 truncate text-sm text-slate-300">{lastPreview}</div>
+                  </div>
+                </button>
+
+                {!conversation ? (
+                  <div className="mt-4 rounded-[24px] border border-white/10 bg-white/[0.05] px-4 py-5 text-sm text-slate-300">
+                    No existing conversation yet. Start one below.
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-[24px] border border-white/10 bg-white/[0.05] px-4 py-4 text-sm text-slate-300">
+                    Open thread with admin.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </>
   )
 }

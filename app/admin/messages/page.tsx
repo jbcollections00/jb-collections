@@ -2,6 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import {
+  Archive,
+  CheckCheck,
+  ChevronLeft,
+  Mail,
+  MessageCircle,
+  Search,
+  Send,
+  Shield,
+  Trash2,
+  User2,
+  X,
+} from "lucide-react"
 import AdminHeader from "@/app/components/AdminHeader"
 import { createClient } from "@/lib/supabase/client"
 
@@ -13,7 +26,6 @@ type Conversation = {
   created_at: string
   updated_at: string
   deleted_at?: string | null
-  user_deleted_at?: string | null
 }
 
 type ProfileRow = {
@@ -55,6 +67,7 @@ export default function AdminMessagesPage() {
   const [sending, setSending] = useState(false)
   const [markingRead, setMarkingRead] = useState(false)
   const [error, setError] = useState("")
+  const [showMobileList, setShowMobileList] = useState(false)
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null
@@ -80,6 +93,12 @@ export default function AdminMessagesPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [selectedConversation?.messages.length])
+
+  useEffect(() => {
+    if (selectedConversation) {
+      setShowMobileList(false)
+    }
+  }, [selectedConversation?.id])
 
   async function checkAdmin() {
     try {
@@ -133,7 +152,9 @@ export default function AdminMessagesPage() {
       }
 
       const conversationList = (conversationRows as Conversation[]) || []
-      const userIds = [...new Set(conversationList.map((item) => item.user_id).filter(Boolean))]
+      const userIds = [
+        ...new Set(conversationList.map((item) => item.user_id).filter(Boolean)),
+      ]
       const conversationIds = conversationList.map((item) => item.id)
 
       let profiles: ProfileRow[] = []
@@ -167,11 +188,17 @@ export default function AdminMessagesPage() {
         }
       }
 
-      const combined: ConversationWithMeta[] = conversationList.map((conversation) => ({
-        ...conversation,
-        profile: profiles.find((profile) => profile.id === conversation.user_id) || null,
-        messages: messages.filter((message) => message.conversation_id === conversation.id),
-      }))
+      const combined: ConversationWithMeta[] = conversationList.map(
+        (conversation) => ({
+          ...conversation,
+          profile:
+            profiles.find((profile) => profile.id === conversation.user_id) ||
+            null,
+          messages: messages.filter(
+            (message) => message.conversation_id === conversation.id
+          ),
+        })
+      )
 
       setConversations(combined)
 
@@ -182,7 +209,9 @@ export default function AdminMessagesPage() {
       })
     } catch (err) {
       console.error("Load admin conversations error:", err)
-      setError(err instanceof Error ? err.message : "Failed to load conversations.")
+      setError(
+        err instanceof Error ? err.message : "Failed to load conversations."
+      )
     } finally {
       if (showLoader) setLoading(false)
     }
@@ -255,7 +284,11 @@ export default function AdminMessagesPage() {
       await loadAll(false)
     } catch (err) {
       console.error("Mark conversation read error:", err)
-      setError(err instanceof Error ? err.message : "Failed to mark conversation as read.")
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to mark conversation as read."
+      )
     } finally {
       setMarkingRead(false)
     }
@@ -283,30 +316,9 @@ export default function AdminMessagesPage() {
       await loadAll(false)
     } catch (err) {
       console.error("Close conversation error:", err)
-      setError(err instanceof Error ? err.message : "Failed to close conversation.")
-    }
-  }
-
-  async function reopenConversation(conversationId: string) {
-    try {
-      setError("")
-
-      const { error } = await supabase
-        .from("conversations")
-        .update({
-          status: "open",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", conversationId)
-
-      if (error) {
-        throw error
-      }
-
-      await loadAll(false)
-    } catch (err) {
-      console.error("Reopen conversation error:", err)
-      setError(err instanceof Error ? err.message : "Failed to reopen conversation.")
+      setError(
+        err instanceof Error ? err.message : "Failed to close conversation."
+      )
     }
   }
 
@@ -342,7 +354,10 @@ export default function AdminMessagesPage() {
     try {
       setError("")
 
-      const { error } = await supabase.from("conversation_messages").delete().eq("id", messageId)
+      const { error } = await supabase
+        .from("conversation_messages")
+        .delete()
+        .eq("id", messageId)
 
       if (error) {
         throw error
@@ -351,7 +366,11 @@ export default function AdminMessagesPage() {
       await loadAll(false)
     } catch (err) {
       console.error("Hard delete message error:", err)
-      setError(err instanceof Error ? err.message : "Failed to permanently delete message.")
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to permanently delete message."
+      )
     }
   }
 
@@ -391,12 +410,16 @@ export default function AdminMessagesPage() {
       await loadAll(false)
     } catch (err) {
       console.error("Soft delete conversation error:", err)
-      setError(err instanceof Error ? err.message : "Failed to delete conversation.")
+      setError(
+        err instanceof Error ? err.message : "Failed to delete conversation."
+      )
     }
   }
 
   async function hardDeleteConversation(conversationId: string) {
-    const ok = window.confirm("Permanently delete this conversation and all messages?")
+    const ok = window.confirm(
+      "Permanently delete this conversation and all messages?"
+    )
     if (!ok) return
 
     try {
@@ -425,7 +448,9 @@ export default function AdminMessagesPage() {
     } catch (err) {
       console.error("Hard delete conversation error:", err)
       setError(
-        err instanceof Error ? err.message : "Failed to permanently delete conversation."
+        err instanceof Error
+          ? err.message
+          : "Failed to permanently delete conversation."
       )
     }
   }
@@ -459,14 +484,17 @@ export default function AdminMessagesPage() {
     return "No content"
   }
 
-  function getLastActivity(item: ConversationWithMeta) {
-    const lastMessage = item.messages[item.messages.length - 1]
-    return lastMessage ? lastMessage.created_at : item.updated_at || item.created_at
-  }
-
-  function isUnreadLike(status: string | null | undefined) {
-    const value = String(status || "").toLowerCase()
-    return value === "open" || value === "unread"
+  function getStatusClasses(status: string) {
+    if (status === "closed") {
+      return "bg-red-500/15 text-red-300 ring-1 ring-red-500/25"
+    }
+    if (status === "replied") {
+      return "bg-violet-500/15 text-violet-200 ring-1 ring-violet-500/25"
+    }
+    if (status === "read") {
+      return "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/25"
+    }
+    return "bg-sky-500/15 text-sky-200 ring-1 ring-sky-500/25"
   }
 
   const filteredConversations = useMemo(() => {
@@ -491,260 +519,349 @@ export default function AdminMessagesPage() {
   const stats = useMemo(() => {
     return {
       total: conversations.length,
-      open: conversations.filter((item) => isUnreadLike(item.status)).length,
+      open: conversations.filter(
+        (item) => item.status === "open" || item.status === "unread"
+      ).length,
       replied: conversations.filter((item) => item.status === "replied").length,
       closed: conversations.filter((item) => item.status === "closed").length,
     }
   }, [conversations])
 
-  const selectedConversationReplyDisabled =
-    sending ||
-    !replyBody.trim() ||
-    selectedConversation?.status === "closed" ||
-    !!selectedConversation?.user_deleted_at
-
   if (checkingAdmin) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-[#eef4ff] via-[#f8fbff] to-white px-4">
-        <div className="rounded-[24px] border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
-          <p className="text-lg font-bold text-slate-800">Checking admin access...</p>
-          <p className="mt-2 text-sm text-slate-500">Please wait.</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#0b1120] px-4">
+        <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-white/5 px-8 py-8 text-center shadow-2xl backdrop-blur-xl">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/20 text-blue-300">
+            <Shield size={26} />
+          </div>
+          <p className="text-xl font-extrabold text-white">
+            Checking admin access...
+          </p>
+          <p className="mt-2 text-sm text-slate-300">Please wait.</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#eef4ff] via-[#f8fbff] to-white px-4 py-4 text-slate-900 sm:px-6 sm:py-6 lg:px-8">
-      <div className="mx-auto w-full max-w-7xl">
+    <div className="min-h-screen bg-[#0b1120] text-white">
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-3 py-3 sm:px-4 sm:py-4 lg:px-6">
         <AdminHeader />
 
-        <div className="mb-5 rounded-[24px] bg-gradient-to-br from-slate-900 via-blue-900 to-blue-600 px-5 py-6 text-white shadow-[0_20px_45px_rgba(37,99,235,0.18)] sm:rounded-[28px] sm:px-7 sm:py-8">
-          <div className="text-xs font-extrabold uppercase tracking-[0.16em] text-white/90 sm:text-sm">
-            ADMIN MESSENGER
-          </div>
-          <h1 className="mt-3 text-3xl font-extrabold sm:text-4xl lg:text-[42px]">
-            Conversation Inbox
-          </h1>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-blue-100 sm:text-base lg:text-[17px]">
-            Reply to users in one continuous thread, messenger-style.
-          </p>
-        </div>
+        <section className="mt-4 overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-br from-[#111827] via-[#0f172a] to-[#1d4ed8] shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
+          <div className="flex flex-col gap-6 px-5 py-6 sm:px-7 sm:py-8 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-blue-100">
+                <MessageCircle size={14} />
+                Level 2 Admin Messenger
+              </div>
 
-        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-2 text-xs font-bold text-slate-500 sm:text-sm">Total</div>
-            <div className="text-3xl font-extrabold text-slate-900 sm:text-[34px]">
-              {stats.total}
+              <h1 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl lg:text-[44px]">
+                Conversation Inbox
+              </h1>
+
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-blue-100/90 sm:text-base">
+                Dark premium messenger layout with mobile-ready conversation list,
+                cleaner stats, sticky reply box, and stronger moderation controls.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
+                <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-blue-100/70">
+                  Total
+                </div>
+                <div className="mt-2 text-2xl font-black">{stats.total}</div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
+                <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-blue-100/70">
+                  Open
+                </div>
+                <div className="mt-2 text-2xl font-black text-sky-200">
+                  {stats.open}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
+                <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-blue-100/70">
+                  Replied
+                </div>
+                <div className="mt-2 text-2xl font-black text-violet-200">
+                  {stats.replied}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
+                <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-blue-100/70">
+                  Closed
+                </div>
+                <div className="mt-2 text-2xl font-black text-red-200">
+                  {stats.closed}
+                </div>
+              </div>
             </div>
           </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-2 text-xs font-bold text-slate-500 sm:text-sm">Open</div>
-            <div className="text-3xl font-extrabold text-blue-600 sm:text-[34px]">
-              {stats.open}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-2 text-xs font-bold text-slate-500 sm:text-sm">Replied</div>
-            <div className="text-3xl font-extrabold text-violet-600 sm:text-[34px]">
-              {stats.replied}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-2 text-xs font-bold text-slate-500 sm:text-sm">Closed</div>
-            <div className="text-3xl font-extrabold text-red-500 sm:text-[34px]">
-              {stats.closed}
-            </div>
-          </div>
-        </div>
+        </section>
 
         {error && (
-          <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
             {error}
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
-          <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-4 py-4">
-              <div className="mb-3 font-extrabold text-slate-900">Conversations</div>
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search user, email, subject..."
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
-              />
-            </div>
+        <div className="mt-4 flex min-h-0 flex-1 gap-4">
+          <aside
+            className={`fixed inset-y-0 left-0 z-40 w-[88%] max-w-[360px] transform border-r border-white/10 bg-[#0f172a] shadow-2xl transition duration-300 lg:static lg:z-auto lg:w-[360px] lg:max-w-none lg:translate-x-0 lg:overflow-hidden lg:rounded-[28px] lg:border lg:bg-[#0f172a]/95 ${
+              showMobileList ? "translate-x-0" : "-translate-x-full"
+            }`}
+          >
+            <div className="flex h-full flex-col lg:min-h-[760px]">
+              <div className="border-b border-white/10 px-4 py-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <div className="text-lg font-extrabold text-white">
+                      Conversations
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      Messenger-style inbox
+                    </div>
+                  </div>
 
-            <div className="max-h-[760px] overflow-y-auto">
-              {loading ? (
-                <div className="px-4 py-5 text-sm text-slate-500">Loading conversations...</div>
-              ) : filteredConversations.length === 0 ? (
-                <div className="px-4 py-5 text-sm text-slate-500">No conversations found.</div>
-              ) : (
-                filteredConversations.map((item) => {
-                  const active = selectedConversation?.id === item.id
-                  const unreadLike = isUnreadLike(item.status)
+                  <button
+                    type="button"
+                    onClick={() => setShowMobileList(false)}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 lg:hidden"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
 
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => setSelectedConversation(item)}
-                      className={`w-full border-b border-slate-100 px-4 py-4 text-left transition ${
-                        active ? "bg-blue-50" : "bg-white hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className="mb-2 flex items-center justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-2">
-                          {unreadLike && <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />}
-                          <div className="truncate text-sm font-extrabold text-slate-900">
-                            {getDisplayName(item)}
+                <div className="relative">
+                  <Search
+                    size={16}
+                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search user, email, subject..."
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 py-3 pl-11 pr-4 text-sm text-white outline-none placeholder:text-slate-400 focus:border-blue-400"
+                  />
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto">
+                {loading ? (
+                  <div className="px-4 py-5 text-sm text-slate-400">
+                    Loading conversations...
+                  </div>
+                ) : filteredConversations.length === 0 ? (
+                  <div className="px-4 py-5 text-sm text-slate-400">
+                    No conversations found.
+                  </div>
+                ) : (
+                  filteredConversations.map((item) => {
+                    const active = selectedConversation?.id === item.id
+                    const lastMessage =
+                      item.messages[item.messages.length - 1] || null
+
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setSelectedConversation(item)}
+                        className={`w-full border-b border-white/5 px-4 py-4 text-left transition ${
+                          active
+                            ? "bg-blue-500/15"
+                            : "bg-transparent hover:bg-white/5"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-blue-200">
+                            <User2 size={18} />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="truncate text-sm font-extrabold text-white">
+                                {getDisplayName(item)}
+                              </div>
+                              <div className="shrink-0 whitespace-nowrap text-[11px] text-slate-400">
+                                {lastMessage
+                                  ? formatTime(lastMessage.created_at)
+                                  : formatTime(item.created_at)}
+                              </div>
+                            </div>
+
+                            <div className="mt-1 truncate text-sm font-semibold text-slate-200">
+                              {item.subject || "No subject"}
+                            </div>
+
+                            <div className="mt-1 truncate text-xs text-slate-400">
+                              {getPreview(item)}
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <span
+                                className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold capitalize ${getStatusClasses(
+                                  item.status
+                                )}`}
+                              >
+                                {item.status || "unknown"}
+                              </span>
+
+                              {item.messages.some(
+                                (message) => !!message.attachment_url
+                              ) && (
+                                <span className="inline-flex rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-bold text-amber-200 ring-1 ring-amber-500/25">
+                                  attachment
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-
-                        <div className="shrink-0 whitespace-nowrap text-xs text-slate-500">
-                          {formatTime(getLastActivity(item))}
-                        </div>
-                      </div>
-
-                      <div className="mb-1 truncate text-sm font-bold text-slate-800">
-                        {item.subject || "No subject"}
-                      </div>
-
-                      <div className="mb-3 truncate text-xs text-slate-500 sm:text-sm">
-                        {getPreview(item)}
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                            item.status === "closed"
-                              ? "bg-red-100 text-red-700"
-                              : item.status === "replied"
-                                ? "bg-violet-100 text-violet-700"
-                                : "bg-blue-100 text-blue-700"
-                          }`}
-                        >
-                          {item.status || "unknown"}
-                        </span>
-
-                        {item.user_deleted_at && (
-                          <span className="inline-flex rounded-full bg-slate-200 px-2.5 py-1 text-[11px] font-bold text-slate-600">
-                            user deleted
-                          </span>
-                        )}
-
-                        {item.messages.some((message) => !!message.attachment_url) && (
-                          <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-700">
-                            attachment
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  )
-                })
-              )}
+                      </button>
+                    )
+                  })
+                )}
+              </div>
             </div>
-          </div>
+          </aside>
 
-          <div className="flex min-h-[680px] flex-col overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm xl:min-h-[760px]">
+          {showMobileList && (
+            <button
+              type="button"
+              aria-label="Close conversation list overlay"
+              onClick={() => setShowMobileList(false)}
+              className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+            />
+          )}
+
+          <section className="flex min-h-[720px] min-w-0 flex-1 flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[#0f172a]/95 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
             {!selectedConversation ? (
-              <div className="p-6 text-sm text-slate-500">
-                Select a conversation to view the chat.
+              <div className="flex flex-1 items-center justify-center p-6">
+                <div className="max-w-md text-center">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-blue-500/15 text-blue-300">
+                    <MessageCircle size={28} />
+                  </div>
+                  <h2 className="mt-4 text-2xl font-black text-white">
+                    Select a conversation
+                  </h2>
+                  <p className="mt-2 text-sm leading-7 text-slate-400">
+                    Choose a conversation from the left to view and reply.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowMobileList(true)}
+                    className="mt-4 inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10 lg:hidden"
+                  >
+                    Open Conversations
+                  </button>
+                </div>
               </div>
             ) : (
               <>
-                <div className="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 sm:px-5 sm:py-5 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <h2 className="text-2xl font-extrabold text-slate-900 sm:text-[28px]">
-                      {selectedConversation.subject || "No subject"}
-                    </h2>
+                <div className="border-b border-white/10 bg-white/[0.03] px-4 py-4 sm:px-5">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="min-w-0">
+                      <div className="mb-3 flex items-center gap-2 lg:hidden">
+                        <button
+                          type="button"
+                          onClick={() => setShowMobileList(true)}
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-200 transition hover:bg-white/10"
+                        >
+                          <ChevronLeft size={18} />
+                        </button>
+                        <span className="text-sm font-bold text-slate-300">
+                          Conversations
+                        </span>
+                      </div>
 
-                    <div className="mt-2 text-sm leading-7 text-slate-600">
-                      <div>
-                        <strong>User:</strong> {getDisplayName(selectedConversation)}
-                      </div>
-                      <div>
-                        <strong>Email:</strong> {selectedConversation.profile?.email || "No email"}
-                      </div>
-                      <div>
-                        <strong>Started:</strong> {formatTime(selectedConversation.created_at)}
+                      <h2 className="truncate text-2xl font-black text-white sm:text-[30px]">
+                        {selectedConversation.subject || "No subject"}
+                      </h2>
+
+                      <div className="mt-3 grid gap-2 text-sm text-slate-300 sm:grid-cols-2">
+                        <div className="inline-flex items-center gap-2">
+                          <User2 size={15} className="text-slate-400" />
+                          <span className="truncate">
+                            {getDisplayName(selectedConversation)}
+                          </span>
+                        </div>
+                        <div className="inline-flex items-center gap-2">
+                          <Mail size={15} className="text-slate-400" />
+                          <span className="truncate">
+                            {selectedConversation.profile?.email || "No email"}
+                          </span>
+                        </div>
+                        <div className="inline-flex items-center gap-2">
+                          <MessageCircle size={15} className="text-slate-400" />
+                          <span>{selectedConversation.messages.length} message(s)</span>
+                        </div>
+                        <div className="inline-flex items-center gap-2">
+                          <Archive size={15} className="text-slate-400" />
+                          <span>Started {formatTime(selectedConversation.created_at)}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    <span
-                      className={`inline-flex items-center rounded-full px-3 py-2 text-xs font-bold ${
-                        selectedConversation.status === "closed"
-                          ? "bg-red-100 text-red-700"
-                          : selectedConversation.status === "replied"
-                            ? "bg-violet-100 text-violet-700"
-                            : "bg-blue-100 text-blue-700"
-                      }`}
-                    >
-                      {selectedConversation.status}
-                    </span>
-
-                    {(selectedConversation.status === "open" ||
-                      selectedConversation.status === "unread") && (
-                      <button
-                        onClick={() => markConversationRead(selectedConversation.id)}
-                        disabled={markingRead}
-                        className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+                    <div className="flex flex-wrap gap-2">
+                      <span
+                        className={`inline-flex items-center rounded-full px-3 py-2 text-xs font-bold capitalize ${getStatusClasses(
+                          selectedConversation.status
+                        )}`}
                       >
-                        {markingRead ? "Updating..." : "Mark Read"}
-                      </button>
-                    )}
+                        {selectedConversation.status}
+                      </span>
 
-                    {selectedConversation.status !== "closed" ? (
+                      {(selectedConversation.status === "open" ||
+                        selectedConversation.status === "unread") && (
+                        <button
+                          onClick={() => markConversationRead(selectedConversation.id)}
+                          disabled={markingRead}
+                          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-70"
+                        >
+                          <CheckCheck size={16} />
+                          {markingRead ? "Updating..." : "Mark Read"}
+                        </button>
+                      )}
+
+                      {selectedConversation.status !== "closed" && (
+                        <button
+                          onClick={() => closeConversation(selectedConversation.id)}
+                          className="rounded-xl bg-red-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-red-600"
+                        >
+                          Close
+                        </button>
+                      )}
+
                       <button
-                        onClick={() => closeConversation(selectedConversation.id)}
-                        className="rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-600"
+                        onClick={() => softDeleteConversation(selectedConversation.id)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-bold text-red-200 transition hover:bg-red-500/20"
                       >
-                        Close
+                        <Trash2 size={16} />
+                        Delete
                       </button>
-                    ) : (
+
                       <button
-                        onClick={() => reopenConversation(selectedConversation.id)}
-                        className="rounded-xl border border-emerald-300 bg-white px-4 py-2 text-sm font-bold text-emerald-700 transition hover:bg-emerald-50"
+                        onClick={() =>
+                          hardDeleteConversation(selectedConversation.id)
+                        }
+                        className="rounded-xl bg-red-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-red-800"
                       >
-                        Reopen
+                        Delete Permanently
                       </button>
-                    )}
-
-                    <button
-                      onClick={() => softDeleteConversation(selectedConversation.id)}
-                      className="rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-bold text-red-600 transition hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
-
-                    <button
-                      onClick={() => hardDeleteConversation(selectedConversation.id)}
-                      className="rounded-xl bg-red-700 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-800"
-                    >
-                      Delete Permanently
-                    </button>
+                    </div>
                   </div>
                 </div>
 
-                {selectedConversation.user_deleted_at && (
-                  <div className="mx-4 mt-4 rounded-xl bg-yellow-100 px-4 py-3 text-sm font-bold text-yellow-800 sm:mx-5">
-                    User deleted this conversation from their side.
-                  </div>
-                )}
-
-                <div className="flex-1 overflow-y-auto bg-slate-50 px-3 py-4 sm:px-5 sm:py-5">
+                <div className="flex-1 overflow-y-auto bg-[#0b1220] px-3 py-4 sm:px-5 sm:py-5">
                   {selectedConversation.messages.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500">
+                    <div className="rounded-3xl border border-dashed border-white/10 bg-white/5 p-6 text-sm text-slate-400">
                       No messages in this conversation yet.
                     </div>
                   ) : (
-                    <div className="grid gap-3 sm:gap-4">
+                    <div className="grid gap-4">
                       {selectedConversation.messages.map((message) => {
                         const isAdmin = message.sender_role === "admin"
 
@@ -754,15 +871,15 @@ export default function AdminMessagesPage() {
                             className={`flex ${isAdmin ? "justify-end" : "justify-start"}`}
                           >
                             <div
-                              className={`max-w-[92%] rounded-[22px] px-4 py-3 shadow-sm sm:max-w-[80%] lg:max-w-[72%] ${
+                              className={`max-w-[94%] rounded-[24px] px-4 py-3 shadow-lg sm:max-w-[82%] lg:max-w-[72%] ${
                                 isAdmin
-                                  ? "border-0 bg-gradient-to-br from-blue-600 to-indigo-600 text-white"
-                                  : "border border-slate-200 bg-white text-slate-900"
+                                  ? "bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600 text-white"
+                                  : "border border-white/10 bg-white/5 text-white backdrop-blur"
                               }`}
                             >
                               <div
-                                className={`mb-2 text-[11px] font-extrabold uppercase tracking-[0.08em] ${
-                                  isAdmin ? "text-white/85" : "text-slate-500"
+                                className={`mb-2 text-[11px] font-extrabold uppercase tracking-[0.1em] ${
+                                  isAdmin ? "text-blue-100" : "text-slate-400"
                                 }`}
                               >
                                 {isAdmin ? "Admin" : "User"}
@@ -783,7 +900,7 @@ export default function AdminMessagesPage() {
                                     className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold ${
                                       isAdmin
                                         ? "border border-white/20 bg-white/15 text-white"
-                                        : "border border-blue-200 bg-blue-50 text-blue-600"
+                                        : "border border-blue-400/20 bg-blue-500/10 text-blue-200"
                                     }`}
                                   >
                                     📎 {getAttachmentName(message.attachment_url)}
@@ -792,8 +909,8 @@ export default function AdminMessagesPage() {
                               )}
 
                               <div
-                                className={`mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] ${
-                                  isAdmin ? "text-white/75" : "text-slate-500"
+                                className={`mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] ${
+                                  isAdmin ? "text-blue-100/90" : "text-slate-400"
                                 }`}
                               >
                                 <span>{formatTime(message.created_at)}</span>
@@ -802,7 +919,7 @@ export default function AdminMessagesPage() {
                                   <button
                                     onClick={() => softDeleteMessage(message.id)}
                                     className={`font-bold hover:underline ${
-                                      isAdmin ? "text-white/90" : "text-red-500"
+                                      isAdmin ? "text-white" : "text-red-300"
                                     }`}
                                   >
                                     Delete
@@ -811,7 +928,7 @@ export default function AdminMessagesPage() {
                                   <button
                                     onClick={() => hardDeleteMessage(message.id)}
                                     className={`font-bold hover:underline ${
-                                      isAdmin ? "text-white" : "text-red-700"
+                                      isAdmin ? "text-white" : "text-red-200"
                                     }`}
                                   >
                                     Delete Permanently
@@ -827,46 +944,54 @@ export default function AdminMessagesPage() {
                   )}
                 </div>
 
-                <div className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
-                  <div className="mb-3 text-lg font-extrabold text-slate-900">Send Reply</div>
-
-                  <textarea
-                    value={replyBody}
-                    onChange={(e) => setReplyBody(e.target.value)}
-                    placeholder={
-                      selectedConversation.user_deleted_at
-                        ? "Reply disabled because the user deleted this chat from their side."
-                        : selectedConversation.status === "closed"
-                          ? "Reply disabled because this conversation is closed."
-                          : "Write your reply here..."
-                    }
-                    rows={4}
-                    disabled={
-                      selectedConversation.status === "closed" ||
-                      !!selectedConversation.user_deleted_at
-                    }
-                    className="w-full resize-y rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                  />
-
-                  <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-xs text-slate-500 sm:text-sm">
-                      {selectedConversation.user_deleted_at
-                        ? "This user removed the chat from their inbox."
-                        : "Replies are added to the same conversation thread."}
+                <div className="border-t border-white/10 bg-[#0f172a] px-4 py-4 sm:px-5">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-lg font-black text-white">Send Reply</div>
+                      <div className="text-xs text-slate-400">
+                        Replies stay in the same conversation thread.
+                      </div>
                     </div>
 
-                    <button
-                      onClick={sendReply}
-                      disabled={selectedConversationReplyDisabled}
-                      className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
-                    >
-                      {sending ? "Sending..." : "Send Reply"}
-                    </button>
+                    {selectedConversation.status === "closed" && (
+                      <span className="rounded-full bg-red-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-red-200 ring-1 ring-red-500/25">
+                        Closed conversation
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="rounded-[24px] border border-white/10 bg-white/5 p-3">
+                    <textarea
+                      value={replyBody}
+                      onChange={(e) => setReplyBody(e.target.value)}
+                      placeholder="Write your reply here..."
+                      rows={4}
+                      className="w-full resize-y rounded-2xl border border-white/10 bg-[#0b1220] px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-blue-400"
+                    />
+
+                    <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="text-xs text-slate-400 sm:text-sm">
+                        Keep replies clear and professional.
+                      </div>
+
+                      <button
+                        onClick={sendReply}
+                        disabled={
+                          sending ||
+                          !replyBody.trim() ||
+                          selectedConversation.status === "closed"
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Send size={16} />
+                        {sending ? "Sending..." : "Send Reply"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </>
             )}
-          </div>
+          </section>
         </div>
       </div>
     </div>
