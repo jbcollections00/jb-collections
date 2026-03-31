@@ -17,6 +17,7 @@ export default function LayoutShell({
   const pathname = usePathname() ?? ""
 
   const hideAds =
+    pathname === "/" ||
     pathname.startsWith("/admin") ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/signup")
@@ -27,9 +28,9 @@ export default function LayoutShell({
     pathname.startsWith("/signup")
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-[#020617] text-white">
       {!hideAds && (
-        <div className="w-full border-b bg-white">
+        <div className="w-full border-b border-white/10 bg-[#061229]">
           <div className="mx-auto max-w-6xl px-4 py-3">
             <AdSlot code={TOP_AD} />
           </div>
@@ -53,19 +54,19 @@ export default function LayoutShell({
       </main>
 
       {!hideFooter && (
-        <footer className="mt-10 border-t bg-white py-6">
-          <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-4 text-sm text-slate-500">
+        <footer className="mt-10 border-t border-white/10 bg-[#020617] py-6">
+          <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-4 text-sm text-slate-300">
             <div className="flex flex-wrap justify-center gap-4">
-              <Link href="/terms" className="hover:text-slate-900">
+              <Link href="/terms" className="transition hover:text-white">
                 Terms
               </Link>
-              <Link href="/privacy" className="hover:text-slate-900">
+              <Link href="/privacy" className="transition hover:text-white">
                 Privacy Policy
               </Link>
-              <Link href="/disclaimer" className="hover:text-slate-900">
+              <Link href="/disclaimer" className="transition hover:text-white">
                 Disclaimer
               </Link>
-              <Link href="/refund-policy" className="hover:text-slate-900">
+              <Link href="/refund-policy" className="transition hover:text-white">
                 Refund Policy
               </Link>
             </div>

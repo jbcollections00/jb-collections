@@ -1,12 +1,11 @@
 "use client"
 
-import Image from "next/image"
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { Home, LogOut, Menu, MessageCircle, User, X } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import AdSlot from "@/app/components/AdSlot"
+import SiteHeader from "@/app/components/SiteHeader"
 import { IN_CONTENT_AD } from "@/app/lib/adCodes"
 
 type Category = {
@@ -124,35 +123,34 @@ function getVisibilityLabel(file: FileItem) {
 function getVisibilityBadgeClasses(file: FileItem) {
   const visibility = (file.visibility || "free").toLowerCase()
 
-  if (visibility === "platinum") return "bg-fuchsia-600 text-white"
-  if (visibility === "premium") return "bg-black/75 text-white"
-  if (visibility === "private") return "bg-red-600 text-white"
-  return "bg-emerald-600 text-white"
+  if (visibility === "platinum") return "border-fuchsia-400/30 bg-fuchsia-600 text-white"
+  if (visibility === "premium") return "border-amber-400/30 bg-amber-500 text-white"
+  if (visibility === "private") return "border-red-400/30 bg-red-600 text-white"
+  return "border-emerald-400/30 bg-emerald-600 text-white"
 }
 
 function getCardBorderClasses(file: FileItem) {
   const visibility = (file.visibility || "free").toLowerCase()
 
-  if (visibility === "platinum") return "border-fuchsia-200"
-  if (visibility === "premium") return "border-amber-200"
-  return "border-slate-200"
+  if (visibility === "platinum") return "border-fuchsia-400/20"
+  if (visibility === "premium") return "border-amber-400/20"
+  if (visibility === "private") return "border-red-400/20"
+  return "border-white/10"
 }
 
 export default function CategoryPage() {
   const params = useParams()
   const router = useRouter()
   const categoryId = params?.id as string
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [category, setCategory] = useState<Category | null>(null)
   const [allCategories, setAllCategories] = useState<CategoryLinkItem[]>([])
   const [files, setFiles] = useState<FileItem[]>([])
   const [loading, setLoading] = useState(true)
   const [checkingAuth, setCheckingAuth] = useState(true)
-  const [loggingOut, setLoggingOut] = useState(false)
   const [search, setSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [selectedCategoryId, setSelectedCategoryId] = useState("")
 
@@ -305,32 +303,12 @@ export default function CategoryPage() {
     router.push(`/categories/${nextValue}`)
   }
 
-  async function handleLogout() {
-    try {
-      setLoggingOut(true)
-      await supabase.auth.signOut()
-      router.replace("/login")
-      router.refresh()
-    } catch (error) {
-      console.error("Logout failed:", error)
-      alert("Failed to log out.")
-    } finally {
-      setLoggingOut(false)
-    }
-  }
-
-  const navBaseClasses =
-    "inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-semibold shadow-sm transition"
-  const navBlueClasses = `${navBaseClasses} bg-blue-600 text-white hover:bg-blue-700`
-  const navWhiteClasses = `${navBaseClasses} bg-white text-blue-700 hover:bg-slate-100`
-  const navRedClasses = `${navBaseClasses} bg-red-500 text-white hover:bg-red-600`
-
   if (checkingAuth) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-        <div className="rounded-3xl border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
-          <p className="text-lg font-semibold text-slate-800">Checking your account...</p>
-          <p className="mt-2 text-sm text-slate-500">Please wait.</p>
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+        <div className="rounded-3xl border border-white/10 bg-slate-900 px-8 py-6 text-center shadow-sm">
+          <p className="text-lg font-semibold text-white">Checking your account...</p>
+          <p className="mt-2 text-sm text-slate-400">Please wait.</p>
         </div>
       </div>
     )
@@ -338,24 +316,25 @@ export default function CategoryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <div className="mx-auto w-full max-w-[1800px] px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-          <div className="mb-5 h-24 animate-pulse rounded-[24px] border border-slate-200 bg-slate-200 shadow-sm" />
-          <div className="mb-5 h-24 animate-pulse rounded-[24px] border border-slate-200 bg-slate-200 shadow-sm" />
+      <div className="min-h-screen bg-slate-950">
+        <SiteHeader />
+
+        <div className="mx-auto w-full max-w-[1800px] px-4 pb-6 pt-24 sm:px-6 sm:pb-8 sm:pt-28 lg:px-8">
+          <div className="mb-6 h-40 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
           <div className="mb-6 flex justify-center">
-            <div className="h-[90px] w-full max-w-[728px] animate-pulse rounded-[20px] bg-slate-200" />
+            <div className="h-[90px] w-full max-w-[728px] animate-pulse rounded-[20px] bg-slate-800" />
           </div>
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
             {Array.from({ length: 10 }).map((_, index) => (
               <div
                 key={index}
-                className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm"
+                className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-900/80 shadow-sm ring-1 ring-white/5"
               >
-                <div className="aspect-[4/5] animate-pulse bg-slate-200" />
+                <div className="aspect-[4/5] animate-pulse bg-slate-800" />
                 <div className="space-y-3 p-3">
-                  <div className="mx-auto h-4 w-3/4 animate-pulse rounded bg-slate-200" />
-                  <div className="h-9 w-full animate-pulse rounded-xl bg-slate-200" />
+                  <div className="mx-auto h-4 w-3/4 animate-pulse rounded bg-slate-700" />
+                  <div className="h-10 w-full animate-pulse rounded-xl bg-slate-700" />
                 </div>
               </div>
             ))}
@@ -367,16 +346,18 @@ export default function CategoryPage() {
 
   if (!category) {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <div className="mx-auto max-w-5xl px-4 py-16 text-center">
-          <h1 className="text-3xl font-bold text-slate-900">Category not found</h1>
-          <p className="mt-3 text-slate-500">
+      <div className="min-h-screen bg-slate-950">
+        <SiteHeader />
+
+        <div className="mx-auto max-w-5xl px-4 py-24 text-center">
+          <h1 className="text-3xl font-bold text-white">Category not found</h1>
+          <p className="mt-3 text-slate-400">
             This category does not exist or may have been removed.
           </p>
           <div className="mt-6">
             <Link
               href="/dashboard"
-              className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+              className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-200"
             >
               Back to Dashboard
             </Link>
@@ -394,130 +375,64 @@ export default function CategoryPage() {
   )
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto w-full max-w-[1800px] px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <div className="mb-5 overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-          <div className="bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 px-6 py-5 sm:px-8">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <Image
-                  src="/jb-logo.png"
-                  alt="JB Collections"
-                  width={64}
-                  height={64}
-                  priority
-                  className="h-10 w-auto sm:h-12"
-                />
-                <span className="text-2xl font-black tracking-[0.22em] text-white sm:text-3xl">
-                  JB COLLECTIONS
-                </span>
+    <div className="min-h-screen bg-slate-950">
+      <SiteHeader />
+
+      <div className="mx-auto w-full max-w-[1800px] px-4 pb-6 pt-24 sm:px-6 sm:pb-8 sm:pt-28 lg:px-8">
+        <div className="mb-6 overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.22),transparent_32%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.18),transparent_28%),linear-gradient(135deg,#0f172a_0%,#111827_55%,#020617_100%)] shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+          <div className="flex flex-col gap-6 px-5 py-7 sm:px-6 lg:grid lg:grid-cols-[1fr_minmax(380px,720px)] lg:items-end lg:px-8">
+            <div>
+              <div className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-sky-300">
+                JB Collections
               </div>
 
-              <div className="hidden items-center gap-3 lg:flex">
-                <Link href="/dashboard" className={navWhiteClasses}>
-                  <Home className="h-4 w-4" />
-                  Dashboard
-                </Link>
+              <h1 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl lg:text-5xl">
+                {category.name}
+              </h1>
 
-                <Link href="/profile" className={navBlueClasses}>
-                  <User className="h-4 w-4" />
-                  Profile
-                </Link>
+              <p className="mt-3 max-w-2xl text-sm text-slate-300 sm:text-base">
+                {category.description || "Browse files available in this collection."}
+              </p>
 
-                <Link href="/contact" className={navBlueClasses}>
-                  <MessageCircle className="h-4 w-4" />
-                  Messages
-                </Link>
-
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  disabled={loggingOut}
-                  className={`${navRedClasses} disabled:cursor-not-allowed disabled:opacity-70`}
-                >
-                  <LogOut className="h-4 w-4" />
-                  {loggingOut ? "Logging out..." : "Logout"}
-                </button>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200">
+                  {formatNumber(filteredFiles.length)} files
+                </div>
+                <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200">
+                  Page {currentPage} of {totalPages}
+                </div>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setMobileMenuOpen((prev) => !prev)}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white backdrop-blur lg:hidden"
-                aria-label="Toggle menu"
-              >
-                {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-              </button>
             </div>
 
-            {mobileMenuOpen && (
-              <div className="mt-4 grid grid-cols-1 gap-3 lg:hidden">
-                <Link
-                  href="/dashboard"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={navWhiteClasses}
-                >
-                  <Home className="h-4 w-4" />
-                  Dashboard
-                </Link>
-
-                <Link
-                  href="/profile"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={navBlueClasses}
-                >
-                  <User className="h-4 w-4" />
-                  Profile
-                </Link>
-
-                <Link
-                  href="/contact"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={navBlueClasses}
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  Messages
-                </Link>
-
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  disabled={loggingOut}
-                  className={`${navRedClasses} w-full disabled:cursor-not-allowed disabled:opacity-70`}
-                >
-                  <LogOut className="h-4 w-4" />
-                  {loggingOut ? "Logging out..." : "Logout"}
-                </button>
+            <div className="flex flex-col gap-3 lg:flex-row">
+              <div className="w-full lg:flex-1">
+                <div className="rounded-[24px] border border-white/10 bg-white/5 p-2 backdrop-blur-md">
+                  <input
+                    type="text"
+                    placeholder={`Search in ${category.name}...`}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full rounded-[18px] border border-white/10 bg-white px-4 py-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
-            )}
-          </div>
-        </div>
 
-        <div className="mb-5 rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <div className="w-full lg:flex-1">
-              <input
-                type="text"
-                placeholder={`Search in ${category.name}...`}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white"
-              />
-            </div>
-
-            <div className="w-full lg:w-[320px]">
-              <select
-                value={selectedCategoryId}
-                onChange={(e) => handleCategoryChange(e.target.value)}
-                className="w-full rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white"
-              >
-                <option value="">Select Category</option>
-                {allCategories.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
+              <div className="w-full lg:w-[280px]">
+                <div className="rounded-[24px] border border-white/10 bg-white/5 p-2 backdrop-blur-md">
+                  <select
+                    value={selectedCategoryId}
+                    onChange={(e) => handleCategoryChange(e.target.value)}
+                    className="w-full rounded-[18px] border border-white/10 bg-white px-4 py-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Category</option>
+                    {allCategories.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -528,15 +443,15 @@ export default function CategoryPage() {
 
         {filteredFiles.length === 0 ? (
           <>
-            <div className="rounded-[24px] border border-dashed border-slate-300 bg-white px-6 py-20 text-center shadow-sm">
+            <div className="rounded-[26px] border border-dashed border-white/15 bg-slate-900/70 px-6 py-20 text-center shadow-sm">
               <div className="mx-auto max-w-md">
-                <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-slate-100 text-3xl">
+                <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-white/5 text-3xl">
                   📁
                 </div>
-                <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
+                <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">
                   No files found
                 </h2>
-                <p className="mt-3 text-slate-500">
+                <p className="mt-3 text-slate-400">
                   There are no downloadable files in {category.name} yet.
                 </p>
               </div>
@@ -546,7 +461,7 @@ export default function CategoryPage() {
               <button
                 type="button"
                 onClick={handleBackToTop}
-                className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-200"
               >
                 ↑ Back to Top
               </button>
@@ -558,14 +473,14 @@ export default function CategoryPage() {
           </>
         ) : (
           <>
-            <div className="mb-5 text-center text-sm text-slate-600">
-              Showing <span className="font-bold text-slate-900">{startItem}</span> to{" "}
-              <span className="font-bold text-slate-900">{endItem}</span> of{" "}
-              <span className="font-bold text-slate-900">{formatNumber(filteredFiles.length)}</span>{" "}
+            <div className="mb-5 text-center text-sm text-slate-400">
+              Showing <span className="font-bold text-white">{startItem}</span> to{" "}
+              <span className="font-bold text-white">{endItem}</span> of{" "}
+              <span className="font-bold text-white">{formatNumber(filteredFiles.length)}</span>{" "}
               files
             </div>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
               {paginatedFiles.map((file) => {
                 const previewImage = getPreviewImage(file)
                 const type = getDisplayFileType(file)
@@ -577,26 +492,29 @@ export default function CategoryPage() {
                 return (
                   <div
                     key={file.id}
-                    className={`group overflow-hidden rounded-[20px] border bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${getCardBorderClasses(
+                    className={`group overflow-hidden rounded-[24px] border bg-slate-900/80 shadow-[0_10px_30px_rgba(0,0,0,0.25)] ring-1 ring-white/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(0,0,0,0.38)] ${getCardBorderClasses(
                       file
                     )}`}
                   >
-                    <div className="relative overflow-hidden bg-slate-100">
+                    <div className="relative overflow-hidden bg-slate-800">
                       <div className="aspect-[4/5] overflow-hidden">
                         {previewImage ? (
-                          <img
-                            src={previewImage}
-                            alt={getDisplayName(file)}
-                            loading="lazy"
-                            decoding="async"
-                            className={`h-full w-full object-cover transition duration-500 group-hover:scale-105 ${
-                              isPlatinumLocked || isPremiumLocked ? "brightness-90" : ""
-                            }`}
-                          />
+                          <>
+                            <img
+                              src={previewImage}
+                              alt={getDisplayName(file)}
+                              loading="lazy"
+                              decoding="async"
+                              className={`h-full w-full object-cover transition duration-500 group-hover:scale-105 ${
+                                isPlatinumLocked || isPremiumLocked ? "brightness-90" : ""
+                              }`}
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent" />
+                          </>
                         ) : (
-                          <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-slate-100 via-slate-50 to-slate-200">
+                          <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
                             <div className="mb-3 text-5xl">{icon}</div>
-                            <p className="px-4 text-center text-sm font-semibold text-slate-500">
+                            <p className="px-4 text-center text-sm font-semibold text-slate-400">
                               No preview available
                             </p>
                           </div>
@@ -604,7 +522,7 @@ export default function CategoryPage() {
 
                         <div className="absolute left-3 top-3 flex flex-wrap gap-2">
                           <div
-                            className={`rounded-full px-3 py-1.5 text-[11px] font-bold backdrop-blur-md ${getVisibilityBadgeClasses(
+                            className={`rounded-full border px-3 py-1.5 text-[11px] font-bold backdrop-blur-md ${getVisibilityBadgeClasses(
                               file
                             )}`}
                           >
@@ -630,9 +548,9 @@ export default function CategoryPage() {
                       </div>
                     </div>
 
-                    <div className="px-3 pb-3 pt-2">
+                    <div className="px-3 pb-3 pt-3">
                       <h3
-                        className="mb-2 line-clamp-2 min-h-[40px] text-center text-sm font-extrabold leading-tight text-slate-900"
+                        className="mb-2 line-clamp-2 min-h-[40px] text-center text-sm font-extrabold leading-tight text-white"
                         title={getDisplayName(file)}
                       >
                         {getDisplayName(file)}
@@ -641,14 +559,14 @@ export default function CategoryPage() {
                       {isPlatinumLocked && !isPlatinumUser ? (
                         <Link
                           href="/upgrade"
-                          className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-3 py-2 text-sm font-bold text-white transition hover:opacity-90"
+                          className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-3 py-2.5 text-sm font-bold text-white transition hover:opacity-90"
                         >
                           Unlock with Platinum
                         </Link>
                       ) : isPremiumLocked && !isPremiumUser ? (
                         <Link
                           href="/upgrade"
-                          className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-2 text-sm font-bold text-white transition hover:opacity-90"
+                          className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-2.5 text-sm font-bold text-white transition hover:opacity-90"
                         >
                           Unlock with Premium
                         </Link>
@@ -656,7 +574,7 @@ export default function CategoryPage() {
                         <button
                           type="button"
                           onClick={() => handleDownload(file)}
-                          className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-3 py-2 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
+                          className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-3 py-2.5 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
                         >
                           Download Now
                         </button>
@@ -673,7 +591,7 @@ export default function CategoryPage() {
                   type="button"
                   onClick={() => goToPage(currentPage - 1)}
                   disabled={currentPage === 1}
-                  className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Prev
                 </button>
@@ -685,8 +603,8 @@ export default function CategoryPage() {
                     onClick={() => goToPage(page)}
                     className={`min-w-[48px] rounded-2xl border px-4 py-3 text-sm font-semibold shadow-sm transition ${
                       currentPage === page
-                        ? "border-slate-900 bg-slate-900 text-white"
-                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                        ? "border-white bg-white text-slate-900"
+                        : "border-white/10 bg-slate-900 text-slate-200 hover:bg-slate-800"
                     }`}
                   >
                     {page}
@@ -697,7 +615,7 @@ export default function CategoryPage() {
                   type="button"
                   onClick={() => goToPage(currentPage + 1)}
                   disabled={currentPage === totalPages}
-                  className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Next
                 </button>
@@ -706,7 +624,7 @@ export default function CategoryPage() {
               <button
                 type="button"
                 onClick={handleBackToTop}
-                className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-200"
               >
                 ↑ Back to Top
               </button>
