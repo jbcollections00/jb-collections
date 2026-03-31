@@ -600,7 +600,7 @@ export default function ProfilePageClient() {
 
           <section className="relative overflow-hidden rounded-[34px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.26),transparent_28%),radial-gradient(circle_at_top_right,rgba(99,102,241,0.25),transparent_30%),linear-gradient(135deg,#0ea5e9_0%,#2563eb_45%,#4f46e5_75%,#7c3aed_100%)] shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_40%)]" />
-            <div className="relative h-40 sm:h-48" />
+            <div className="relative h-20 sm:h-14" />
           </section>
 
           <section className="-mt-14 relative z-10 overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_32%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.14),transparent_28%),linear-gradient(135deg,#0f172a_0%,#111827_55%,#020617_100%)] p-6 text-white shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
