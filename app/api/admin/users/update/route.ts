@@ -37,11 +37,16 @@ function normalizePaymentType(value?: string | null) {
   return "none"
 }
 
-function safeIsoOrNull(value?: string | null) {
-  if (!value) return null
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-  return date.toISOString()
+function normalizeDurationMonths(value?: unknown) {
+  const months = Number(value)
+  if (!Number.isFinite(months) || months <= 0) return 1
+  return Math.floor(months)
+}
+
+function getExpiryFromMonths(startDate: Date, months: number) {
+  const next = new Date(startDate)
+  next.setMonth(next.getMonth() + months)
+  return next.toISOString()
 }
 
 export async function POST(req: Request) {
@@ -103,36 +108,51 @@ export async function POST(req: Request) {
     const role = normalizeRole(body.role)
     const accountStatus = normalizeAccountStatus(body.account_status)
     const status = normalizeAccountStatus(body.status)
+    const paymentType = membership === "standard" ? "none" : normalizePaymentType(body.membership_payment_type)
+    const durationMonths =
+      paymentType === "monthly" ? normalizeDurationMonths(body.membership_duration_months) : null
+
     const isPremium = membership === "premium" || membership === "platinum"
 
-    const paymentType =
-      membership === "standard"
-        ? "none"
-        : normalizePaymentType(body.membership_payment_type)
+    let membershipStartedAt: string | null = null
+    let membershipExpiresAt: string | null = null
 
-    const membershipDurationMonths =
-      paymentType === "monthly"
-        ? Math.max(1, Number(body.membership_duration_months) || 1)
-        : null
+    if (membership !== "standard") {
+      if (paymentType === "monthly") {
+        if (body.membership_started_at) {
+          const parsedStart = new Date(String(body.membership_started_at))
+          membershipStartedAt = Number.isNaN(parsedStart.getTime())
+            ? new Date().toISOString()
+            : parsedStart.toISOString()
+        } else {
+          membershipStartedAt = new Date().toISOString()
+        }
 
-    const membershipStartedAt =
-      paymentType === "monthly" ? safeIsoOrNull(body.membership_started_at) : null
-
-    const membershipExpiresAt =
-      paymentType === "monthly" ? safeIsoOrNull(body.membership_expires_at) : null
+        if (body.membership_expires_at) {
+          const parsedExpiry = new Date(String(body.membership_expires_at))
+          membershipExpiresAt = Number.isNaN(parsedExpiry.getTime())
+            ? getExpiryFromMonths(new Date(membershipStartedAt), durationMonths || 1)
+            : parsedExpiry.toISOString()
+        } else {
+          membershipExpiresAt = getExpiryFromMonths(
+            new Date(membershipStartedAt),
+            durationMonths || 1
+          )
+        }
+      }
+    }
 
     const updatePayload = {
       full_name: body.full_name ?? null,
       username: body.username ?? null,
       membership,
       is_premium: isPremium,
+      membership_payment_type: paymentType,
+      membership_started_at: membership === "standard" ? null : membershipStartedAt,
+      membership_expires_at: membership === "standard" ? null : membershipExpiresAt,
       account_status: accountStatus,
       status,
       role,
-      membership_payment_type: paymentType,
-      membership_duration_months: membershipDurationMonths,
-      membership_started_at: membershipStartedAt,
-      membership_expires_at: membershipExpiresAt,
     }
 
     const { error } = await adminSupabase
@@ -148,11 +168,10 @@ export async function POST(req: Request) {
       success: true,
       membership,
       is_premium: isPremium,
-      role,
       membership_payment_type: paymentType,
-      membership_duration_months: membershipDurationMonths,
-      membership_started_at: membershipStartedAt,
-      membership_expires_at: membershipExpiresAt,
+      membership_started_at: membership === "standard" ? null : membershipStartedAt,
+      membership_expires_at: membership === "standard" ? null : membershipExpiresAt,
+      role,
     })
   } catch (error) {
     console.error("Admin update user API error:", error)

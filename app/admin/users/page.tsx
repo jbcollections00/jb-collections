@@ -58,6 +58,28 @@ function addMonths(dateValue: string, months: number) {
   return formatLocalDateTimeInput(next)
 }
 
+function isMembershipExpired(user: UserRow) {
+  if (String(user.role || "").toLowerCase() === "admin") return false
+
+  const membership = normalizeMembership(user.membership)
+  if (membership === "standard") return false
+  if (!user.membership_expires_at) return false
+
+  const expiresAt = new Date(user.membership_expires_at).getTime()
+  if (Number.isNaN(expiresAt)) return false
+
+  return expiresAt <= Date.now()
+}
+
+function getEffectiveMembership(user: UserRow) {
+  if (String(user.role || "").toLowerCase() === "admin") return "admin"
+
+  const membership = normalizeMembership(user.membership)
+  if (isMembershipExpired(user)) return "standard"
+
+  return membership
+}
+
 export default function AdminUsersPage() {
   const supabase = createClient()
   const router = useRouter()
@@ -124,9 +146,7 @@ export default function AdminUsersPage() {
     setEditFullName(selectedUser.full_name || selectedUser.name || "")
     setEditUsername(selectedUser.username || "")
     setEditMembership(normalizedMembership)
-    setEditAccountStatus(
-      String(selectedUser.account_status || selectedUser.status || "Active")
-    )
+    setEditAccountStatus(String(selectedUser.account_status || selectedUser.status || "Active"))
     setEditRole(String(selectedUser.role || "user"))
     setEditIsPremium(normalizedMembership === "premium" || normalizedMembership === "platinum")
 
@@ -251,28 +271,26 @@ export default function AdminUsersPage() {
   }
 
   function getMembershipLabel(user: UserRow) {
-    if (String(user.role || "").toLowerCase() === "admin") {
-      return "Admin"
-    }
+    const effectiveMembership = getEffectiveMembership(user)
 
-    const membership = normalizeMembership(user.membership)
-    if (membership === "platinum") return "Platinum"
-    if (membership === "premium") return "Premium"
+    if (effectiveMembership === "admin") return "Admin"
+    if (effectiveMembership === "platinum") return "Platinum"
+    if (effectiveMembership === "premium") return "Premium"
     return "Standard"
   }
 
   function getMembershipBadge(user: UserRow) {
-    const membership = normalizeMembership(user.membership)
+    const effectiveMembership = getEffectiveMembership(user)
 
-    if (String(user.role || "").toLowerCase() === "admin") {
+    if (effectiveMembership === "admin") {
       return "bg-violet-500/20 text-violet-300 border border-violet-400/30"
     }
 
-    if (membership === "platinum") {
+    if (effectiveMembership === "platinum") {
       return "bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-400/30"
     }
 
-    if (membership === "premium") {
+    if (effectiveMembership === "premium") {
       return "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
     }
 
@@ -508,6 +526,7 @@ export default function AdminUsersPage() {
                 filteredUsers.map((user) => {
                   const active = selectedUser?.id === user.id
                   const isOnline = getOnlineStatus(user)
+                  const expired = isMembershipExpired(user)
 
                   return (
                     <button
@@ -519,9 +538,7 @@ export default function AdminUsersPage() {
                         setSelectedUser(user)
                       }}
                       className={`flex w-full items-center gap-3 border-b border-slate-800 px-4 py-4 text-left transition ${
-                        active
-                          ? "bg-blue-500/10"
-                          : "bg-slate-900 hover:bg-slate-800/80"
+                        active ? "bg-blue-500/10" : "bg-slate-900 hover:bg-slate-800/80"
                       }`}
                     >
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-lg font-extrabold text-blue-300">
@@ -537,14 +554,22 @@ export default function AdminUsersPage() {
                           {user.email || "No email"}
                         </div>
 
-                        <div className="mt-2 flex items-center justify-between gap-2">
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${getMembershipBadge(
-                              user
-                            )}`}
-                          >
-                            {getMembershipLabel(user)}
-                          </span>
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${getMembershipBadge(
+                                user
+                              )}`}
+                            >
+                              {getMembershipLabel(user)}
+                            </span>
+
+                            {expired ? (
+                              <span className="inline-flex rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[11px] font-bold text-red-300">
+                                Expired
+                              </span>
+                            ) : null}
+                          </div>
 
                           <span
                             className={`inline-flex items-center gap-1 text-[11px] font-bold ${
@@ -586,6 +611,12 @@ export default function AdminUsersPage() {
                       {getMembershipLabel(selectedUser)}
                     </span>
 
+                    {isMembershipExpired(selectedUser) ? (
+                      <span className="inline-flex rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-bold text-red-300">
+                        Membership Expired
+                      </span>
+                    ) : null}
+
                     <span className="inline-flex rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-300">
                       {Number(selectedUser.jb_points || 0).toLocaleString()} JB Coins
                     </span>
@@ -593,7 +624,8 @@ export default function AdminUsersPage() {
 
                   <div className="mt-3 space-y-1 text-sm leading-7 text-slate-300">
                     <div>
-                      <strong className="text-white">Email:</strong> {selectedUser.email || "No email"}
+                      <strong className="text-white">Email:</strong>{" "}
+                      {selectedUser.email || "No email"}
                     </div>
                     <div>
                       <strong className="text-white">User ID:</strong> {selectedUser.id}
@@ -623,6 +655,10 @@ export default function AdminUsersPage() {
                       {selectedUser.membership_expires_at
                         ? new Date(selectedUser.membership_expires_at).toLocaleString()
                         : "Not set"}
+                    </div>
+                    <div>
+                      <strong className="text-white">Effective Membership:</strong>{" "}
+                      {getMembershipLabel(selectedUser)}
                     </div>
                   </div>
                 </div>

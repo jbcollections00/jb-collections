@@ -29,12 +29,6 @@ type RelatedFileRow = {
   slug?: string | null
 }
 
-type ProfileRow = {
-  role?: string | null
-  membership?: string | null
-  is_premium?: boolean | null
-}
-
 type EventType = "gate_view" | "premium_auto_download" | "download_click"
 
 function getDisplayName(file: FileRow | null) {
@@ -45,13 +39,6 @@ function getDisplayName(file: FileRow | null) {
 function getPreviewImage(file: FileRow | null) {
   if (!file) return null
   return file.thumbnail_url || null
-}
-
-function normalizeMembership(value?: string | null) {
-  const membership = String(value || "").trim().toLowerCase()
-  if (membership === "platinum") return "platinum"
-  if (membership === "premium") return "premium"
-  return "standard"
 }
 
 function isUuid(value: string) {
@@ -191,11 +178,17 @@ export default function DownloadPageClient() {
         ? await baseQuery.eq("id", idOrSlug).maybeSingle()
         : await baseQuery.eq("slug", idOrSlug).maybeSingle()
 
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("role, membership, is_premium")
-        .eq("id", user.id)
-        .maybeSingle()
+      const refreshRes = await fetch("/api/membership/refresh", {
+        method: "POST",
+        cache: "no-store",
+      })
+
+      const refreshData = await refreshRes.json()
+
+      if (!refreshRes.ok) {
+        setError(refreshData?.error || "Failed to refresh membership.")
+        return
+      }
 
       if (fileError) {
         setError(`Failed to load file: ${fileError.message}`)
@@ -207,28 +200,16 @@ export default function DownloadPageClient() {
         return
       }
 
-      if (profileError) {
-        console.error("Profile fetch error:", profileError)
-      }
-
-      const profile = profileData as ProfileRow | null
-      const membership = normalizeMembership(profile?.membership)
-
-      const premium =
-        profile?.role === "admin" ||
-        profile?.is_premium === true ||
-        membership === "premium" ||
-        membership === "platinum"
-
-      const platinum = profile?.role === "admin" || membership === "platinum"
+      const premium = Boolean(refreshData?.is_premium)
+      const platinum = Boolean(refreshData?.is_platinum)
 
       const foundFile = fileData as FileRow
       const realFileId = foundFile.id
       const visibility = (foundFile.visibility || "free").toLowerCase()
 
       setFile(foundFile)
-      setIsPremiumUser(Boolean(premium))
-      setIsPlatinumUser(Boolean(platinum))
+      setIsPremiumUser(premium)
+      setIsPlatinumUser(platinum)
 
       void incrementViews(realFileId)
 

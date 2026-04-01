@@ -3,6 +3,8 @@ import { createServerClient } from "@supabase/ssr"
 import { createClient } from "@supabase/supabase-js"
 import { cookies } from "next/headers"
 
+export const runtime = "nodejs"
+
 export async function GET() {
   try {
     const cookieStore = await cookies()
@@ -40,16 +42,22 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json(
+        { error: "Missing SUPABASE_SERVICE_ROLE_KEY" },
+        { status: 500 }
+      )
+    }
+
     const adminSupabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    // 🔥 FIXED: added jb_points
     const { data, error } = await adminSupabase
       .from("profiles")
       .select(
-        "id, email, full_name, name, username, membership, account_status, status, is_premium, role, jb_points, last_seen, created_at"
+        "id, email, full_name, name, username, membership, membership_payment_type, membership_started_at, membership_expires_at, account_status, status, is_premium, role, jb_points, last_seen, created_at"
       )
       .order("created_at", { ascending: false })
 
