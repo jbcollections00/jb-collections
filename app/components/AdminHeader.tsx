@@ -24,9 +24,11 @@ export default function AdminHeader() {
   const [loggingOut, setLoggingOut] = useState(false)
 
   function isActive(href: string) {
-    if (href === "/admin") return pathname === "/admin"
-    return pathname.startsWith(href)
-  }
+  const currentPath = pathname || ""
+
+  if (href === "/admin") return currentPath === "/admin"
+  return currentPath.startsWith(href)
+}
 
   async function handleLogout() {
     try {
