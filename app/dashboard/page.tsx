@@ -142,7 +142,7 @@ function HomeFileCard({ file }: { file: HomeFile }) {
 
   return (
     <div className="group overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.04] shadow-[0_10px_30px_rgba(0,0,0,0.25)] backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:border-cyan-400/40 hover:bg-white/[0.06] hover:shadow-[0_18px_45px_rgba(37,99,235,0.22)]">
-      <div className="relative aspect-[4/2.6] overflow-hidden bg-slate-900/60">
+      <div className="relative aspect-[3/4] overflow-hidden bg-slate-900/60">
         {image ? (
           <img
             src={image}
@@ -258,13 +258,13 @@ function FileSection({
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-5 md:grid-cols-4 lg:grid-cols-5">
           {Array.from({ length: 10 }).map((_, index) => (
             <div
               key={index}
               className="overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.05] shadow-[0_10px_30px_rgba(0,0,0,0.25)]"
             >
-              <div className="aspect-[4/2.6] animate-pulse bg-white/10" />
+              <div className="aspect-[3/4] animate-pulse bg-white/10" />
               <div className="space-y-2 p-4">
                 <div className="h-4 w-2/3 animate-pulse rounded bg-white/10" />
                 <div className="h-10 w-full animate-pulse rounded-2xl bg-white/10" />
@@ -278,7 +278,7 @@ function FileSection({
           No items available yet.
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-5 md:grid-cols-4 lg:grid-cols-5">
           {files.map((file) => (
             <HomeFileCard key={file.id} file={file} />
           ))}
@@ -503,13 +503,13 @@ export default function DashboardPage() {
             </div>
 
             {loading ? (
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
+              <div className="grid grid-cols-2 gap-5 md:grid-cols-4 lg:grid-cols-5">
                 {Array.from({ length: 4 }).map((_, index) => (
                   <div
                     key={index}
                     className="overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.05] shadow-[0_10px_30px_rgba(0,0,0,0.25)]"
                   >
-                    <div className="aspect-[4/2.6] animate-pulse bg-white/10" />
+                    <div className="aspect-[3/4] animate-pulse bg-white/10" />
                     <div className="space-y-3 p-4">
                       <div className="mx-auto h-4 w-3/4 animate-pulse rounded bg-white/10" />
                       <div className="h-10 w-full animate-pulse rounded-2xl bg-white/10" />
@@ -522,7 +522,7 @@ export default function DashboardPage() {
                 No categories available yet.
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
+              <div className="grid grid-cols-2 gap-5 md:grid-cols-4 lg:grid-cols-5">
                 {categories.map((category) => {
                   const image = getCategoryImage(category)
                   const count = fileCounts[category.id] || 0
@@ -532,7 +532,7 @@ export default function DashboardPage() {
                       key={category.id}
                       className="group overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.05] shadow-[0_10px_30px_rgba(0,0,0,0.25)] backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:border-cyan-400/40 hover:bg-white/[0.06]"
                     >
-                      <div className="relative aspect-[4/2.6] overflow-hidden bg-slate-900/60">
+                      <div className="relative aspect-[3/4] overflow-hidden bg-slate-900/60">
                         {image ? (
                           <img
                             src={image}

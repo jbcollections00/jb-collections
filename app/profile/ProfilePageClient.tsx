@@ -541,8 +541,13 @@ export default function ProfilePageClient() {
 
   const displayStatus = profile?.account_status || profile?.status || "Active"
   const initials = getInitials(displayName)
+
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+    (typeof window !== "undefined" ? window.location.origin : "https://jb-collections.com")
+
   const publicProfileText = profile?.username
-    ? `jbcollections.com/u/${profile.username}`
+    ? `${siteUrl}/u/${profile.username}`
     : "Set username first"
 
   if (loading) {

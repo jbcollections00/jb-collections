@@ -42,6 +42,11 @@ function getDisplayName(file: FileRow | null) {
   return file.title || "Untitled File"
 }
 
+function getPreviewImage(file: FileRow | null) {
+  if (!file) return null
+  return file.thumbnail_url || null
+}
+
 function normalizeMembership(value?: string | null) {
   const membership = String(value || "").trim().toLowerCase()
   if (membership === "platinum") return "platinum"
@@ -368,6 +373,7 @@ export default function DownloadPage() {
 
   const visibility = (file.visibility || "free").toLowerCase()
   const monetizationEnabled = file.monetization_enabled !== false
+  const previewImage = getPreviewImage(file)
 
   const shouldShowTopAd =
     !isPremiumUser && visibility === "free" && monetizationEnabled && Boolean(DOWNLOAD_TOP_AD)
@@ -420,6 +426,19 @@ export default function DownloadPage() {
           </div>
 
           <div className="p-6 sm:p-8">
+            {previewImage ? (
+              <div className="mb-6 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+  <div className="relative mx-auto aspect-[3/4] w-full max-w-md overflow-hidden bg-slate-100">
+    <img
+      src={previewImage}
+      alt={getDisplayName(file)}
+      className="h-full w-full object-cover"
+    />
+    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-900/35 via-slate-900/5 to-transparent" />
+  </div>
+</div>
+            ) : null}
+
             <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-center">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Access Type

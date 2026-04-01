@@ -82,6 +82,7 @@ export default function FilesPage() {
   const [monetizationEnabled, setMonetizationEnabled] = useState(true)
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [selectedThumbnail, setSelectedThumbnail] = useState<File | null>(null)
 
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -200,6 +201,7 @@ export default function FilesPage() {
     setLinkvertiseUrl("")
     setMonetizationEnabled(true)
     setSelectedFile(null)
+    setSelectedFiles([])
     setSelectedThumbnail(null)
     setEditingId(null)
     setExistingThumbnailUrl(null)
@@ -240,6 +242,7 @@ export default function FilesPage() {
 
   function handleFileChange(file: File | null) {
     clearMessages()
+    setSelectedFiles([])
 
     if (!file) {
       setSelectedFile(null)
@@ -255,6 +258,34 @@ export default function FilesPage() {
     }
 
     setSelectedFile(file)
+  }
+
+  function handleMultipleFiles(fileList: FileList | null) {
+    clearMessages()
+    setSelectedFile(null)
+
+    if (!fileList) {
+      setSelectedFiles([])
+      return
+    }
+
+    const maxSizeInBytes = 5 * 1024 * 1024 * 1024
+    const nextFiles: File[] = []
+    let skippedLarge = 0
+
+    Array.from(fileList).forEach((file) => {
+      if (file.size > maxSizeInBytes) {
+        skippedLarge += 1
+        return
+      }
+      nextFiles.push(file)
+    })
+
+    setSelectedFiles(nextFiles)
+
+    if (skippedLarge > 0) {
+      setErrorMessage(`${skippedLarge} file(s) exceeded 5GB and were skipped.`)
+    }
   }
 
   function handleThumbnailChange(file: File | null) {
@@ -300,6 +331,7 @@ export default function FilesPage() {
     setLinkvertiseUrl(file.linkvertise_url || "")
     setMonetizationEnabled(file.monetization_enabled !== false)
     setSelectedFile(null)
+    setSelectedFiles([])
     setSelectedThumbnail(null)
     setEditingId(file.id)
     setExistingThumbnailUrl(getDisplayThumbnail(file))
@@ -436,18 +468,8 @@ export default function FilesPage() {
   async function saveFile() {
     clearMessages()
 
-    if (!title.trim()) {
-      setErrorMessage("File title is required.")
-      return
-    }
-
-    if (!categoryId) {
+    if ((!editingId || selectedFiles.length > 0) && !categoryId) {
       setErrorMessage("Please select a category.")
-      return
-    }
-
-    if (!editingId && !selectedFile) {
-      setErrorMessage("Please choose a file to upload.")
       return
     }
 
@@ -465,6 +487,115 @@ export default function FilesPage() {
 
     if (linkvertiseUrl.trim() && !cleanedLinkvertiseUrl) {
       setErrorMessage("Linkvertise link is invalid. Please enter a full valid URL.")
+      return
+    }
+
+    if (!editingId && selectedFiles.length > 0) {
+      setSaving(true)
+
+      try {
+        let sharedThumbnailUrl: string | null = null
+
+        if (selectedThumbnail) {
+          setStatusText("Preparing shared thumbnail upload...")
+
+          const presignedThumb = await requestPresignedUpload({
+            fileName: selectedThumbnail.name,
+            contentType: selectedThumbnail.type || "application/octet-stream",
+            folder: "thumbnails",
+          })
+
+          setUploadProgress(0)
+          setStatusText("Uploading shared thumbnail...")
+          lastProgressRef.current = 0
+
+          await uploadFileDirect(selectedThumbnail, presignedThumb.uploadUrl, (percent) => {
+            updateProgress(percent, "Uploading shared thumbnail...")
+          })
+
+          sharedThumbnailUrl = `${
+            process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL?.replace(/\/$/, "") || ""
+          }/${presignedThumb.key}`
+        }
+
+        for (let index = 0; index < selectedFiles.length; index++) {
+          const currentFile = selectedFiles[index]
+          const derivedTitle = title.trim() || currentFile.name.replace(/\.[^/.]+$/, "")
+
+          setStatusText(
+            `Preparing file ${index + 1} of ${selectedFiles.length}: ${currentFile.name}`
+          )
+          setUploadProgress(0)
+          lastProgressRef.current = 0
+
+          const presignedMain = await requestPresignedUpload({
+            fileName: currentFile.name,
+            contentType: currentFile.type || "application/octet-stream",
+            title: derivedTitle,
+            categoryId,
+          })
+
+          setStatusText(
+            `Uploading file ${index + 1} of ${selectedFiles.length}: ${currentFile.name}`
+          )
+
+          await uploadFileDirect(currentFile, presignedMain.uploadUrl, (percent) => {
+            updateProgress(
+              percent,
+              `Uploading file ${index + 1} of ${selectedFiles.length}: ${currentFile.name}`
+            )
+          })
+
+          setUploadProgress(0)
+          setStatusText(
+            `Saving record ${index + 1} of ${selectedFiles.length}: ${currentFile.name}`
+          )
+
+          await finalizeFileRecord({
+            mode: "create",
+            title: derivedTitle,
+            description,
+            categoryId,
+            visibility,
+            status,
+            shrinkmeUrl: cleanedShrinkmeUrl,
+            linkvertiseUrl: cleanedLinkvertiseUrl,
+            monetizationEnabled,
+            storageKey: presignedMain.key,
+            thumbnailUrl: sharedThumbnailUrl,
+            fileSize: currentFile.size,
+            fileType: getFileType(currentFile.name),
+          })
+        }
+
+        clearForm()
+        setSuccessMessage(
+          `${selectedFiles.length} file${selectedFiles.length === 1 ? "" : "s"} uploaded successfully.`
+        )
+        await loadData()
+      } catch (error) {
+        setStatusText("")
+        setUploadProgress(0)
+        setErrorMessage(error instanceof Error ? error.message : "Something went wrong.")
+      } finally {
+        setSaving(false)
+      }
+
+      return
+    }
+
+    if (!title.trim()) {
+      setErrorMessage("File title is required.")
+      return
+    }
+
+    if (!categoryId) {
+      setErrorMessage("Please select a category.")
+      return
+    }
+
+    if (!editingId && !selectedFile) {
+      setErrorMessage("Please choose a file to upload.")
       return
     }
 
@@ -705,7 +836,11 @@ export default function FilesPage() {
           <div className="grid gap-4">
             <div className="grid gap-4 md:grid-cols-2">
               <input
-                placeholder="File title"
+                placeholder={
+                  selectedFiles.length > 1 && !editingId
+                    ? "Shared title base (optional for multi-upload)"
+                    : "File title"
+                }
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 disabled={saving}
@@ -804,16 +939,48 @@ export default function FilesPage() {
                   htmlFor="file-upload-input"
                   className="mb-2 block text-sm font-bold text-slate-700"
                 >
-                  {editingId ? "Replace file (optional, up to 5GB)" : "Choose file (up to 5GB)"}
+                  {editingId
+                    ? "Replace file (optional, up to 5GB)"
+                    : "Choose file(s) (up to 5GB each)"}
                 </label>
 
                 <input
                   id="file-upload-input"
                   type="file"
+                  multiple={!editingId}
                   disabled={saving}
-                  onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
+                  onChange={(e) => {
+                    const fileList = e.target.files
+
+                    if (!fileList || fileList.length === 0) {
+                      handleFileChange(null)
+                      setSelectedFiles([])
+                      return
+                    }
+
+                    if (editingId || fileList.length === 1) {
+                      handleFileChange(fileList[0] || null)
+                    } else {
+                      handleMultipleFiles(fileList)
+                    }
+                  }}
                   className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white"
                 />
+
+                {selectedFiles.length > 0 && !editingId && (
+                  <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
+                    <p className="text-sm font-bold text-blue-700">
+                      {selectedFiles.length} files selected
+                    </p>
+                    <div className="mt-2 max-h-36 space-y-1 overflow-auto pr-1">
+                      {selectedFiles.map((file, index) => (
+                        <div key={`${file.name}-${index}`} className="text-xs text-blue-700">
+                          {index + 1}. {file.name} — {formatFileSize(file.size)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {selectedFile && (
                   <div className="mt-3">
@@ -824,7 +991,7 @@ export default function FilesPage() {
                   </div>
                 )}
 
-                {!selectedFile && editingId && (
+                {!selectedFile && selectedFiles.length === 0 && editingId && (
                   <div className="mt-3">
                     <p className="text-xs font-bold text-slate-500">Current file attached</p>
                     {existingFileSize ? (
@@ -841,7 +1008,11 @@ export default function FilesPage() {
                   htmlFor="thumbnail-upload-input"
                   className="mb-2 block text-sm font-bold text-slate-700"
                 >
-                  {editingId ? "Replace thumbnail (optional)" : "Choose thumbnail image"}
+                  {editingId
+                    ? "Replace thumbnail (optional)"
+                    : selectedFiles.length > 1
+                      ? "Choose shared thumbnail image for all selected files"
+                      : "Choose thumbnail image"}
                 </label>
 
                 <input
@@ -880,7 +1051,13 @@ export default function FilesPage() {
                 disabled={saving}
                 className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {saving ? "Uploading..." : editingId ? "Update File" : "Upload & Create"}
+                {saving
+                  ? "Uploading..."
+                  : editingId
+                    ? "Update File"
+                    : selectedFiles.length > 1
+                      ? `Upload ${selectedFiles.length} Files`
+                      : "Upload & Create"}
               </button>
 
               <button
