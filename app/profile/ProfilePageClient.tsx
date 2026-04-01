@@ -887,152 +887,181 @@ export default function ProfilePageClient() {
           </section>
 
           {editOpen && (
-            <section className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/80 p-6 shadow-sm ring-1 ring-white/5">
-              <div className="mb-5">
-                <h2 className="text-xl font-black text-white">Edit Your Profile</h2>
-                <p className="mt-1 text-sm text-slate-400">
-                  Changes save automatically while you type.
-                </p>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-bold text-slate-200">
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    value={fullNameInput}
-                    onChange={(e) => setFullNameInput(e.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
-                    placeholder="Enter your full name"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-bold text-slate-200">
-                    Username
-                  </label>
-                  <input
-                    type="text"
-                    value={usernameInput}
-                    onChange={(e) => setUsernameInput(e.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
-                    placeholder="yourusername"
-                  />
-                  {usernameStatus.message ? (
-                    <p
-                      className={`mt-2 text-sm font-medium ${
-                        usernameStatus.state === "available"
-                          ? "text-emerald-400"
-                          : usernameStatus.state === "checking"
-                            ? "text-slate-400"
-                            : usernameStatus.state === "taken" ||
-                                usernameStatus.state === "invalid" ||
-                                usernameStatus.state === "error"
-                              ? "text-red-400"
-                              : "text-slate-400"
-                      }`}
-                    >
-                      {usernameStatus.message}
-                    </p>
-                  ) : null}
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="mb-2 block text-sm font-bold text-slate-200">
-                    Profile Image
-                  </label>
-
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    {avatarUrlInput ? (
+            <>
+              <section className="mt-6">
+                <div className="rounded-[28px] border border-amber-400/30 bg-gradient-to-r from-amber-500/10 via-yellow-400/10 to-orange-500/10 p-5 shadow-lg">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
                       <img
-                        src={avatarUrlInput}
-                        alt="Profile preview"
-                        className="h-24 w-24 rounded-2xl object-cover ring-1 ring-white/10"
+                        src="/jb-coin.png"
+                        alt="JB Coin"
+                        className="h-14 w-14 object-contain drop-shadow-lg"
                       />
-                    ) : (
-                      <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-slate-950 text-lg font-bold text-slate-300 ring-1 ring-white/10">
-                        {initials}
-                      </div>
-                    )}
 
-                    <div className="flex-1">
-                      <label className="inline-flex cursor-pointer items-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-900 transition hover:bg-slate-200">
-                        {uploadingAvatar ? "Uploading..." : "Upload Image"}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          disabled={uploadingAvatar}
-                          onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            if (file) void handleAvatarUpload(file)
-                          }}
-                        />
-                      </label>
-                      <p className="mt-2 text-sm text-slate-400">
-                        Upload a square image for the best result.
-                      </p>
+                      <div>
+                        <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-amber-200">
+                          JB Coins
+                        </p>
+                        <p className="mt-1 text-2xl font-black text-white sm:text-3xl">
+                          {jbPoints.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-right text-xs font-bold text-amber-200">
+                      Balance
                     </div>
                   </div>
                 </div>
+              </section>
 
-                <div className="sm:col-span-2">
-                  <label className="mb-2 block text-sm font-bold text-slate-200">
-                    Bio
-                  </label>
-                  <textarea
-                    value={bioInput}
-                    onChange={(e) => setBioInput(e.target.value)}
-                    rows={4}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
-                    placeholder="Write a short bio about yourself"
-                  />
+              <section className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/80 p-6 shadow-sm ring-1 ring-white/5">
+                <div className="mb-5">
+                  <h2 className="text-xl font-black text-white">Edit Your Profile</h2>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Changes save automatically while you type.
+                  </p>
                 </div>
-              </div>
 
-              <div className="mt-5 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const ok = await saveProfile(true)
-                    if (ok) setEditOpen(false)
-                  }}
-                  disabled={saving || usernameStatus.state === "checking"}
-                  className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {saving ? "Saving..." : "Save Now"}
-                </button>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-sm font-bold text-slate-200">
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      value={fullNameInput}
+                      onChange={(e) => setFullNameInput(e.target.value)}
+                      className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+                      placeholder="Enter your full name"
+                    />
+                  </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditOpen(false)
-                    setSaveError("")
-                    setSaveMessage("")
-                    setUsernameStatus({ state: "idle", message: "" })
+                  <div>
+                    <label className="mb-2 block text-sm font-bold text-slate-200">
+                      Username
+                    </label>
+                    <input
+                      type="text"
+                      value={usernameInput}
+                      onChange={(e) => setUsernameInput(e.target.value)}
+                      className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+                      placeholder="yourusername"
+                    />
+                    {usernameStatus.message ? (
+                      <p
+                        className={`mt-2 text-sm font-medium ${
+                          usernameStatus.state === "available"
+                            ? "text-emerald-400"
+                            : usernameStatus.state === "checking"
+                              ? "text-slate-400"
+                              : usernameStatus.state === "taken" ||
+                                  usernameStatus.state === "invalid" ||
+                                  usernameStatus.state === "error"
+                                ? "text-red-400"
+                                : "text-slate-400"
+                        }`}
+                      >
+                        {usernameStatus.message}
+                      </p>
+                    ) : null}
+                  </div>
 
-                    const original = originalProfileRef.current
-                    setFullNameInput(original.full_name)
-                    setUsernameInput(original.username)
-                    setBioInput(original.bio)
-                    setAvatarUrlInput(original.avatar_url)
-                  }}
-                  className="rounded-2xl border border-white/10 bg-slate-950 px-5 py-3 text-sm font-bold text-slate-200 transition hover:bg-slate-900"
-                >
-                  Cancel
-                </button>
+                  <div className="sm:col-span-2">
+                    <label className="mb-2 block text-sm font-bold text-slate-200">
+                      Profile Image
+                    </label>
 
-                <span className="text-sm text-slate-400">
-                  {saving
-                    ? "Saving changes..."
-                    : hasUnsavedChanges
-                      ? "Unsaved changes detected."
-                      : "All changes saved."}
-                </span>
-              </div>
-            </section>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      {avatarUrlInput ? (
+                        <img
+                          src={avatarUrlInput}
+                          alt="Profile preview"
+                          className="h-24 w-24 rounded-2xl object-cover ring-1 ring-white/10"
+                        />
+                      ) : (
+                        <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-slate-950 text-lg font-bold text-slate-300 ring-1 ring-white/10">
+                          {initials}
+                        </div>
+                      )}
+
+                      <div className="flex-1">
+                        <label className="inline-flex cursor-pointer items-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-900 transition hover:bg-slate-200">
+                          {uploadingAvatar ? "Uploading..." : "Upload Image"}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={uploadingAvatar}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0]
+                              if (file) void handleAvatarUpload(file)
+                            }}
+                          />
+                        </label>
+                        <p className="mt-2 text-sm text-slate-400">
+                          Upload a square image for the best result.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="mb-2 block text-sm font-bold text-slate-200">
+                      Bio
+                    </label>
+                    <textarea
+                      value={bioInput}
+                      onChange={(e) => setBioInput(e.target.value)}
+                      rows={4}
+                      className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+                      placeholder="Write a short bio about yourself"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const ok = await saveProfile(true)
+                      if (ok) setEditOpen(false)
+                    }}
+                    disabled={saving || usernameStatus.state === "checking"}
+                    className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {saving ? "Saving..." : "Save Now"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditOpen(false)
+                      setSaveError("")
+                      setSaveMessage("")
+                      setUsernameStatus({ state: "idle", message: "" })
+
+                      const original = originalProfileRef.current
+                      setFullNameInput(original.full_name)
+                      setUsernameInput(original.username)
+                      setBioInput(original.bio)
+                      setAvatarUrlInput(original.avatar_url)
+                    }}
+                    className="rounded-2xl border border-white/10 bg-slate-950 px-5 py-3 text-sm font-bold text-slate-200 transition hover:bg-slate-900"
+                  >
+                    Cancel
+                  </button>
+
+                  <span className="text-sm text-slate-400">
+                    {saving
+                      ? "Saving changes..."
+                      : hasUnsavedChanges
+                        ? "Unsaved changes detected."
+                        : "All changes saved."}
+                  </span>
+                </div>
+              </section>
+            </>
           )}
 
           <section className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/80 p-4 shadow-sm ring-1 ring-white/5">
