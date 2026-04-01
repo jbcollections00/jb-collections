@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto"
 import { NextRequest, NextResponse } from "next/server"
-import { createClient as createSupabaseAdmin } from "@supabase/supabase-js"
+import { createClient as createSupabaseAdmin, SupabaseClient } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase-server"
 import { getR2BucketName, getSignedUploadUrl } from "@/lib/r2"
 
@@ -78,11 +78,7 @@ function normalizeExternalUrl(value?: string | null) {
 }
 
 function sanitizeVisibility(value?: string | null): Visibility {
-  if (
-    value === "premium" ||
-    value === "platinum" ||
-    value === "private"
-  ) {
+  if (value === "premium" || value === "platinum" || value === "private") {
     return value
   }
 
@@ -105,6 +101,39 @@ function sanitizeStatus(value?: string | null): FileStatus {
 
 function sanitizeMonetizationEnabled(value?: boolean | null) {
   return value !== false
+}
+
+async function generateUniqueSlug(
+  adminDb: SupabaseClient,
+  title: string,
+  excludeFileId?: string
+) {
+  const baseSlug = slugify(title) || `file-${Date.now()}`
+  let candidate = baseSlug
+  let suffix = 2
+
+  for (let i = 0; i < 100; i += 1) {
+    let query = adminDb.from("files").select("id").eq("slug", candidate).limit(1)
+
+    if (excludeFileId) {
+      query = query.neq("id", excludeFileId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    if (!data || data.length === 0) {
+      return candidate
+    }
+
+    candidate = `${baseSlug}-${suffix}`
+    suffix += 1
+  }
+
+  return `${baseSlug}-${Date.now()}`
 }
 
 export async function POST(req: NextRequest) {
@@ -157,9 +186,7 @@ export async function POST(req: NextRequest) {
 
     if (body.action === "presign") {
       const fileName = String(body.fileName || "").trim()
-      const contentType = String(
-        body.contentType || "application/octet-stream"
-      ).trim()
+      const contentType = String(body.contentType || "application/octet-stream").trim()
       const folder = String(body.folder || "").trim()
       const title = String(body.title || "").trim()
 
@@ -199,9 +226,7 @@ export async function POST(req: NextRequest) {
       const visibility = sanitizeVisibility(body.visibility)
       const status = sanitizeStatus(body.status)
       const monetizationEnabled = sanitizeMonetizationEnabled(
-        typeof body.monetizationEnabled === "boolean"
-          ? body.monetizationEnabled
-          : true
+        typeof body.monetizationEnabled === "boolean" ? body.monetizationEnabled : true
       )
 
       const rawShrinkmeUrl =
@@ -215,9 +240,7 @@ export async function POST(req: NextRequest) {
           : null
 
       const shrinkmeUrl = rawShrinkmeUrl ? normalizeExternalUrl(rawShrinkmeUrl) : null
-      const linkvertiseUrl = rawLinkvertiseUrl
-        ? normalizeExternalUrl(rawLinkvertiseUrl)
-        : null
+      const linkvertiseUrl = rawLinkvertiseUrl ? normalizeExternalUrl(rawLinkvertiseUrl) : null
 
       const storageKey =
         typeof body.storageKey === "string" && body.storageKey.trim()
@@ -230,9 +253,7 @@ export async function POST(req: NextRequest) {
           : null
 
       const fileSize =
-        typeof body.fileSize === "number" && Number.isFinite(body.fileSize)
-          ? body.fileSize
-          : null
+        typeof body.fileSize === "number" && Number.isFinite(body.fileSize) ? body.fileSize : null
 
       const fileType =
         typeof body.fileType === "string" && body.fileType.trim()
@@ -248,20 +269,13 @@ export async function POST(req: NextRequest) {
       }
 
       if (rawShrinkmeUrl && !shrinkmeUrl) {
-        return NextResponse.json(
-          { error: "ShrinkMe link is invalid." },
-          { status: 400 }
-        )
+        return NextResponse.json({ error: "ShrinkMe link is invalid." }, { status: 400 })
       }
 
       if (rawLinkvertiseUrl && !linkvertiseUrl) {
-        return NextResponse.json(
-          { error: "Linkvertise link is invalid." },
-          { status: 400 }
-        )
+        return NextResponse.json({ error: "Linkvertise link is invalid." }, { status: 400 })
       }
 
-      const slug = slugify(title)
       const bucketName = getR2BucketName()
 
       if (mode === "create") {
@@ -271,6 +285,8 @@ export async function POST(req: NextRequest) {
             { status: 400 }
           )
         }
+
+        const slug = await generateUniqueSlug(adminDb, title)
 
         const { data: insertedFile, error: insertFileError } = await adminDb
           .from("files")
@@ -297,17 +313,15 @@ export async function POST(req: NextRequest) {
           )
         }
 
-        const { error: insertVersionError } = await adminDb
-          .from("file_versions")
-          .insert({
-            file_id: insertedFile.id,
-            object_key: storageKey,
-            bucket_name: bucketName,
-            archive_type: fileType,
-            mime_type: null,
-            file_size_bytes: fileSize,
-            is_current: true,
-          })
+        const { error: insertVersionError } = await adminDb.from("file_versions").insert({
+          file_id: insertedFile.id,
+          object_key: storageKey,
+          bucket_name: bucketName,
+          archive_type: fileType,
+          mime_type: null,
+          file_size_bytes: fileSize,
+          is_current: true,
+        })
 
         if (insertVersionError) {
           await adminDb.from("files").delete().eq("id", insertedFile.id)
@@ -330,10 +344,7 @@ export async function POST(req: NextRequest) {
       const fileId = String(body.id || "").trim()
 
       if (!fileId) {
-        return NextResponse.json(
-          { error: "Missing file id for update." },
-          { status: 400 }
-        )
+        return NextResponse.json({ error: "Missing file id for update." }, { status: 400 })
       }
 
       const { data: existingFile, error: existingFileError } = await adminDb
@@ -345,6 +356,8 @@ export async function POST(req: NextRequest) {
       if (existingFileError || !existingFile) {
         return NextResponse.json({ error: "File not found." }, { status: 404 })
       }
+
+      const slug = await generateUniqueSlug(adminDb, title, fileId)
 
       const finalThumbnailUrl =
         incomingThumbnailUrl || existingFile.thumbnail_url || existingFile.cover_url || null
@@ -383,32 +396,26 @@ export async function POST(req: NextRequest) {
         if (clearCurrentError) {
           return NextResponse.json(
             {
-              error:
-                clearCurrentError.message ||
-                "Failed to update file version state.",
+              error: clearCurrentError.message || "Failed to update file version state.",
             },
             { status: 500 }
           )
         }
 
-        const { error: insertVersionError } = await adminDb
-          .from("file_versions")
-          .insert({
-            file_id: fileId,
-            object_key: storageKey,
-            bucket_name: bucketName,
-            archive_type: fileType,
-            mime_type: null,
-            file_size_bytes: fileSize,
-            is_current: true,
-          })
+        const { error: insertVersionError } = await adminDb.from("file_versions").insert({
+          file_id: fileId,
+          object_key: storageKey,
+          bucket_name: bucketName,
+          archive_type: fileType,
+          mime_type: null,
+          file_size_bytes: fileSize,
+          is_current: true,
+        })
 
         if (insertVersionError) {
           return NextResponse.json(
             {
-              error:
-                insertVersionError.message ||
-                "Failed to create new file version.",
+              error: insertVersionError.message || "Failed to create new file version.",
             },
             { status: 500 }
           )

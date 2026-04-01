@@ -185,21 +185,31 @@ function HomeFileCard({ file }: { file: HomeFile }) {
 function StatCard({
   label,
   value,
+  icon,
   onClick,
 }: {
   label: string
   value: string
+  icon: string
   onClick?: () => void
 }) {
   const isClickable = typeof onClick === "function"
 
   const content = (
-    <>
-      <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-sky-200/75">
-        {label}
+    <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-cyan-400/10 text-base ring-1 ring-cyan-400/20 sm:h-10 sm:w-10 sm:text-lg">
+        {icon}
       </div>
-      <div className="mt-3 text-3xl font-black leading-none text-white">{value}</div>
-    </>
+
+      <div className="min-w-0">
+        <div className="truncate text-[9px] font-bold uppercase tracking-[0.14em] text-sky-200/75 sm:text-[10px] sm:tracking-[0.18em]">
+          {label}
+        </div>
+        <div className="mt-1 text-xl font-black leading-none text-white sm:text-2xl">
+          {value}
+        </div>
+      </div>
+    </div>
   )
 
   if (isClickable) {
@@ -207,7 +217,7 @@ function StatCard({
       <button
         type="button"
         onClick={onClick}
-        className="rounded-[24px] border border-white/10 bg-white/[0.05] px-5 py-5 text-left shadow-[0_10px_30px_rgba(0,0,0,0.25)] backdrop-blur-sm transition duration-300 hover:-translate-y-0.5 hover:border-cyan-400/40 hover:bg-white/[0.08]"
+        className="min-w-0 rounded-[20px] border border-white/10 bg-white/[0.05] px-2.5 py-3 text-left shadow-[0_10px_24px_rgba(0,0,0,0.22)] backdrop-blur-sm transition duration-300 hover:border-cyan-400/40 hover:bg-white/[0.08] sm:px-3"
       >
         {content}
       </button>
@@ -215,7 +225,7 @@ function StatCard({
   }
 
   return (
-    <div className="rounded-[24px] border border-white/10 bg-white/[0.05] px-5 py-5 text-left shadow-[0_10px_30px_rgba(0,0,0,0.25)] backdrop-blur-sm">
+    <div className="min-w-0 rounded-[20px] border border-white/10 bg-white/[0.05] px-2.5 py-3 text-left shadow-[0_10px_24px_rgba(0,0,0,0.22)] backdrop-blur-sm sm:px-3">
       {content}
     </div>
   )
@@ -248,7 +258,7 @@ function FileSection({
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
           {Array.from({ length: 10 }).map((_, index) => (
             <div
               key={index}
@@ -268,7 +278,7 @@ function FileSection({
           No items available yet.
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
           {files.map((file) => (
             <HomeFileCard key={file.id} file={file} />
           ))}
@@ -493,7 +503,7 @@ export default function DashboardPage() {
             </div>
 
             {loading ? (
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
                 {Array.from({ length: 4 }).map((_, index) => (
                   <div
                     key={index}
@@ -512,7 +522,7 @@ export default function DashboardPage() {
                 No categories available yet.
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
                 {categories.map((category) => {
                   const image = getCategoryImage(category)
                   const count = fileCounts[category.id] || 0
@@ -587,12 +597,17 @@ export default function DashboardPage() {
 
             <section className="mt-10">
               <div className="rounded-[28px] border border-white/10 bg-[#061229]/70 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-md sm:p-5">
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-                  <StatCard label="Total Members" value={formatNumber(liveStats.totalUsers)} />
+                <div className="grid grid-cols-4 gap-2 sm:gap-3">
+                  <StatCard
+                    label="Members"
+                    value={formatNumber(liveStats.totalUsers)}
+                    icon="👥"
+                  />
 
                   <StatCard
-                    label="Online Users"
-                    value={`🔥 ${formatNumber(liveStats.onlineUsers)}`}
+                    label="Online"
+                    value={formatNumber(liveStats.onlineUsers)}
+                    icon="🔥"
                     onClick={
                       canToggleOnlineUsers
                         ? () => setShowOnlineMembers((prev) => !prev)
@@ -600,9 +615,17 @@ export default function DashboardPage() {
                     }
                   />
 
-                  <StatCard label="Active Today" value={formatNumber(liveStats.activeToday)} />
+                  <StatCard
+                    label="Today"
+                    value={formatNumber(liveStats.activeToday)}
+                    icon="📈"
+                  />
 
-                  <StatCard label="New Member/s" value={formatNumber(newMembers.length)} />
+                  <StatCard
+                    label="New"
+                    value={formatNumber(newMembers.length)}
+                    icon="🆕"
+                  />
                 </div>
 
                 {canToggleOnlineUsers && showOnlineMembers ? (

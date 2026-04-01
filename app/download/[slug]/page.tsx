@@ -16,6 +16,17 @@ type FileRow = {
   linkvertise_url?: string | null
   monetization_enabled?: boolean | null
   status?: string | null
+  category_id?: string | null
+  thumbnail_url?: string | null
+  slug?: string | null
+  downloads_count?: number | null
+}
+
+type RelatedFileRow = {
+  id: string
+  title?: string | null
+  thumbnail_url?: string | null
+  slug?: string | null
 }
 
 type ProfileRow = {
@@ -38,19 +49,28 @@ function normalizeMembership(value?: string | null) {
   return "standard"
 }
 
-export default function DownloadGatePage() {
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  )
+}
+
+export default function DownloadPage() {
   const params = useParams()
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
-  const id = params?.id as string
+  const idOrSlug = (params?.slug as string) || ""
   const unlockedFromQuery = searchParams?.get("unlocked") === "1"
 
   const [checking, setChecking] = useState(true)
   const [file, setFile] = useState<FileRow | null>(null)
+  const [related, setRelated] = useState<RelatedFileRow[]>([])
   const [isPremiumUser, setIsPremiumUser] = useState(false)
   const [isPlatinumUser, setIsPlatinumUser] = useState(false)
   const [error, setError] = useState("")
+  const [shareUrl, setShareUrl] = useState("")
+  const [copied, setCopied] = useState(false)
 
   const [step, setStep] = useState<"waiting" | "ready" | "premium-only" | "platinum-only">(
     "waiting"
@@ -63,10 +83,16 @@ export default function DownloadGatePage() {
   const hasLoggedGateViewRef = useRef(false)
 
   useEffect(() => {
-    if (!id) return
+    if (typeof window !== "undefined") {
+      setShareUrl(window.location.href)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!idOrSlug) return
     void loadPage()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, unlockedFromQuery])
+  }, [idOrSlug, unlockedFromQuery])
 
   useEffect(() => {
     if (checking) return
@@ -110,11 +136,26 @@ export default function DownloadGatePage() {
     }
   }
 
+  async function incrementViews(targetFileId: string) {
+    try {
+      const { error } = await supabase.rpc("increment_file_views", {
+        file_id_input: targetFileId,
+      })
+
+      if (error) {
+        console.warn("Failed to increment file views:", error.message)
+      }
+    } catch (err) {
+      console.warn("Failed to increment file views:", err)
+    }
+  }
+
   async function loadPage() {
     try {
       setChecking(true)
       setError("")
       setFile(null)
+      setRelated([])
       setIsPremiumUser(false)
       setIsPlatinumUser(false)
 
@@ -134,22 +175,22 @@ export default function DownloadGatePage() {
         return
       }
 
-      const [{ data: fileData, error: fileError }, { data: profileData, error: profileError }] =
-        await Promise.all([
-          supabase
-            .from("files")
-            .select(
-              "id, title, description, visibility, shrinkme_url, linkvertise_url, monetization_enabled, status"
-            )
-            .eq("id", id)
-            .eq("status", "published")
-            .maybeSingle(),
-          supabase
-            .from("profiles")
-            .select("role, membership, is_premium")
-            .eq("id", user.id)
-            .maybeSingle(),
-        ])
+      const baseQuery = supabase
+        .from("files")
+        .select(
+          "id, title, description, visibility, shrinkme_url, linkvertise_url, monetization_enabled, status, category_id, thumbnail_url, slug, downloads_count"
+        )
+        .eq("status", "published")
+
+      const { data: fileData, error: fileError } = isUuid(idOrSlug)
+        ? await baseQuery.eq("id", idOrSlug).maybeSingle()
+        : await baseQuery.eq("slug", idOrSlug).maybeSingle()
+
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("role, membership, is_premium")
+        .eq("id", user.id)
+        .maybeSingle()
 
       if (fileError) {
         setError(`Failed to load file: ${fileError.message}`)
@@ -157,7 +198,7 @@ export default function DownloadGatePage() {
       }
 
       if (!fileData) {
-        setError(`No file row found for id: ${id}`)
+        setError(`No file row found for: ${idOrSlug}`)
         return
       }
 
@@ -183,6 +224,25 @@ export default function DownloadGatePage() {
       setFile(foundFile)
       setIsPremiumUser(Boolean(premium))
       setIsPlatinumUser(Boolean(platinum))
+
+      void incrementViews(realFileId)
+
+      if (foundFile.category_id) {
+        const { data: relatedFiles, error: relatedError } = await supabase
+          .from("files")
+          .select("id, title, thumbnail_url, slug")
+          .eq("category_id", foundFile.category_id)
+          .neq("id", realFileId)
+          .eq("status", "published")
+          .order("downloads_count", { ascending: false })
+          .limit(6)
+
+        if (relatedError) {
+          console.warn("Failed to load related files:", relatedError.message)
+        } else {
+          setRelated((relatedFiles as RelatedFileRow[]) || [])
+        }
+      }
 
       if (!hasLoggedGateViewRef.current) {
         hasLoggedGateViewRef.current = true
@@ -262,6 +322,17 @@ export default function DownloadGatePage() {
     )
 
     window.location.href = `/api/download/${file.id}`
+  }
+
+  async function handleCopyLink() {
+    try {
+      if (!shareUrl) return
+      await navigator.clipboard.writeText(shareUrl)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch (err) {
+      console.warn("Failed to copy link:", err)
+    }
   }
 
   if (checking) {
@@ -434,6 +505,45 @@ export default function DownloadGatePage() {
               )}
             </div>
 
+            <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-4">
+              <p className="mb-3 text-center text-sm font-semibold text-slate-700">Share this file</p>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="inline-flex items-center justify-center rounded-2xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-300"
+                >
+                  {copied ? "Copied!" : "Copy Link"}
+                </button>
+
+                <a
+                  href={
+                    shareUrl
+                      ? `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`
+                      : "#"
+                  }
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                >
+                  Facebook
+                </a>
+
+                <a
+                  href={
+                    shareUrl
+                      ? `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}`
+                      : "#"
+                  }
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center rounded-2xl bg-sky-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-600"
+                >
+                  Telegram
+                </a>
+              </div>
+            </div>
+
             {!isPremiumUser && visibility === "free" ? (
               <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center">
                 <p className="text-sm font-semibold text-amber-800">
@@ -463,6 +573,49 @@ export default function DownloadGatePage() {
             ) : null}
           </div>
         </div>
+
+        {related.length > 0 ? (
+          <div className="mt-8 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Keep Browsing
+                </p>
+                <h2 className="text-xl font-bold text-slate-900">Related Downloads</h2>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              {related.map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/download/${item.slug || item.id}`}
+                  className="group overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div className="aspect-[4/3] overflow-hidden bg-slate-200">
+                    {item.thumbnail_url ? (
+                      <img
+                        src={item.thumbnail_url}
+                        alt={item.title || "Related file"}
+                        className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-slate-400">
+                        No Preview
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3">
+                    <p className="line-clamp-2 text-sm font-semibold text-slate-800 transition group-hover:text-blue-600">
+                      {item.title || "Untitled File"}
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {shouldShowStickyAd ? (
