@@ -45,10 +45,11 @@ export async function GET() {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
+    // 🔥 FIXED: added jb_points
     const { data, error } = await adminSupabase
       .from("profiles")
       .select(
-        "id, email, full_name, name, username, membership, account_status, status, is_premium, role, last_seen, created_at"
+        "id, email, full_name, name, username, membership, account_status, status, is_premium, role, jb_points, last_seen, created_at"
       )
       .order("created_at", { ascending: false })
 

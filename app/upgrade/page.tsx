@@ -1,8 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { Suspense, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
 import AdSlot from "@/app/components/AdSlot"
 import SiteHeader from "@/app/components/SiteHeader"
 import { IN_CONTENT_AD } from "@/app/lib/adCodes"
@@ -13,8 +14,26 @@ function normalizePlan(value?: string | null) {
   return "premium"
 }
 
+type ProfileRow = {
+  id?: string
+  full_name?: string | null
+  name?: string | null
+  membership?: string | null
+  jb_points?: number | null
+  role?: string | null
+  is_premium?: boolean | null
+}
+
+function normalizeMembership(value?: string | null) {
+  const membership = String(value || "").trim().toLowerCase()
+  if (membership === "platinum") return "platinum"
+  if (membership === "premium") return "premium"
+  return "standard"
+}
+
 function UpgradePageContent() {
   const searchParams = useSearchParams()
+  const supabase = useMemo(() => createClient(), [])
 
   const success = searchParams?.get("success") ?? ""
   const error = searchParams?.get("error") ?? ""
@@ -23,6 +42,75 @@ function UpgradePageContent() {
   const [selectedPlan, setSelectedPlan] = useState<"premium" | "platinum">(initialPlan)
   const [showPaymentBox, setShowPaymentBox] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<"gcash" | "maya" | "bank">("gcash")
+  const [selectedMethod, setSelectedMethod] = useState<"payment" | "coins">("coins")
+  const [profile, setProfile] = useState<ProfileRow | null>(null)
+  const [profileLoading, setProfileLoading] = useState(true)
+
+  const premiumCoinCost = 2000
+  const platinumCoinCost = 2600
+
+  useEffect(() => {
+    void loadProfile()
+  }, [])
+
+  async function loadProfile() {
+    try {
+      setProfileLoading(true)
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        setProfile(null)
+        return
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, name, membership, jb_points, role, is_premium")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      if (error) {
+        console.error("Upgrade profile fetch error:", error)
+        setProfile(null)
+        return
+      }
+
+      setProfile((data as ProfileRow | null) || null)
+    } catch (err) {
+      console.error("Upgrade profile load error:", err)
+      setProfile(null)
+    } finally {
+      setProfileLoading(false)
+    }
+  }
+
+  const membership = normalizeMembership(profile?.membership)
+  const currentCoins = Number(profile?.jb_points || 0)
+  const selectedCoinCost = selectedPlan === "platinum" ? platinumCoinCost : premiumCoinCost
+  const hasEnoughCoins = currentCoins >= selectedCoinCost
+  const planTitle = selectedPlan === "platinum" ? "Platinum" : "Premium"
+  const planPrice = selectedPlan === "platinum" ? "₱299" : "₱149"
+  const planCoinCost = selectedPlan === "platinum" ? platinumCoinCost : premiumCoinCost
+  const planGradient =
+    selectedPlan === "platinum"
+      ? "linear-gradient(90deg, #c026d3, #7c3aed)"
+      : "linear-gradient(90deg, #0ea5e9, #4f46e5)"
+  const formDefaultSubject =
+    selectedPlan === "platinum"
+      ? "Platinum upgrade request"
+      : "Premium upgrade request"
+
+  const successText =
+    success === "redeemed"
+      ? selectedPlan === "platinum"
+        ? "Your Platinum membership was redeemed successfully using JB Coins."
+        : "Your Premium membership was redeemed successfully using JB Coins."
+      : selectedPlan === "platinum"
+        ? "Your platinum upgrade request was submitted successfully."
+        : "Your premium upgrade request was submitted successfully."
 
   const errorMessage =
     error === "missing-message"
@@ -43,24 +131,19 @@ function UpgradePageContent() {
                     ? "Receipt upload failed. Please try again."
                     : error === "insert-failed"
                       ? "Failed to save your request. Please try again."
-                      : error === "unexpected"
-                        ? "Something went wrong. Please try again."
-                        : null
-
-  const planTitle = selectedPlan === "platinum" ? "Platinum" : "Premium"
-  const planPrice = selectedPlan === "platinum" ? "₱299" : "₱149"
-  const planGradient =
-    selectedPlan === "platinum"
-      ? "linear-gradient(90deg, #c026d3, #7c3aed)"
-      : "linear-gradient(90deg, #0ea5e9, #4f46e5)"
-  const formDefaultSubject =
-    selectedPlan === "platinum"
-      ? "Platinum upgrade request"
-      : "Premium upgrade request"
-  const successText =
-    selectedPlan === "platinum"
-      ? "Your platinum upgrade request was submitted successfully."
-      : "Your premium upgrade request was submitted successfully."
+                      : error === "insufficient-coins"
+                        ? "You do not have enough JB Coins to redeem this membership."
+                        : error === "already-premium"
+                          ? "Your account already has Premium or higher access."
+                          : error === "already-platinum"
+                            ? "Your account already has Platinum access."
+                            : error === "auth-required"
+                              ? "Please log in first before redeeming with JB Coins."
+                              : error === "redeem-failed"
+                                ? "Redeem failed. Please try again."
+                                : error === "unexpected"
+                                  ? "Something went wrong. Please try again."
+                                  : null
 
   const paymentDetails = useMemo(() => {
     if (selectedPayment === "gcash") {
@@ -95,8 +178,9 @@ function UpgradePageContent() {
     }
   }, [selectedPayment])
 
-  function choosePlan(plan: "premium" | "platinum") {
+  function choosePlan(plan: "premium" | "platinum", method: "payment" | "coins") {
     setSelectedPlan(plan)
+    setSelectedMethod(method)
     setShowPaymentBox(true)
 
     setTimeout(() => {
@@ -106,6 +190,16 @@ function UpgradePageContent() {
       }
     }, 100)
   }
+
+  const isAlreadyPremiumOrHigher =
+    membership === "premium" || membership === "platinum"
+  const isAlreadyPlatinum = membership === "platinum"
+
+  const disablePremiumRedeem =
+    profileLoading || !profile || currentCoins < premiumCoinCost || isAlreadyPremiumOrHigher
+
+  const disablePlatinumRedeem =
+    profileLoading || !profile || currentCoins < platinumCoinCost || isAlreadyPlatinum
 
   return (
     <>
@@ -191,7 +285,99 @@ function UpgradePageContent() {
             </p>
           </div>
 
-          {success === "1" && (
+          <div
+            style={{
+              marginBottom: "20px",
+              border: "1px solid #dbe4f0",
+              background: "#ffffff",
+              borderRadius: "22px",
+              padding: "18px",
+              boxShadow: "0 8px 18px rgba(15, 23, 42, 0.05)",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                gap: "14px",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    color: "#64748b",
+                    marginBottom: "6px",
+                  }}
+                >
+                  CURRENT MEMBERSHIP
+                </div>
+                <div
+                  style={{
+                    fontSize: "24px",
+                    fontWeight: 800,
+                    color: "#0f172a",
+                  }}
+                >
+                  {membership === "platinum"
+                    ? "Platinum"
+                    : membership === "premium"
+                      ? "Premium"
+                      : "Free"}
+                </div>
+              </div>
+
+              <div>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    color: "#64748b",
+                    marginBottom: "6px",
+                  }}
+                >
+                  JB COIN WALLET
+                </div>
+                <div
+                  style={{
+                    fontSize: "24px",
+                    fontWeight: 800,
+                    color: "#0f172a",
+                  }}
+                >
+                  {profileLoading ? "Loading..." : `${currentCoins.toLocaleString()} JB Coins`}
+                </div>
+              </div>
+
+              <div>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    color: "#64748b",
+                    marginBottom: "6px",
+                  }}
+                >
+                  REDEEM PRICES
+                </div>
+                <div
+                  style={{
+                    fontSize: "14px",
+                    color: "#475569",
+                    lineHeight: 1.8,
+                    fontWeight: 700,
+                  }}
+                >
+                  <div>Premium = 2000 JB Coins</div>
+                  <div>Platinum = 2600 JB Coins</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {success === "1" || success === "redeemed" ? (
             <div
               style={{
                 marginBottom: "18px",
@@ -207,7 +393,7 @@ function UpgradePageContent() {
             >
               {successText}
             </div>
-          )}
+          ) : null}
 
           {errorMessage && (
             <div
@@ -335,10 +521,50 @@ function UpgradePageContent() {
                 style={{
                   fontSize: "14px",
                   color: "#64748b",
-                  marginBottom: "18px",
+                  marginBottom: "12px",
                 }}
               >
                 per month
+              </div>
+
+              <div
+                style={{
+                  marginBottom: "18px",
+                  border: "1px solid #dbeafe",
+                  background: "#eff6ff",
+                  borderRadius: "14px",
+                  padding: "12px 14px",
+                  textAlign: "center",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    color: "#1d4ed8",
+                    marginBottom: "4px",
+                  }}
+                >
+                  REDEEM WITH JB COINS
+                </div>
+                <div
+                  style={{
+                    fontSize: "24px",
+                    fontWeight: 800,
+                    color: "#0f172a",
+                  }}
+                >
+                  {premiumCoinCost.toLocaleString()}
+                </div>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    color: "#475569",
+                    marginTop: "4px",
+                  }}
+                >
+                  JB Coins
+                </div>
               </div>
 
               <div style={{ display: "grid", gap: "10px", fontSize: "14px", color: "#475569" }}>
@@ -349,10 +575,41 @@ function UpgradePageContent() {
                 <div>✖ No platinum-exclusive files</div>
               </div>
 
-              <div style={{ marginTop: "18px" }}>
+              <div style={{ marginTop: "18px", display: "grid", gap: "10px" }}>
                 <button
                   type="button"
-                  onClick={() => choosePlan("premium")}
+                  onClick={() => choosePlan("premium", "coins")}
+                  disabled={disablePremiumRedeem}
+                  style={{
+                    display: "inline-flex",
+                    width: "100%",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    padding: "12px 18px",
+                    borderRadius: "14px",
+                    background: disablePremiumRedeem
+                      ? "#cbd5e1"
+                      : "linear-gradient(90deg, #1d4ed8, #2563eb)",
+                    color: "#ffffff",
+                    textDecoration: "none",
+                    fontWeight: 700,
+                    fontSize: "14px",
+                    border: "none",
+                    cursor: disablePremiumRedeem ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {isAlreadyPremiumOrHigher
+                    ? "Already Premium or Higher"
+                    : profileLoading
+                      ? "Checking Coins..."
+                      : currentCoins < premiumCoinCost
+                        ? "Not Enough JB Coins"
+                        : "Redeem Premium with JB Coins"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => choosePlan("premium", "payment")}
                   style={{
                     display: "inline-flex",
                     width: "100%",
@@ -369,7 +626,7 @@ function UpgradePageContent() {
                     cursor: "pointer",
                   }}
                 >
-                  Choose Premium
+                  Choose Premium via Payment
                 </button>
               </div>
             </div>
@@ -408,10 +665,50 @@ function UpgradePageContent() {
                 style={{
                   fontSize: "14px",
                   color: "#64748b",
-                  marginBottom: "18px",
+                  marginBottom: "12px",
                 }}
               >
                 per month
+              </div>
+
+              <div
+                style={{
+                  marginBottom: "18px",
+                  border: "1px solid #f5d0fe",
+                  background: "#fdf4ff",
+                  borderRadius: "14px",
+                  padding: "12px 14px",
+                  textAlign: "center",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    color: "#a21caf",
+                    marginBottom: "4px",
+                  }}
+                >
+                  REDEEM WITH JB COINS
+                </div>
+                <div
+                  style={{
+                    fontSize: "24px",
+                    fontWeight: 800,
+                    color: "#0f172a",
+                  }}
+                >
+                  {platinumCoinCost.toLocaleString()}
+                </div>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    color: "#475569",
+                    marginTop: "4px",
+                  }}
+                >
+                  JB Coins
+                </div>
               </div>
 
               <div style={{ display: "grid", gap: "10px", fontSize: "14px", color: "#475569" }}>
@@ -422,10 +719,41 @@ function UpgradePageContent() {
                 <div>✔ Premium + Platinum content</div>
               </div>
 
-              <div style={{ marginTop: "18px" }}>
+              <div style={{ marginTop: "18px", display: "grid", gap: "10px" }}>
                 <button
                   type="button"
-                  onClick={() => choosePlan("platinum")}
+                  onClick={() => choosePlan("platinum", "coins")}
+                  disabled={disablePlatinumRedeem}
+                  style={{
+                    display: "inline-flex",
+                    width: "100%",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    padding: "12px 18px",
+                    borderRadius: "14px",
+                    background: disablePlatinumRedeem
+                      ? "#d8b4fe"
+                      : "linear-gradient(90deg, #c026d3, #7c3aed)",
+                    color: "#ffffff",
+                    textDecoration: "none",
+                    fontWeight: 700,
+                    fontSize: "14px",
+                    border: "none",
+                    cursor: disablePlatinumRedeem ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {isAlreadyPlatinum
+                    ? "Already Platinum"
+                    : profileLoading
+                      ? "Checking Coins..."
+                      : currentCoins < platinumCoinCost
+                        ? "Not Enough JB Coins"
+                        : "Redeem Platinum with JB Coins"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => choosePlan("platinum", "payment")}
                   style={{
                     display: "inline-flex",
                     width: "100%",
@@ -442,7 +770,7 @@ function UpgradePageContent() {
                     cursor: "pointer",
                   }}
                 >
-                  Choose Platinum
+                  Choose Platinum via Payment
                 </button>
               </div>
             </div>
@@ -480,436 +808,644 @@ function UpgradePageContent() {
                 gap: "24px",
               }}
             >
-              <div
-                style={{
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "22px",
-                  background: "#ffffff",
-                  padding: "22px",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => setShowPaymentBox((prev) => !prev)}
-                  style={{
-                    width: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "16px",
-                    background: "#f8fafc",
-                    padding: "16px 18px",
-                    cursor: "pointer",
-                    fontSize: "18px",
-                    fontWeight: 800,
-                    color: "#0f172a",
-                  }}
-                >
-                  <span>Payment Instructions for {planTitle}</span>
-                  <span style={{ fontSize: "22px", lineHeight: 1 }}>▾</span>
-                </button>
-
-                <div
-                  style={{
-                    marginTop: "16px",
-                    border:
-                      selectedPlan === "platinum"
-                        ? "1px solid #f5d0fe"
-                        : "1px solid #bfdbfe",
-                    background:
-                      selectedPlan === "platinum" ? "#fdf4ff" : "#eff6ff",
-                    borderRadius: "18px",
-                    padding: "18px",
-                    marginBottom: "20px",
-                    textAlign: "center",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "13px",
-                      fontWeight: 700,
-                      color: selectedPlan === "platinum" ? "#a21caf" : "#1d4ed8",
-                      marginBottom: "8px",
-                    }}
-                  >
-                    {planTitle.toUpperCase()} MEMBERSHIP
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: "32px",
-                      fontWeight: 800,
-                      color: "#0f172a",
-                    }}
-                  >
-                    {planPrice}
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: "14px",
-                      color: "#64748b",
-                      marginTop: "4px",
-                    }}
-                  >
-                    per month
-                  </div>
-                </div>
-
+              {selectedMethod === "coins" ? (
                 <div
                   style={{
                     border: "1px solid #e2e8f0",
-                    borderRadius: "18px",
-                    background: "#f8fafc",
-                    padding: "18px",
-                    marginBottom: "20px",
+                    borderRadius: "22px",
+                    background: "#ffffff",
+                    padding: "22px",
                   }}
                 >
                   <div
                     style={{
-                      fontSize: "18px",
-                      fontWeight: 800,
-                      color: "#0f172a",
-                      marginBottom: "10px",
-                      textAlign: "center",
-                    }}
-                  >
-                    Choose Payment Method
-                  </div>
-
-                  <p
-                    style={{
-                      margin: "0 0 14px",
-                      fontSize: "14px",
-                      color: "#475569",
-                      lineHeight: 1.7,
-                      textAlign: "center",
-                    }}
-                  >
-                    Send <strong>{planPrice}</strong> first, then fill out the form below and upload your receipt.
-                  </p>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "10px",
-                      flexWrap: "wrap",
-                      justifyContent: "center",
-                      marginBottom: "18px",
-                    }}
-                  >
-                    {[
-                      { key: "gcash", label: "GCash" },
-                      { key: "maya", label: "Maya" },
-                      { key: "bank", label: "Bank / InstaPay" },
-                    ].map((item) => {
-                      const active = selectedPayment === item.key
-                      return (
-                        <button
-                          key={item.key}
-                          type="button"
-                          onClick={() =>
-                            setSelectedPayment(item.key as "gcash" | "maya" | "bank")
-                          }
-                          style={{
-                            padding: "12px 16px",
-                            borderRadius: "12px",
-                            border: active ? "2px solid #2563eb" : "1px solid #cbd5e1",
-                            background: active ? "#eff6ff" : "#ffffff",
-                            color: active ? "#1d4ed8" : "#334155",
-                            fontWeight: 700,
-                            fontSize: "14px",
-                            cursor: "pointer",
-                          }}
-                        >
-                          {item.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-
-                  <div
-                    style={{
-                      border: "1px solid #dbeafe",
-                      background: "#ffffff",
-                      borderRadius: "16px",
-                      padding: "16px",
+                      border:
+                        selectedPlan === "platinum"
+                          ? "1px solid #f5d0fe"
+                          : "1px solid #bfdbfe",
+                      background:
+                        selectedPlan === "platinum" ? "#fdf4ff" : "#eff6ff",
+                      borderRadius: "18px",
+                      padding: "18px",
+                      marginBottom: "20px",
                       textAlign: "center",
                     }}
                   >
                     <div
                       style={{
-                        fontSize: "15px",
-                        fontWeight: 800,
-                        color: "#0f172a",
-                        marginBottom: "10px",
+                        fontSize: "13px",
+                        fontWeight: 700,
+                        color: selectedPlan === "platinum" ? "#a21caf" : "#1d4ed8",
+                        marginBottom: "8px",
                       }}
                     >
-                      {paymentDetails.label}
+                      {planTitle.toUpperCase()} MEMBERSHIP REDEEM
                     </div>
 
-                    <img
-                      src={paymentDetails.qr}
-                      alt={`${paymentDetails.label} QR`}
+                    <div
                       style={{
-                        width: "240px",
-                        maxWidth: "100%",
-                        display: "block",
-                        margin: "0 auto 12px",
-                        borderRadius: "12px",
-                        border: "1px solid #e2e8f0",
-                        background: "#fff",
+                        fontSize: "32px",
+                        fontWeight: 800,
+                        color: "#0f172a",
                       }}
-                    />
-
-                    <div style={{ fontSize: "14px", color: "#64748b" }}>
-                      {paymentDetails.numberLabel}
-                    </div>
-                    <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", marginTop: "4px" }}>
-                      {paymentDetails.number}
-                    </div>
-                    <div style={{ fontSize: "13px", color: "#64748b", marginTop: "6px" }}>
-                      {paymentDetails.name}
+                    >
+                      {planCoinCost.toLocaleString()} JB Coins
                     </div>
 
-                    {paymentDetails.extra ? (
-                      <div style={{ fontSize: "12px", color: "#64748b", marginTop: "8px" }}>
-                        {paymentDetails.extra}
-                      </div>
-                    ) : null}
+                    <div
+                      style={{
+                        fontSize: "14px",
+                        color: "#64748b",
+                        marginTop: "4px",
+                      }}
+                    >
+                      Instant unlock after successful redeem
+                    </div>
                   </div>
 
                   <div
                     style={{
-                      marginTop: "14px",
-                      borderRadius: "14px",
-                      background: "#ffffff",
-                      border: "1px dashed #cbd5e1",
-                      padding: "14px",
-                      fontSize: "13px",
-                      color: "#475569",
-                      lineHeight: 1.7,
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "18px",
+                      background: "#f8fafc",
+                      padding: "18px",
+                      marginBottom: "20px",
                     }}
                   >
-                    <div><strong>How it works:</strong></div>
-                    <div>1. Send payment for the selected membership.</div>
-                    <div>2. Choose the payment method you used.</div>
-                    <div>3. Enter the payment name and reference number.</div>
-                    <div>4. Upload your receipt.</div>
-                    <div>5. Wait for admin approval.</div>
+                    <div
+                      style={{
+                        fontSize: "18px",
+                        fontWeight: 800,
+                        color: "#0f172a",
+                        marginBottom: "12px",
+                        textAlign: "center",
+                      }}
+                    >
+                      Redeem Using JB Coins
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                        gap: "14px",
+                        marginBottom: "14px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          border: "1px solid #dbe4f0",
+                          borderRadius: "14px",
+                          background: "#ffffff",
+                          padding: "14px",
+                        }}
+                      >
+                        <div style={{ fontSize: "12px", color: "#64748b", fontWeight: 700 }}>
+                          CURRENT BALANCE
+                        </div>
+                        <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", marginTop: "6px" }}>
+                          {profileLoading ? "Loading..." : `${currentCoins.toLocaleString()} JB Coins`}
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          border: "1px solid #dbe4f0",
+                          borderRadius: "14px",
+                          background: "#ffffff",
+                          padding: "14px",
+                        }}
+                      >
+                        <div style={{ fontSize: "12px", color: "#64748b", fontWeight: 700 }}>
+                          REQUIRED
+                        </div>
+                        <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", marginTop: "6px" }}>
+                          {planCoinCost.toLocaleString()} JB Coins
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          border: "1px solid #dbe4f0",
+                          borderRadius: "14px",
+                          background: "#ffffff",
+                          padding: "14px",
+                        }}
+                      >
+                        <div style={{ fontSize: "12px", color: "#64748b", fontWeight: 700 }}>
+                          AFTER REDEEM
+                        </div>
+                        <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", marginTop: "6px" }}>
+                          {Math.max(0, currentCoins - planCoinCost).toLocaleString()} JB Coins
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        borderRadius: "14px",
+                        background: hasEnoughCoins ? "#f0fdf4" : "#fef2f2",
+                        border: hasEnoughCoins ? "1px solid #bbf7d0" : "1px solid #fecaca",
+                        padding: "14px",
+                        fontSize: "14px",
+                        fontWeight: 700,
+                        color: hasEnoughCoins ? "#15803d" : "#b91c1c",
+                        textAlign: "center",
+                      }}
+                    >
+                      {profileLoading
+                        ? "Checking your JB Coin balance..."
+                        : hasEnoughCoins
+                          ? `You have enough JB Coins to redeem ${planTitle}.`
+                          : `You need ${(planCoinCost - currentCoins).toLocaleString()} more JB Coins to redeem ${planTitle}.`}
+                    </div>
                   </div>
+
+                  <form
+                    action="/api/upgrade/redeem-coins"
+                    method="POST"
+                    style={{
+                      display: "grid",
+                      gap: "14px",
+                    }}
+                  >
+                    <input type="hidden" name="plan" value={selectedPlan} />
+                    <input type="hidden" name="cost" value={String(planCoinCost)} />
+
+                    <button
+                      type="submit"
+                      disabled={profileLoading || !profile || !hasEnoughCoins}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "15px 24px",
+                        borderRadius: "14px",
+                        background:
+                          profileLoading || !profile || !hasEnoughCoins
+                            ? "#cbd5e1"
+                            : planGradient,
+                        color: "#ffffff",
+                        border: "none",
+                        fontWeight: 700,
+                        fontSize: "15px",
+                        cursor:
+                          profileLoading || !profile || !hasEnoughCoins
+                            ? "not-allowed"
+                            : "pointer",
+                        boxShadow:
+                          selectedPlan === "platinum"
+                            ? "0 10px 20px rgba(124, 58, 237, 0.22)"
+                            : "0 10px 20px rgba(59, 130, 246, 0.22)",
+                      }}
+                    >
+                      Redeem {planTitle} with {planCoinCost.toLocaleString()} JB Coins
+                    </button>
+                  </form>
 
                   <p
                     style={{
-                      marginTop: "10px",
-                      fontSize: "12px",
+                      margin: "12px 0 0",
+                      fontSize: "13px",
                       color: "#64748b",
                       textAlign: "center",
                     }}
                   >
-                    Make sure the payer name and reference number match the receipt you upload.
+                    This button needs a backend route at <strong>/api/upgrade/redeem-coins</strong> to deduct JB Coins and upgrade the membership automatically.
                   </p>
                 </div>
-
-                <form
-                  action="/api/upgrade/request"
-                  method="POST"
-                  encType="multipart/form-data"
+              ) : (
+                <div
                   style={{
-                    display: "grid",
-                    gap: "14px",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "22px",
+                    background: "#ffffff",
+                    padding: "22px",
                   }}
                 >
-                  <input type="hidden" name="plan" value={selectedPlan} />
-
-                  <input
-                    type="text"
-                    name="subject"
-                    placeholder="Subject"
-                    defaultValue={formDefaultSubject}
+                  <button
+                    type="button"
+                    onClick={() => setShowPaymentBox((prev) => !prev)}
                     style={{
                       width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
                       border: "1px solid #cbd5e1",
-                      borderRadius: "14px",
-                      padding: "14px 16px",
-                      fontSize: "15px",
-                      outline: "none",
+                      borderRadius: "16px",
+                      background: "#f8fafc",
+                      padding: "16px 18px",
+                      cursor: "pointer",
+                      fontSize: "18px",
+                      fontWeight: 800,
+                      color: "#0f172a",
                     }}
-                  />
+                  >
+                    <span>Payment Instructions for {planTitle}</span>
+                    <span style={{ fontSize: "22px", lineHeight: 1 }}>▾</span>
+                  </button>
 
                   <div
                     style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-                      gap: "14px",
+                      marginTop: "16px",
+                      border:
+                        selectedPlan === "platinum"
+                          ? "1px solid #f5d0fe"
+                          : "1px solid #bfdbfe",
+                      background:
+                        selectedPlan === "platinum" ? "#fdf4ff" : "#eff6ff",
+                      borderRadius: "18px",
+                      padding: "18px",
+                      marginBottom: "20px",
+                      textAlign: "center",
                     }}
                   >
-                    <input
-                      type="text"
-                      name="payment_name"
-                      placeholder="Account name used for payment"
-                      required
+                    <div
                       style={{
-                        width: "100%",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: "14px",
-                        padding: "14px 16px",
-                        fontSize: "15px",
-                        outline: "none",
-                      }}
-                    />
-
-                    <select
-                      name="payment_method"
-                      required
-                      value={selectedPayment}
-                      onChange={(e) =>
-                        setSelectedPayment(e.target.value as "gcash" | "maya" | "bank")
-                      }
-                      style={{
-                        width: "100%",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: "14px",
-                        padding: "14px 16px",
-                        fontSize: "15px",
-                        outline: "none",
-                        background: "#fff",
+                        fontSize: "13px",
+                        fontWeight: 700,
+                        color: selectedPlan === "platinum" ? "#a21caf" : "#1d4ed8",
+                        marginBottom: "8px",
                       }}
                     >
-                      <option value="gcash">GCash</option>
-                      <option value="maya">Maya</option>
-                      <option value="bank">Bank / InstaPay</option>
-                    </select>
+                      {planTitle.toUpperCase()} MEMBERSHIP
+                    </div>
 
-                    <input
-                      type="text"
-                      name="payment_number"
-                      placeholder="Mobile number or bank account used for payment"
+                    <div
                       style={{
-                        width: "100%",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: "14px",
-                        padding: "14px 16px",
-                        fontSize: "15px",
-                        outline: "none",
+                        fontSize: "32px",
+                        fontWeight: 800,
+                        color: "#0f172a",
                       }}
-                    />
+                    >
+                      {planPrice}
+                    </div>
 
-                    <input
-                      type="text"
-                      name="reference_number"
-                      placeholder="Reference number"
-                      required
+                    <div
                       style={{
-                        width: "100%",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: "14px",
-                        padding: "14px 16px",
-                        fontSize: "15px",
-                        outline: "none",
+                        fontSize: "14px",
+                        color: "#64748b",
+                        marginTop: "4px",
                       }}
-                    />
+                    >
+                      per month
+                    </div>
                   </div>
 
-                  <textarea
-                    name="message"
-                    placeholder={`Write your reason for requesting ${planTitle.toLowerCase()} access...`}
-                    required
-                    rows={6}
-                    style={{
-                      width: "100%",
-                      border: "1px solid #cbd5e1",
-                      borderRadius: "14px",
-                      padding: "14px 16px",
-                      fontSize: "15px",
-                      outline: "none",
-                      resize: "vertical",
-                      lineHeight: 1.6,
-                    }}
-                  />
-
                   <div
                     style={{
-                      border: "1px dashed #cbd5e1",
-                      borderRadius: "14px",
-                      padding: "16px",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "18px",
                       background: "#f8fafc",
+                      padding: "18px",
+                      marginBottom: "20px",
                     }}
                   >
-                    <label
-                      htmlFor="receipt"
+                    <div
                       style={{
-                        display: "block",
-                        marginBottom: "8px",
-                        fontSize: "14px",
-                        fontWeight: 700,
-                        color: "#334155",
+                        fontSize: "18px",
+                        fontWeight: 800,
+                        color: "#0f172a",
+                        marginBottom: "10px",
+                        textAlign: "center",
                       }}
                     >
-                      Upload receipt
-                    </label>
-
-                    <input
-                      id="receipt"
-                      type="file"
-                      name="receipt"
-                      accept="image/*,.pdf"
-                      required
-                      style={{
-                        width: "100%",
-                        fontSize: "14px",
-                        color: "#475569",
-                      }}
-                    />
+                      Choose Payment Method
+                    </div>
 
                     <p
                       style={{
-                        margin: "8px 0 0",
-                        fontSize: "12px",
-                        color: "#94a3b8",
-                        lineHeight: 1.5,
+                        margin: "0 0 14px",
+                        fontSize: "14px",
+                        color: "#475569",
+                        lineHeight: 1.7,
+                        textAlign: "center",
                       }}
                     >
-                      Accepted: JPG, PNG, WEBP, PDF
+                      Send <strong>{planPrice}</strong> first, then fill out the form below and upload your receipt.
+                    </p>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "10px",
+                        flexWrap: "wrap",
+                        justifyContent: "center",
+                        marginBottom: "18px",
+                      }}
+                    >
+                      {[
+                        { key: "gcash", label: "GCash" },
+                        { key: "maya", label: "Maya" },
+                        { key: "bank", label: "Bank / InstaPay" },
+                      ].map((item) => {
+                        const active = selectedPayment === item.key
+                        return (
+                          <button
+                            key={item.key}
+                            type="button"
+                            onClick={() =>
+                              setSelectedPayment(item.key as "gcash" | "maya" | "bank")
+                            }
+                            style={{
+                              padding: "12px 16px",
+                              borderRadius: "12px",
+                              border: active ? "2px solid #2563eb" : "1px solid #cbd5e1",
+                              background: active ? "#eff6ff" : "#ffffff",
+                              color: active ? "#1d4ed8" : "#334155",
+                              fontWeight: 700,
+                              fontSize: "14px",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {item.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    <div
+                      style={{
+                        border: "1px solid #dbeafe",
+                        background: "#ffffff",
+                        borderRadius: "16px",
+                        padding: "16px",
+                        textAlign: "center",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "15px",
+                          fontWeight: 800,
+                          color: "#0f172a",
+                          marginBottom: "10px",
+                        }}
+                      >
+                        {paymentDetails.label}
+                      </div>
+
+                      <img
+                        src={paymentDetails.qr}
+                        alt={`${paymentDetails.label} QR`}
+                        style={{
+                          width: "240px",
+                          maxWidth: "100%",
+                          display: "block",
+                          margin: "0 auto 12px",
+                          borderRadius: "12px",
+                          border: "1px solid #e2e8f0",
+                          background: "#fff",
+                        }}
+                      />
+
+                      <div style={{ fontSize: "14px", color: "#64748b" }}>
+                        {paymentDetails.numberLabel}
+                      </div>
+                      <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", marginTop: "4px" }}>
+                        {paymentDetails.number}
+                      </div>
+                      <div style={{ fontSize: "13px", color: "#64748b", marginTop: "6px" }}>
+                        {paymentDetails.name}
+                      </div>
+
+                      {paymentDetails.extra ? (
+                        <div style={{ fontSize: "12px", color: "#64748b", marginTop: "8px" }}>
+                          {paymentDetails.extra}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: "14px",
+                        borderRadius: "14px",
+                        background: "#ffffff",
+                        border: "1px dashed #cbd5e1",
+                        padding: "14px",
+                        fontSize: "13px",
+                        color: "#475569",
+                        lineHeight: 1.7,
+                      }}
+                    >
+                      <div><strong>How it works:</strong></div>
+                      <div>1. Send payment for the selected membership.</div>
+                      <div>2. Choose the payment method you used.</div>
+                      <div>3. Enter the payment name and reference number.</div>
+                      <div>4. Upload your receipt.</div>
+                      <div>5. Wait for admin approval.</div>
+                    </div>
+
+                    <p
+                      style={{
+                        marginTop: "10px",
+                        fontSize: "12px",
+                        color: "#64748b",
+                        textAlign: "center",
+                      }}
+                    >
+                      Make sure the payer name and reference number match the receipt you upload.
                     </p>
                   </div>
 
-                  <button
-                    type="submit"
+                  <form
+                    action="/api/upgrade/request"
+                    method="POST"
+                    encType="multipart/form-data"
                     style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      padding: "15px 24px",
-                      borderRadius: "14px",
-                      background: planGradient,
-                      color: "#ffffff",
-                      border: "none",
-                      fontWeight: 700,
-                      fontSize: "15px",
-                      cursor: "pointer",
-                      boxShadow:
-                        selectedPlan === "platinum"
-                          ? "0 10px 20px rgba(124, 58, 237, 0.22)"
-                          : "0 10px 20px rgba(59, 130, 246, 0.22)",
+                      display: "grid",
+                      gap: "14px",
                     }}
                   >
-                    Request {planTitle} Access
-                  </button>
-                </form>
+                    <input type="hidden" name="plan" value={selectedPlan} />
 
-                <p
-                  style={{
-                    margin: "12px 0 0",
-                    fontSize: "13px",
-                    color: "#64748b",
-                    textAlign: "center",
-                  }}
-                >
-                  Upgrade requests are reviewed manually. Please wait for approval confirmation.
-                </p>
-              </div>
+                    <input
+                      type="text"
+                      name="subject"
+                      placeholder="Subject"
+                      defaultValue={formDefaultSubject}
+                      style={{
+                        width: "100%",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "14px",
+                        padding: "14px 16px",
+                        fontSize: "15px",
+                        outline: "none",
+                      }}
+                    />
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                        gap: "14px",
+                      }}
+                    >
+                      <input
+                        type="text"
+                        name="payment_name"
+                        placeholder="Account name used for payment"
+                        required
+                        style={{
+                          width: "100%",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "14px",
+                          padding: "14px 16px",
+                          fontSize: "15px",
+                          outline: "none",
+                        }}
+                      />
+
+                      <select
+                        name="payment_method"
+                        required
+                        value={selectedPayment}
+                        onChange={(e) =>
+                          setSelectedPayment(e.target.value as "gcash" | "maya" | "bank")
+                        }
+                        style={{
+                          width: "100%",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "14px",
+                          padding: "14px 16px",
+                          fontSize: "15px",
+                          outline: "none",
+                          background: "#fff",
+                        }}
+                      >
+                        <option value="gcash">GCash</option>
+                        <option value="maya">Maya</option>
+                        <option value="bank">Bank / InstaPay</option>
+                      </select>
+
+                      <input
+                        type="text"
+                        name="payment_number"
+                        placeholder="Mobile number or bank account used for payment"
+                        style={{
+                          width: "100%",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "14px",
+                          padding: "14px 16px",
+                          fontSize: "15px",
+                          outline: "none",
+                        }}
+                      />
+
+                      <input
+                        type="text"
+                        name="reference_number"
+                        placeholder="Reference number"
+                        required
+                        style={{
+                          width: "100%",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "14px",
+                          padding: "14px 16px",
+                          fontSize: "15px",
+                          outline: "none",
+                        }}
+                      />
+                    </div>
+
+                    <textarea
+                      name="message"
+                      placeholder={`Write your reason for requesting ${planTitle.toLowerCase()} access...`}
+                      required
+                      rows={6}
+                      style={{
+                        width: "100%",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "14px",
+                        padding: "14px 16px",
+                        fontSize: "15px",
+                        outline: "none",
+                        resize: "vertical",
+                        lineHeight: 1.6,
+                      }}
+                    />
+
+                    <div
+                      style={{
+                        border: "1px dashed #cbd5e1",
+                        borderRadius: "14px",
+                        padding: "16px",
+                        background: "#f8fafc",
+                      }}
+                    >
+                      <label
+                        htmlFor="receipt"
+                        style={{
+                          display: "block",
+                          marginBottom: "8px",
+                          fontSize: "14px",
+                          fontWeight: 700,
+                          color: "#334155",
+                        }}
+                      >
+                        Upload receipt
+                      </label>
+
+                      <input
+                        id="receipt"
+                        type="file"
+                        name="receipt"
+                        accept="image/*,.pdf"
+                        required
+                        style={{
+                          width: "100%",
+                          fontSize: "14px",
+                          color: "#475569",
+                        }}
+                      />
+
+                      <p
+                        style={{
+                          margin: "8px 0 0",
+                          fontSize: "12px",
+                          color: "#94a3b8",
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        Accepted: JPG, PNG, WEBP, PDF
+                      </p>
+                    </div>
+
+                    <button
+                      type="submit"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "15px 24px",
+                        borderRadius: "14px",
+                        background: planGradient,
+                        color: "#ffffff",
+                        border: "none",
+                        fontWeight: 700,
+                        fontSize: "15px",
+                        cursor: "pointer",
+                        boxShadow:
+                          selectedPlan === "platinum"
+                            ? "0 10px 20px rgba(124, 58, 237, 0.22)"
+                            : "0 10px 20px rgba(59, 130, 246, 0.22)",
+                      }}
+                    >
+                      Request {planTitle} Access
+                    </button>
+                  </form>
+
+                  <p
+                    style={{
+                      margin: "12px 0 0",
+                      fontSize: "13px",
+                      color: "#64748b",
+                      textAlign: "center",
+                    }}
+                  >
+                    Upgrade requests are reviewed manually. Please wait for approval confirmation.
+                  </p>
+                </div>
+              )}
             </div>
           ) : null}
 

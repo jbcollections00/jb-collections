@@ -15,7 +15,7 @@ const navItems = [
 
 export default function AdminHeader() {
   const rawPathname = usePathname()
-  const pathname = rawPathname ?? "" // ✅ FIX HERE
+  const pathname = rawPathname ?? ""
 
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
@@ -24,11 +24,10 @@ export default function AdminHeader() {
   const [loggingOut, setLoggingOut] = useState(false)
 
   function isActive(href: string) {
-  const currentPath = pathname || ""
-
-  if (href === "/admin") return currentPath === "/admin"
-  return currentPath.startsWith(href)
-}
+    const currentPath = pathname || ""
+    if (href === "/admin") return currentPath === "/admin"
+    return currentPath.startsWith(href)
+  }
 
   async function handleLogout() {
     try {
@@ -46,13 +45,10 @@ export default function AdminHeader() {
 
   return (
     <>
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-sky-100/70 bg-white/80 backdrop-blur-xl">
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-slate-800 bg-slate-950/90 backdrop-blur-xl">
         <div className="mx-auto flex h-20 w-full max-w-[1800px] items-center gap-3 px-4 sm:h-24 sm:px-6 lg:px-8">
-          <Link
-            href="/admin"
-            className="group flex min-w-0 items-center gap-3"
-          >
-            <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 sm:h-12 sm:w-12">
+          <Link href="/admin" className="group flex min-w-0 items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-slate-900 shadow ring-1 ring-slate-700 sm:h-12 sm:w-12">
               <img
                 src="/logo.png"
                 alt="JB Collections"
@@ -61,15 +57,16 @@ export default function AdminHeader() {
             </div>
 
             <div className="min-w-0">
-              <div className="truncate text-lg font-black tracking-tight text-slate-900 sm:text-xl">
+              <div className="truncate text-lg font-black tracking-tight text-white sm:text-xl">
                 JB Collections
               </div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-sky-600">
+              <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-blue-400">
                 Admin Panel
               </div>
             </div>
           </Link>
 
+          {/* DESKTOP NAV */}
           <div className="ml-auto hidden items-center gap-2 lg:flex">
             {navItems.map((item) => {
               const active = isActive(item.href)
@@ -80,11 +77,11 @@ export default function AdminHeader() {
                   href={item.href}
                   className={`inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-bold transition ${
                     active
-                      ? "bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 text-white shadow-[0_10px_25px_rgba(37,99,235,0.28)]"
-                      : "bg-white text-slate-700 ring-1 ring-slate-200 hover:-translate-y-0.5 hover:bg-slate-50 hover:text-slate-900 hover:shadow-sm"
+                      ? "bg-blue-600/20 text-blue-300 border border-blue-500/30"
+                      : "bg-slate-900 text-slate-300 border border-slate-700 hover:bg-slate-800 hover:text-white"
                   }`}
                 >
-                  <span className="text-[15px] leading-none">{item.icon}</span>
+                  <span className="text-[15px]">{item.icon}</span>
                   <span>{item.label}</span>
                 </Link>
               )
@@ -94,24 +91,25 @@ export default function AdminHeader() {
               type="button"
               onClick={handleLogout}
               disabled={loggingOut}
-              className="ml-1 inline-flex items-center justify-center rounded-full bg-red-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
+              className="ml-1 inline-flex items-center justify-center rounded-full bg-red-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-70"
             >
               {loggingOut ? "Logging out..." : "Logout"}
             </button>
           </div>
 
+          {/* MOBILE BUTTON */}
           <button
             type="button"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
-            className="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm ring-1 ring-slate-200 transition hover:bg-slate-50 lg:hidden"
-            aria-label="Toggle admin menu"
+            className="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white ring-1 ring-slate-700 transition hover:bg-slate-800 lg:hidden"
           >
             <span className="text-lg">{mobileMenuOpen ? "✕" : "☰"}</span>
           </button>
         </div>
 
-        {mobileMenuOpen ? (
-          <div className="border-t border-slate-200 bg-white/95 px-4 pb-4 pt-3 backdrop-blur-xl sm:px-6 lg:hidden">
+        {/* MOBILE MENU */}
+        {mobileMenuOpen && (
+          <div className="border-t border-slate-800 bg-slate-950 px-4 pb-4 pt-3 sm:px-6 lg:hidden">
             <div className="grid gap-2">
               {navItems.map((item) => {
                 const active = isActive(item.href)
@@ -123,8 +121,8 @@ export default function AdminHeader() {
                     onClick={() => setMobileMenuOpen(false)}
                     className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold transition ${
                       active
-                        ? "bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 text-white shadow-[0_10px_25px_rgba(37,99,235,0.22)]"
-                        : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+                        ? "bg-blue-600/20 text-blue-300 border border-blue-500/30"
+                        : "bg-slate-900 text-slate-300 border border-slate-700 hover:bg-slate-800"
                     }`}
                   >
                     <span>{item.icon}</span>
@@ -137,15 +135,16 @@ export default function AdminHeader() {
                 type="button"
                 onClick={handleLogout}
                 disabled={loggingOut}
-                className="inline-flex items-center justify-center rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
+                className="inline-flex items-center justify-center rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-red-700"
               >
                 {loggingOut ? "Logging out..." : "Logout"}
               </button>
             </div>
           </div>
-        ) : null}
+        )}
       </header>
 
+      {/* spacing */}
       <div className="h-20 sm:h-24" />
     </>
   )

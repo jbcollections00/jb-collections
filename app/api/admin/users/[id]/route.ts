@@ -31,9 +31,24 @@ export async function GET(
       return NextResponse.json({ error: "Missing user id." }, { status: 400 })
     }
 
+    // 🔥 IMPORTANT: only select needed fields (including jb_points)
     const { data, error } = await supabase
       .from("profiles")
-      .select("*")
+      .select(`
+        id,
+        email,
+        full_name,
+        name,
+        username,
+        membership,
+        role,
+        account_status,
+        status,
+        is_premium,
+        jb_points,
+        last_seen,
+        created_at
+      `)
       .eq("id", userId)
       .maybeSingle()
 
@@ -45,7 +60,9 @@ export async function GET(
       return NextResponse.json({ error: "User not found." }, { status: 404 })
     }
 
-    return NextResponse.json({ user: data })
+    return NextResponse.json({
+      user: data,
+    })
   } catch (error) {
     return NextResponse.json(
       {

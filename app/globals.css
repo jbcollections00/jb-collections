@@ -5,3 +5,27 @@
     transform: rotate(360deg);
   }
 }
+/* FIX FORM INPUT VISIBILITY */
+input,
+textarea,
+select {
+  color: #0f172a !important; /* dark text */
+  background-color: #ffffff !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Fix dropdown options */
+select option {
+  color: #0f172a;
+  background: #ffffff;
+}
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: #2563eb !important;
+}

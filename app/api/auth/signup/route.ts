@@ -14,6 +14,15 @@ export async function POST(req: Request) {
     const password = String(formData.get("password") || "")
     const confirmPassword = String(formData.get("confirmPassword") || "")
 
+    // ✅ REFERRAL CODE
+    const referralCodeFromForm = String(formData.get("referralCode") || "")
+      .trim()
+      .toUpperCase()
+    const referralCodeFromUrl = String(url.searchParams.get("ref") || "")
+      .trim()
+      .toUpperCase()
+    const referralCode = referralCodeFromForm || referralCodeFromUrl || null
+
     if (!fullName || !email || !password || !confirmPassword) {
       return NextResponse.redirect(`${origin}/signup?error=missing-fields`, 303)
     }
@@ -33,10 +42,9 @@ export async function POST(req: Request) {
 
     const cookieStore = await cookies()
 
-    const response = NextResponse.redirect(
-      `${origin}/signup?success=true`,
-      { status: 303 }
-    )
+    const response = NextResponse.redirect(`${origin}/signup?success=true`, {
+      status: 303,
+    })
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,24 +55,16 @@ export async function POST(req: Request) {
             return cookieStore.get(name)?.value
           },
           set(name: string, value: string, options: Record<string, any>) {
-            response.cookies.set({
-              name,
-              value,
-              ...options,
-            })
+            response.cookies.set({ name, value, ...options })
           },
           remove(name: string, options: Record<string, any>) {
-            response.cookies.set({
-              name,
-              value: "",
-              ...options,
-              maxAge: 0,
-            })
+            response.cookies.set({ name, value: "", ...options, maxAge: 0 })
           },
         },
       }
     )
 
+    // 🔥 SIGNUP USER
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
@@ -82,7 +82,6 @@ export async function POST(req: Request) {
 
       if (
         message.includes("already registered") ||
-        message.includes("already been registered") ||
         message.includes("user already registered")
       ) {
         return NextResponse.redirect(`${origin}/signup?error=email-exists`, 303)
@@ -97,6 +96,26 @@ export async function POST(req: Request) {
       const username =
         email.split("@")[0]?.replace(/[^a-zA-Z0-9_]/g, "") || null
 
+      let referredByUserId: string | null = null
+
+      // 🔥 FIND REFERRER
+      if (referralCode) {
+        const { data: refUser, error: refUserError } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("referral_code", referralCode)
+          .maybeSingle()
+
+        if (refUserError) {
+          console.error("Referral lookup error:", refUserError)
+        }
+
+        if (refUser?.id && refUser.id !== newUser.id) {
+          referredByUserId = refUser.id
+        }
+      }
+
+      // 🔥 CREATE PROFILE
       const { error: profileError } = await supabase
         .from("profiles")
         .upsert(
@@ -111,20 +130,44 @@ export async function POST(req: Request) {
             status: "active",
             is_premium: false,
             role: "user",
+            referred_by: referredByUserId,
           },
-          {
-            onConflict: "id",
-          }
+          { onConflict: "id" }
         )
 
       if (profileError) {
         console.error("Profile creation error:", profileError)
+      }
+
+      // 🔥 +35 SIGNUP BONUS
+      try {
+        await supabase.rpc("add_jb_points", {
+          p_user_id: newUser.id,
+          p_action_type: "signup_bonus",
+          p_points: 35,
+          p_reference_id: `signup-${newUser.id}`,
+          p_note: "Signup reward",
+        })
+      } catch (err) {
+        console.error("Signup points error:", err)
+      }
+
+      // 🔥 +10 INVITE POINTS
+      if (referredByUserId) {
+        try {
+          await supabase.rpc("award_invite_points_for_signup", {
+            p_new_user_id: newUser.id,
+          })
+        } catch (err) {
+          console.error("Referral points error:", err)
+        }
       }
     }
 
     return response
   } catch (error) {
     console.error("Signup route error:", error)
+
     return NextResponse.redirect(
       `${new URL(req.url).origin}/signup?error=failed`,
       303

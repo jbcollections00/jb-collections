@@ -240,11 +240,12 @@ export default function CategoriesPage() {
       <div
         style={{
           minHeight: "100vh",
-          background: "linear-gradient(180deg,#eef4ff 0%,#f8fbff 45%,#ffffff 100%)",
+          background: "linear-gradient(180deg,#020617 0%,#0f172a 45%,#111827 100%)",
           fontFamily: "Arial, Helvetica, sans-serif",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          color: "#e2e8f0",
         }}
       >
         Checking admin access...
@@ -256,33 +257,54 @@ export default function CategoriesPage() {
     <div
       style={{
         minHeight: "100vh",
-        background: "linear-gradient(180deg,#eef4ff 0%,#f8fbff 45%,#ffffff 100%)",
+        background: "linear-gradient(180deg,#020617 0%,#0f172a 45%,#111827 100%)",
         fontFamily: "Arial, Helvetica, sans-serif",
         padding: "28px 18px 40px",
+        color: "#e2e8f0",
       }}
     >
       <div style={{ maxWidth: "1700px", margin: "0 auto" }}>
         <AdminHeader />
 
-        <h1 style={{ fontSize: "42px", fontWeight: 800, margin: "0 0 10px" }}>
+        <h1
+          style={{
+            fontSize: "42px",
+            fontWeight: 800,
+            margin: "0 0 10px",
+            color: "#f8fafc",
+          }}
+        >
           Categories
         </h1>
 
-        <p style={{ color: "#64748b", margin: "0 0 20px", fontSize: "17px" }}>
+        <p
+          style={{
+            color: "#94a3b8",
+            margin: "0 0 20px",
+            fontSize: "17px",
+          }}
+        >
           Create, update, and organize your categories.
         </p>
 
         <div
           style={{
-            background: "white",
-            border: "1px solid #e2e8f0",
+            background: "#0f172a",
+            border: "1px solid #1e293b",
             borderRadius: "24px",
             padding: "22px",
             marginBottom: "24px",
-            boxShadow: "0 8px 24px rgba(15,23,42,0.05)",
+            boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
           }}
         >
-          <h2 style={{ fontSize: "24px", fontWeight: 800, margin: "0 0 16px" }}>
+          <h2
+            style={{
+              fontSize: "24px",
+              fontWeight: 800,
+              margin: "0 0 16px",
+              color: "#f8fafc",
+            }}
+          >
             Category Manager
           </h2>
 
@@ -292,9 +314,9 @@ export default function CategoriesPage() {
                 marginBottom: "14px",
                 padding: "12px 14px",
                 borderRadius: "14px",
-                background: "#eff6ff",
-                border: "1px solid #bfdbfe",
-                color: "#1d4ed8",
+                background: "rgba(59,130,246,0.12)",
+                border: "1px solid rgba(59,130,246,0.28)",
+                color: "#93c5fd",
                 fontSize: "14px",
                 fontWeight: 600,
               }}
@@ -320,9 +342,12 @@ export default function CategoriesPage() {
                   width: "100%",
                   padding: "14px",
                   borderRadius: "14px",
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid #334155",
                   marginBottom: "12px",
                   fontSize: "16px",
+                  background: "#020617",
+                  color: "#f8fafc",
+                  outline: "none",
                 }}
               />
 
@@ -335,20 +360,23 @@ export default function CategoriesPage() {
                   minHeight: "110px",
                   padding: "14px",
                   borderRadius: "14px",
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid #334155",
                   marginBottom: "12px",
                   fontSize: "16px",
                   resize: "vertical",
+                  background: "#020617",
+                  color: "#f8fafc",
+                  outline: "none",
                 }}
               />
 
               <div
                 style={{
-                  border: "1px solid #e2e8f0",
+                  border: "1px solid #1e293b",
                   borderRadius: "18px",
                   padding: "14px",
                   marginBottom: "14px",
-                  background: "#f8fafc",
+                  background: "#020617",
                 }}
               >
                 <p
@@ -356,7 +384,7 @@ export default function CategoriesPage() {
                     margin: "0 0 10px 0",
                     fontSize: "14px",
                     fontWeight: 700,
-                    color: "#334155",
+                    color: "#cbd5e1",
                   }}
                 >
                   Upload Thumbnail
@@ -371,8 +399,9 @@ export default function CategoriesPage() {
                     width: "100%",
                     padding: "10px",
                     borderRadius: "14px",
-                    border: "1px solid #cbd5e1",
-                    background: "white",
+                    border: "1px solid #334155",
+                    background: "#0f172a",
+                    color: "#e2e8f0",
                     fontSize: "14px",
                     marginBottom: "10px",
                   }}
@@ -382,7 +411,7 @@ export default function CategoriesPage() {
                   style={{
                     margin: 0,
                     fontSize: "13px",
-                    color: "#64748b",
+                    color: "#94a3b8",
                   }}
                 >
                   {uploadingThumbnail
@@ -417,8 +446,9 @@ export default function CategoriesPage() {
                   style={{
                     padding: "12px 18px",
                     borderRadius: "12px",
-                    border: "1px solid #cbd5e1",
-                    background: "white",
+                    border: "1px solid #334155",
+                    background: "#111827",
+                    color: "#e2e8f0",
                     cursor: saving || uploadingThumbnail ? "not-allowed" : "pointer",
                     fontWeight: 700,
                     opacity: saving || uploadingThumbnail ? 0.7 : 1,
@@ -431,10 +461,10 @@ export default function CategoriesPage() {
 
             <div
               style={{
-                border: "1px solid #e2e8f0",
+                border: "1px solid #1e293b",
                 borderRadius: "18px",
                 padding: "14px",
-                background: "#f8fafc",
+                background: "#020617",
                 minHeight: "100%",
               }}
             >
@@ -443,7 +473,7 @@ export default function CategoriesPage() {
                   margin: "0 0 10px 0",
                   fontSize: "14px",
                   fontWeight: 700,
-                  color: "#334155",
+                  color: "#cbd5e1",
                 }}
               >
                 Thumbnail Preview
@@ -458,9 +488,9 @@ export default function CategoriesPage() {
                     height: "240px",
                     objectFit: "cover",
                     borderRadius: "16px",
-                    border: "1px solid #cbd5e1",
+                    border: "1px solid #334155",
                     display: "block",
-                    background: "#ffffff",
+                    background: "#0f172a",
                   }}
                 />
               ) : (
@@ -469,12 +499,12 @@ export default function CategoriesPage() {
                     width: "100%",
                     height: "240px",
                     borderRadius: "16px",
-                    border: "1px dashed #cbd5e1",
+                    border: "1px dashed #334155",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    color: "#64748b",
-                    background: "#ffffff",
+                    color: "#94a3b8",
+                    background: "#0f172a",
                   }}
                 >
                   No thumbnail preview
@@ -496,11 +526,11 @@ export default function CategoriesPage() {
             <div
               key={cat.id}
               style={{
-                background: "white",
-                border: "1px solid #e2e8f0",
+                background: "#0f172a",
+                border: "1px solid #1e293b",
                 borderRadius: "18px",
                 padding: "12px",
-                boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
+                boxShadow: "0 8px 20px rgba(0,0,0,0.2)",
                 display: "flex",
                 flexDirection: "column",
                 minHeight: "250px",
@@ -512,8 +542,8 @@ export default function CategoriesPage() {
                   height: "110px",
                   borderRadius: "14px",
                   overflow: "hidden",
-                  background: "#f1f5f9",
-                  border: "1px solid #e2e8f0",
+                  background: "#020617",
+                  border: "1px solid #1e293b",
                   marginBottom: "10px",
                   display: "flex",
                   alignItems: "center",
@@ -542,7 +572,7 @@ export default function CategoriesPage() {
                   margin: "0 0 6px",
                   fontWeight: 800,
                   lineHeight: 1.3,
-                  color: "#0f172a",
+                  color: "#f8fafc",
                 }}
               >
                 {cat.name}
@@ -550,7 +580,7 @@ export default function CategoriesPage() {
 
               <p
                 style={{
-                  color: "#64748b",
+                  color: "#94a3b8",
                   fontSize: "12px",
                   lineHeight: 1.45,
                   margin: 0,
@@ -574,8 +604,9 @@ export default function CategoriesPage() {
                     flex: 1,
                     padding: "8px 10px",
                     borderRadius: "10px",
-                    border: "1px solid #cbd5e1",
-                    background: "white",
+                    border: "1px solid #334155",
+                    background: "#111827",
+                    color: "#e2e8f0",
                     cursor: "pointer",
                     fontWeight: 700,
                     fontSize: "12px",
@@ -590,9 +621,9 @@ export default function CategoriesPage() {
                     flex: 1,
                     padding: "8px 10px",
                     borderRadius: "10px",
-                    border: "none",
-                    background: "#ef4444",
-                    color: "white",
+                    border: "1px solid rgba(239,68,68,0.25)",
+                    background: "rgba(239,68,68,0.12)",
+                    color: "#fca5a5",
                     cursor: "pointer",
                     fontWeight: 700,
                     fontSize: "12px",

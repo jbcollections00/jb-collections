@@ -19,6 +19,17 @@ type UserProfile = {
   role?: string | null
   bio?: string | null
   avatar_url?: string | null
+  jb_points?: number | null
+  referral_code?: string | null
+}
+
+type CoinHistoryItem = {
+  id: string
+  amount?: number | null
+  action_type?: string | null
+  description?: string | null
+  created_at?: string | null
+  file_id?: string | null
 }
 
 type UsernameStatus =
@@ -36,6 +47,7 @@ type UsernameStatus =
   | { state: "error"; message: "Could not check username right now." }
 
 type ProfileTab = "overview" | "info" | "security"
+type RedeemPlan = "premium" | "platinum"
 
 function normalizeMembership(profile: UserProfile | null) {
   const role = String(profile?.role || "").trim().toLowerCase()
@@ -126,6 +138,48 @@ function DetailCard({
   )
 }
 
+function formatCoinAmount(amount: number) {
+  if (amount > 0) return `+${amount}`
+  return `${amount}`
+}
+
+function getCoinAmountClasses(amount: number) {
+  if (amount > 0) return "text-emerald-400"
+  if (amount < 0) return "text-red-400"
+  return "text-slate-300"
+}
+
+function formatCoinAction(actionType?: string | null, description?: string | null) {
+  if (description?.trim()) return description.trim()
+
+  const normalized = String(actionType || "").trim().toLowerCase()
+
+  if (normalized === "download_reward") return "Download reward"
+  if (normalized === "signup_bonus") return "Signup bonus"
+  if (normalized === "referral_bonus") return "Referral signup bonus"
+  if (normalized === "redeem_premium") return "Redeemed Premium"
+  if (normalized === "redeem_platinum") return "Redeemed Platinum"
+  if (normalized === "admin_adjustment") return "Admin adjustment"
+
+  return "JB Coin activity"
+}
+
+function formatHistoryDate(value?: string | null) {
+  if (!value) return "Unknown date"
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "Unknown date"
+
+  return new Intl.DateTimeFormat("en-PH", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date)
+}
+
 export default function ProfilePageClient() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
@@ -134,6 +188,8 @@ export default function ProfilePageClient() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [redeemingPlan, setRedeemingPlan] = useState<RedeemPlan | null>(null)
+  const [historyLoading, setHistoryLoading] = useState(false)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [authEmail, setAuthEmail] = useState("")
   const [editOpen, setEditOpen] = useState(false)
@@ -144,6 +200,7 @@ export default function ProfilePageClient() {
     state: "idle",
     message: "",
   })
+  const [coinHistory, setCoinHistory] = useState<CoinHistoryItem[]>([])
 
   const [fullNameInput, setFullNameInput] = useState("")
   const [usernameInput, setUsernameInput] = useState("")
@@ -185,7 +242,7 @@ export default function ProfilePageClient() {
         const { data, error } = await supabase
           .from("profiles")
           .select(
-            "id, email, full_name, name, username, membership, account_status, status, is_premium, role, bio, avatar_url"
+            "id, email, full_name, name, username, membership, account_status, status, is_premium, role, bio, avatar_url, jb_points, referral_code"
           )
           .eq("id", user.id)
           .maybeSingle()
@@ -210,6 +267,8 @@ export default function ProfilePageClient() {
           role: null,
           bio: "",
           avatar_url: "",
+          jb_points: 0,
+          referral_code: "",
         }
 
         const finalProfile = (data as UserProfile | null) ?? fallbackProfile
@@ -236,9 +295,42 @@ export default function ProfilePageClient() {
     [router, supabase]
   )
 
+  const loadCoinHistory = useCallback(async () => {
+    try {
+      setHistoryLoading(true)
+
+      const response = await fetch("/api/jb-coin-history?limit=12", {
+        method: "GET",
+        cache: "no-store",
+      })
+
+      const data = (await response.json()) as {
+        success?: boolean
+        items?: CoinHistoryItem[]
+        error?: string
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load JB Coin history.")
+      }
+
+      setCoinHistory(Array.isArray(data.items) ? data.items : [])
+    } catch (err) {
+      console.error("JB Coin history load error:", err)
+      setCoinHistory([])
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     loadProfile(true)
   }, [loadProfile])
+
+  useEffect(() => {
+    if (!profile?.id) return
+    void loadCoinHistory()
+  }, [profile?.id, loadCoinHistory])
 
   useEffect(() => {
     if (editOpen) return
@@ -499,6 +591,47 @@ export default function ProfilePageClient() {
     }
   }
 
+  async function handleRedeem(plan: RedeemPlan) {
+    try {
+      setRedeemingPlan(plan)
+      setSaveError("")
+      setSaveMessage("")
+
+      const response = await fetch("/api/redeem-membership", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ plan }),
+      })
+
+      const data = (await response.json()) as {
+        success?: boolean
+        message?: string
+        error?: string
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || "Redeem failed.")
+      }
+
+      setSaveMessage(
+        data.message ||
+          (plan === "premium"
+            ? "Premium redeemed successfully."
+            : "Platinum redeemed successfully.")
+      )
+
+      await loadProfile(false)
+      await loadCoinHistory()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Redeem failed."
+      setSaveError(message)
+    } finally {
+      setRedeemingPlan(null)
+    }
+  }
+
   const successParam = searchParams?.get("success") ?? ""
   const errorParam = searchParams?.get("error") ?? ""
 
@@ -511,16 +644,16 @@ export default function ProfilePageClient() {
     errorParam === "missing-message"
       ? "Please enter a message."
       : errorParam === "file-too-large"
-      ? "File too large (max 10MB)."
-      : errorParam === "invalid-file-type"
-      ? "Invalid file type."
-      : errorParam === "upload-failed"
-      ? "Upload failed."
-      : errorParam === "insert-failed"
-      ? "Save failed."
-      : errorParam === "unexpected"
-      ? "Something went wrong."
-      : ""
+        ? "File too large (max 10MB)."
+        : errorParam === "invalid-file-type"
+          ? "Invalid file type."
+          : errorParam === "upload-failed"
+            ? "Upload failed."
+            : errorParam === "insert-failed"
+              ? "Save failed."
+              : errorParam === "unexpected"
+                ? "Something went wrong."
+                : ""
 
   const displayName =
     profile?.full_name ||
@@ -533,12 +666,6 @@ export default function ProfilePageClient() {
   const membershipLevel = normalizeMembership(profile)
   const displayMembership = getMembershipLabel(membershipLevel)
   const membershipBadgeClasses = getMembershipBadgeClasses(membershipLevel)
-
-  const canUpgrade =
-    membershipLevel !== "premium" &&
-    membershipLevel !== "platinum" &&
-    membershipLevel !== "admin"
-
   const displayStatus = profile?.account_status || profile?.status || "Active"
   const initials = getInitials(displayName)
 
@@ -549,6 +676,32 @@ export default function ProfilePageClient() {
   const publicProfileText = profile?.username
     ? `${siteUrl}/u/${profile.username}`
     : "Set username first"
+
+  const referralCode = profile?.referral_code?.trim() || ""
+  const referralLink = referralCode
+    ? `${siteUrl}/signup?ref=${referralCode}`
+    : "Referral code unavailable"
+
+  const jbPoints = Number(profile?.jb_points || 0)
+
+  const hasPremiumAccess =
+    membershipLevel === "premium" ||
+    membershipLevel === "platinum" ||
+    membershipLevel === "admin"
+
+  const hasPlatinumAccess =
+    membershipLevel === "platinum" || membershipLevel === "admin"
+
+  const canRedeemPremium =
+    membershipLevel !== "admin" &&
+    membershipLevel !== "premium" &&
+    membershipLevel !== "platinum" &&
+    jbPoints >= 2000
+
+  const canRedeemPlatinum =
+    membershipLevel !== "admin" &&
+    membershipLevel !== "platinum" &&
+    jbPoints >= 2600
 
   if (loading) {
     return (
@@ -702,15 +855,6 @@ export default function ProfilePageClient() {
                 >
                   {editOpen ? "Close Editor" : "Edit Profile"}
                 </button>
-
-                {canUpgrade && (
-                  <Link
-                    href="/upgrade"
-                    className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 font-bold text-white transition hover:bg-white/15"
-                  >
-                    Upgrade Membership
-                  </Link>
-                )}
               </div>
             </div>
 
@@ -728,10 +872,10 @@ export default function ProfilePageClient() {
                 membershipLevel === "admin"
                   ? "Admin"
                   : membershipLevel === "platinum"
-                  ? "Platinum"
-                  : membershipLevel === "premium"
-                  ? "Premium"
-                  : "Standard"
+                    ? "Platinum"
+                    : membershipLevel === "premium"
+                      ? "Premium"
+                      : "Standard"
               }
             />
             <StatCard label="Status" value={displayStatus} />
@@ -782,12 +926,12 @@ export default function ProfilePageClient() {
                         usernameStatus.state === "available"
                           ? "text-emerald-400"
                           : usernameStatus.state === "checking"
-                          ? "text-slate-400"
-                          : usernameStatus.state === "taken" ||
-                            usernameStatus.state === "invalid" ||
-                            usernameStatus.state === "error"
-                          ? "text-red-400"
-                          : "text-slate-400"
+                            ? "text-slate-400"
+                            : usernameStatus.state === "taken" ||
+                                usernameStatus.state === "invalid" ||
+                                usernameStatus.state === "error"
+                              ? "text-red-400"
+                              : "text-slate-400"
                       }`}
                     >
                       {usernameStatus.message}
@@ -884,8 +1028,8 @@ export default function ProfilePageClient() {
                   {saving
                     ? "Saving changes..."
                     : hasUnsavedChanges
-                    ? "Unsaved changes detected."
-                    : "All changes saved."}
+                      ? "Unsaved changes detected."
+                      : "All changes saved."}
                 </span>
               </div>
             </section>
@@ -918,48 +1062,213 @@ export default function ProfilePageClient() {
           </section>
 
           {activeTab === "overview" && (
-            <section className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <div className="lg:col-span-2 rounded-[32px] border border-white/10 bg-slate-900/80 p-6 shadow-sm ring-1 ring-white/5">
-                <div className="mb-4">
+            <>
+              <section className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <div className="lg:col-span-2 rounded-[32px] border border-white/10 bg-slate-900/80 p-6 shadow-sm ring-1 ring-white/5">
+                  <div className="mb-4">
+                    <p className="text-sm font-bold uppercase tracking-[0.2em] text-sky-400">
+                      About
+                    </p>
+                    <h2 className="mt-1 text-xl font-black text-white">Profile Overview</h2>
+                  </div>
+
+                  <div className="rounded-[24px] border border-white/10 bg-slate-950 p-5">
+                    <p className="text-sm leading-7 text-slate-200">
+                      {profile?.bio?.trim()
+                        ? profile.bio
+                        : "No bio yet. Add a short intro so your profile looks more complete and premium."}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <DetailCard label="Display Name">{displayName}</DetailCard>
+                    <DetailCard label="Public Profile">
+                      <span className="break-all">{publicProfileText}</span>
+                    </DetailCard>
+                  </div>
+                </div>
+
+                <div className="rounded-[32px] border border-white/10 bg-slate-900/80 p-6 shadow-sm ring-1 ring-white/5">
+                  <div className="mb-4">
+                    <p className="text-sm font-bold uppercase tracking-[0.2em] text-sky-400">
+                      Account
+                    </p>
+                    <h2 className="mt-1 text-xl font-black text-white">Quick Summary</h2>
+                  </div>
+
+                  <div className="space-y-4">
+                    <DetailCard label="Access Level">{displayMembership}</DetailCard>
+                    <DetailCard label="Status">{displayStatus}</DetailCard>
+                    <DetailCard label="Email">
+                      <span className="break-all">{displayEmail}</span>
+                    </DetailCard>
+                  </div>
+                </div>
+              </section>
+
+              <section className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/80 p-6 shadow-sm ring-1 ring-white/5">
+                <div className="mb-5">
                   <p className="text-sm font-bold uppercase tracking-[0.2em] text-sky-400">
-                    About
+                    Rewards
                   </p>
-                  <h2 className="mt-1 text-xl font-black text-white">Profile Overview</h2>
-                </div>
-
-                <div className="rounded-[24px] border border-white/10 bg-slate-950 p-5">
-                  <p className="text-sm leading-7 text-slate-200">
-                    {profile?.bio?.trim()
-                      ? profile.bio
-                      : "No bio yet. Add a short intro so your profile looks more complete and premium."}
+                  <h2 className="mt-1 text-xl font-black text-white">JB Rewards</h2>
+                  <p className="mt-2 text-sm text-slate-400">
+                    Use your JB Coins to redeem membership rewards and track your recent activity.
                   </p>
                 </div>
 
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <DetailCard label="Display Name">{displayName}</DetailCard>
-                  <DetailCard label="Public Profile">
-                    <span className="break-all">{publicProfileText}</span>
-                  </DetailCard>
-                </div>
-              </div>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-[24px] border border-white/10 bg-slate-950 p-5">
+                    <div className="flex items-center gap-4">
+                      <img
+                        src="/jb-coin.png"
+                        alt="JB Coin"
+                        className="h-16 w-16 object-contain drop-shadow-lg"
+                      />
 
-              <div className="rounded-[32px] border border-white/10 bg-slate-900/80 p-6 shadow-sm ring-1 ring-white/5">
-                <div className="mb-4">
-                  <p className="text-sm font-bold uppercase tracking-[0.2em] text-sky-400">
-                    Account
-                  </p>
-                  <h2 className="mt-1 text-xl font-black text-white">Quick Summary</h2>
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
+                          Your JB Coins
+                        </p>
+                        <p className="mt-1 text-4xl font-black text-yellow-400">
+                          {jbPoints}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 space-y-2 text-sm font-bold">
+                      <p className="text-amber-300">Redeem Premium = 2000 JB Coins</p>
+                      <p className="text-fuchsia-300">Redeem Platinum = 2600 JB Coins</p>
+                    </div>
+
+                    <div className="mt-5 grid gap-3">
+                      <button
+                        type="button"
+                        onClick={() => void handleRedeem("premium")}
+                        disabled={!canRedeemPremium || redeemingPlan !== null}
+                        className="rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 px-5 py-3 text-sm font-bold text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {redeemingPlan === "premium"
+                          ? "Redeeming Premium..."
+                          : hasPremiumAccess
+                            ? "Premium Already Active"
+                            : canRedeemPremium
+                              ? "Redeem Premium"
+                              : "Need 2000 JB Coins"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleRedeem("platinum")}
+                        disabled={!canRedeemPlatinum || redeemingPlan !== null}
+                        className="rounded-2xl bg-gradient-to-r from-fuchsia-500 to-pink-500 px-5 py-3 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {redeemingPlan === "platinum"
+                          ? "Redeeming Platinum..."
+                          : hasPlatinumAccess
+                            ? "Platinum Already Active"
+                            : canRedeemPlatinum
+                              ? "Redeem Platinum"
+                              : "Need 2600 JB Coins"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[24px] border border-white/10 bg-slate-950 p-5">
+                    <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
+                      Referral Link
+                    </p>
+
+                    <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white break-all">
+                      {referralLink}
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            if (!referralCode) {
+                              setSaveError("Referral code unavailable.")
+                              setSaveMessage("")
+                              return
+                            }
+                            await navigator.clipboard.writeText(referralLink)
+                            setSaveMessage("Referral link copied.")
+                            setSaveError("")
+                          } catch {
+                            setSaveError("Could not copy referral link.")
+                            setSaveMessage("")
+                          }
+                        }}
+                        className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
+                      >
+                        Copy Referral Link
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => void loadCoinHistory()}
+                        className="rounded-2xl border border-white/10 bg-white/10 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/15"
+                      >
+                        Refresh History
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-4">
-                  <DetailCard label="Access Level">{displayMembership}</DetailCard>
-                  <DetailCard label="Status">{displayStatus}</DetailCard>
-                  <DetailCard label="Email">
-                    <span className="break-all">{displayEmail}</span>
-                  </DetailCard>
+                <div className="mt-4 rounded-[24px] border border-white/10 bg-slate-950 p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold uppercase tracking-[0.2em] text-sky-400">
+                        History
+                      </p>
+                      <h3 className="mt-1 text-lg font-black text-white">
+                        Recent JB Coin Activity
+                      </h3>
+                    </div>
+
+                    {historyLoading ? (
+                      <span className="text-sm text-slate-400">Loading...</span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {!historyLoading && coinHistory.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-6 text-center text-sm text-slate-400">
+                        No JB Coin activity yet.
+                      </div>
+                    ) : null}
+
+                    {coinHistory.map((item) => {
+                      const amount = Number(item.amount || 0)
+
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex items-start justify-between gap-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-4"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold text-white">
+                              {formatCoinAction(item.action_type, item.description)}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-400">
+                              {formatHistoryDate(item.created_at)}
+                            </p>
+                          </div>
+
+                          <div className="shrink-0 text-right">
+                            <p className={`text-sm font-black ${getCoinAmountClasses(amount)}`}>
+                              {formatCoinAmount(amount)} JB Coins
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            </section>
+              </section>
+            </>
           )}
 
           {activeTab === "info" && (
@@ -1023,16 +1332,15 @@ export default function ProfilePageClient() {
                       : "Not active"}
                   </DetailCard>
 
-                  {canUpgrade ? (
-                    <Link
-                      href="/upgrade"
-                      className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 px-5 py-3 font-bold text-white shadow-lg shadow-blue-950/30 transition hover:brightness-110"
-                    >
-                      Upgrade Membership
-                    </Link>
-                  ) : (
+                  {membershipLevel === "admin" ||
+                  membershipLevel === "premium" ||
+                  membershipLevel === "platinum" ? (
                     <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-300">
                       Your account already has elevated access.
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-300">
+                      Earn more JB Coins to unlock Premium or Platinum access.
                     </div>
                   )}
                 </div>

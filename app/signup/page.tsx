@@ -14,6 +14,8 @@ import {
 import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 
+const REFERRAL_STORAGE_KEY = "jb_referral_code"
+
 export default function SignupPage() {
   return (
     <Suspense fallback={<SignupPageFallback />}>
@@ -29,11 +31,13 @@ function SignupPageContent() {
 
   const errorParam = searchParams?.get("error") ?? ""
   const successParam = searchParams?.get("success") ?? ""
+  const refParam = searchParams?.get("ref") ?? ""
 
   const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [referralCode, setReferralCode] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -49,7 +53,22 @@ function SignupPageContent() {
   }, [])
 
   useEffect(() => {
-    if (successParam === "true") {
+    if (typeof window === "undefined") return
+
+    const cleanRef = refParam.trim().toUpperCase()
+
+    if (cleanRef) {
+      localStorage.setItem(REFERRAL_STORAGE_KEY, cleanRef)
+      setReferralCode(cleanRef)
+      return
+    }
+
+    const savedRef = localStorage.getItem(REFERRAL_STORAGE_KEY) || ""
+    setReferralCode(savedRef.trim().toUpperCase())
+  }, [refParam])
+
+  useEffect(() => {
+    if (successParam === "true" || successParam === "account-created") {
       const savedName =
         typeof window !== "undefined"
           ? sessionStorage.getItem("signupFullName")
@@ -76,6 +95,7 @@ function SignupPageContent() {
       const redirectTimer = setTimeout(() => {
         if (typeof window !== "undefined") {
           sessionStorage.removeItem("signupFullName")
+          localStorage.removeItem(REFERRAL_STORAGE_KEY)
           window.location.href = "/dashboard"
         }
       }, 3000)
@@ -111,7 +131,19 @@ function SignupPageContent() {
       return "This email is already registered."
     }
 
-    if (errorParam === "failed") {
+    if (errorParam === "referral-code-failed") {
+      return "Could not create your referral code. Please try again."
+    }
+
+    if (errorParam === "reward-failed") {
+      return "Your account was created, but the referral reward could not be processed."
+    }
+
+    if (errorParam === "profile-save-failed") {
+      return "Your account was created, but your profile could not be saved properly."
+    }
+
+    if (errorParam === "signup-failed" || errorParam === "failed") {
       return "Sign up failed. Please try again."
     }
 
@@ -152,6 +184,11 @@ function SignupPageContent() {
 
     if (typeof window !== "undefined") {
       sessionStorage.setItem("signupFullName", fullName.trim())
+
+      const cleanRef = referralCode.trim().toUpperCase()
+      if (cleanRef) {
+        localStorage.setItem(REFERRAL_STORAGE_KEY, cleanRef)
+      }
     }
 
     setSubmitting(true)
@@ -163,11 +200,13 @@ function SignupPageContent() {
       setGoogleLoading(true)
 
       const origin = window.location.origin
+      const cleanRef = referralCode.trim().toUpperCase()
+      const redirectTo = cleanRef ? `${origin}/?ref=${encodeURIComponent(cleanRef)}` : `${origin}`
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${origin}`,
+          redirectTo,
         },
       })
 
@@ -223,6 +262,13 @@ function SignupPageContent() {
         onSubmit={handleSubmit}
         style={{ marginTop: "20px" }}
       >
+        <input
+          type="hidden"
+          name="referralCode"
+          value={referralCode}
+          readOnly
+        />
+
         {errorMessage ? <div style={errorBox}>{errorMessage}</div> : null}
         {googleError ? <div style={errorBox}>{googleError}</div> : null}
 
