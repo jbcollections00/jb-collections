@@ -6,7 +6,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
     "https://jbcollections.com"
 
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const staticRoutes: MetadataRoute.Sitemap = [
     {
