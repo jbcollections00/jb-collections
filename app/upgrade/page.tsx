@@ -96,8 +96,8 @@ function UpgradePageContent() {
   const planCoinCost = selectedPlan === "platinum" ? platinumCoinCost : premiumCoinCost
   const planGradient =
     selectedPlan === "platinum"
-      ? "linear-gradient(90deg, #c026d3, #7c3aed)"
-      : "linear-gradient(90deg, #0ea5e9, #4f46e5)"
+      ? "linear-gradient(90deg, #d946ef, #8b5cf6)"
+      : "linear-gradient(90deg, #38bdf8, #4f46e5)"
   const formDefaultSubject =
     selectedPlan === "platinum"
       ? "Platinum upgrade request"
@@ -201,6 +201,21 @@ function UpgradePageContent() {
   const disablePlatinumRedeem =
     profileLoading || !profile || currentCoins < platinumCoinCost || isAlreadyPlatinum
 
+  const coinsNeededForPremium = Math.max(0, premiumCoinCost - currentCoins)
+  const coinsNeededForPlatinum = Math.max(0, platinumCoinCost - currentCoins)
+
+  const pageCardStyle: React.CSSProperties = {
+    border: "1px solid rgba(148, 163, 184, 0.16)",
+    background: "rgba(15, 23, 42, 0.78)",
+    borderRadius: "24px",
+    boxShadow: "0 20px 45px rgba(2, 6, 23, 0.34)",
+    backdropFilter: "blur(10px)",
+  }
+
+  const mutedText: React.CSSProperties = {
+    color: "#94a3b8",
+  }
+
   return (
     <>
       <SiteHeader />
@@ -208,108 +223,156 @@ function UpgradePageContent() {
       <div
         style={{
           minHeight: "100vh",
-          background: "linear-gradient(180deg, #eef4ff 0%, #f8fbff 45%, #ffffff 100%)",
-          padding: "100px 14px 14px",
+          background:
+            "radial-gradient(circle at top, rgba(59,130,246,0.18), transparent 22%), radial-gradient(circle at top right, rgba(217,70,239,0.14), transparent 24%), linear-gradient(180deg, #020617 0%, #0f172a 42%, #111827 100%)",
+          padding: "100px 14px 24px",
           fontFamily: "Arial, Helvetica, sans-serif",
         }}
       >
-        <div style={{ width: "100%", maxWidth: "1800px", margin: "0 auto" }}>
+        <div style={{ width: "100%", maxWidth: "1400px", margin: "0 auto" }}>
           <div
             style={{
+              ...pageCardStyle,
+              overflow: "hidden",
+              padding: "28px 20px",
               marginBottom: "22px",
-              display: "flex",
-              justifyContent: "center",
+              position: "relative",
             }}
           >
             <div
               style={{
-                width: "100%",
-                maxWidth: "980px",
-                borderRadius: "24px",
-                background: "#ffffff",
-                border: "1px solid #dbe4f0",
-                boxShadow: "0 8px 18px rgba(15, 23, 42, 0.05)",
-                overflow: "hidden",
-                padding: "16px",
+                position: "absolute",
+                inset: 0,
+                background:
+                  selectedPlan === "platinum"
+                    ? "linear-gradient(135deg, rgba(217,70,239,0.12), rgba(139,92,246,0.02))"
+                    : "linear-gradient(135deg, rgba(56,189,248,0.10), rgba(79,70,229,0.02))",
+                pointerEvents: "none",
               }}
-            >
-              <AdSlot code={IN_CONTENT_AD} />
-            </div>
-          </div>
+            />
 
-          <div
-            style={{
-              textAlign: "center",
-              marginBottom: "28px",
-            }}
-          >
             <div
               style={{
-                display: "inline-block",
-                marginBottom: "14px",
-                padding: "7px 14px",
-                borderRadius: "999px",
-                background: selectedPlan === "platinum" ? "#fae8ff" : "#eef2ff",
-                color: selectedPlan === "platinum" ? "#a21caf" : "#4338ca",
-                fontSize: "13px",
-                fontWeight: 700,
-                letterSpacing: "0.3px",
-              }}
-            >
-              MEMBERSHIP UPGRADE
-            </div>
-
-            <h2
-              style={{
-                margin: "0 0 14px",
-                fontSize: "36px",
-                lineHeight: 1.15,
-                color: "#0f172a",
-                fontWeight: 800,
-              }}
-            >
-              Unlock More Downloads
-            </h2>
-
-            <p
-              style={{
+                position: "relative",
+                zIndex: 1,
+                textAlign: "center",
+                maxWidth: "900px",
                 margin: "0 auto",
-                maxWidth: "720px",
-                fontSize: "17px",
-                lineHeight: 1.75,
-                color: "#64748b",
               }}
             >
-              Choose the plan that fits your access level. Upgrade to unlock premium
-              files, faster downloads, and platinum-exclusive releases inside JB Collections.
-            </p>
+              <div
+                style={{
+                  display: "inline-block",
+                  marginBottom: "14px",
+                  padding: "8px 15px",
+                  borderRadius: "999px",
+                  background:
+                    selectedPlan === "platinum"
+                      ? "rgba(217,70,239,0.14)"
+                      : "rgba(59,130,246,0.16)",
+                  border:
+                    selectedPlan === "platinum"
+                      ? "1px solid rgba(217,70,239,0.25)"
+                      : "1px solid rgba(59,130,246,0.24)",
+                  color: selectedPlan === "platinum" ? "#f0abfc" : "#93c5fd",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                  letterSpacing: "0.6px",
+                }}
+              >
+                MEMBERSHIP UPGRADE
+              </div>
+
+              <h1
+                style={{
+                  margin: "0 0 14px",
+                  fontSize: "clamp(30px, 5vw, 48px)",
+                  lineHeight: 1.1,
+                  color: "#f8fafc",
+                  fontWeight: 800,
+                }}
+              >
+                Unlock More Downloads with JB Collections
+              </h1>
+
+              <p
+                style={{
+                  margin: "0 auto",
+                  maxWidth: "760px",
+                  fontSize: "16px",
+                  lineHeight: 1.8,
+                  color: "#cbd5e1",
+                }}
+              >
+                Upgrade your account to access premium files, faster downloads,
+                and exclusive Platinum-only releases. You can upgrade either by
+                paying directly or by redeeming your saved JB Coins.
+              </p>
+
+              <div
+                style={{
+                  marginTop: "18px",
+                  display: "flex",
+                  justifyContent: "center",
+                  flexWrap: "wrap",
+                  gap: "10px",
+                }}
+              >
+                {[
+                  "Instant redeem with JB Coins",
+                  "Manual payment review",
+                  "Secure receipt upload",
+                  "Premium and Platinum access",
+                ].map((item) => (
+                  <div
+                    key={item}
+                    style={{
+                      padding: "10px 14px",
+                      borderRadius: "999px",
+                      background: "rgba(15, 23, 42, 0.7)",
+                      border: "1px solid rgba(148, 163, 184, 0.14)",
+                      color: "#e2e8f0",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div
             style={{
-              marginBottom: "20px",
-              border: "1px solid #dbe4f0",
-              background: "#ffffff",
-              borderRadius: "22px",
+              ...pageCardStyle,
               padding: "18px",
-              boxShadow: "0 8px 18px rgba(15, 23, 42, 0.05)",
+              marginBottom: "20px",
             }}
           >
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                 gap: "14px",
-                alignItems: "center",
+                alignItems: "stretch",
               }}
             >
-              <div>
+              <div
+                style={{
+                  border: "1px solid rgba(148, 163, 184, 0.12)",
+                  borderRadius: "18px",
+                  background: "rgba(2, 6, 23, 0.35)",
+                  padding: "16px",
+                }}
+              >
                 <div
                   style={{
-                    fontSize: "13px",
-                    fontWeight: 700,
-                    color: "#64748b",
-                    marginBottom: "6px",
+                    fontSize: "12px",
+                    fontWeight: 800,
+                    color: "#94a3b8",
+                    marginBottom: "8px",
+                    letterSpacing: "0.4px",
                   }}
                 >
                   CURRENT MEMBERSHIP
@@ -318,7 +381,7 @@ function UpgradePageContent() {
                   style={{
                     fontSize: "24px",
                     fontWeight: 800,
-                    color: "#0f172a",
+                    color: "#f8fafc",
                   }}
                 >
                   {membership === "platinum"
@@ -329,13 +392,21 @@ function UpgradePageContent() {
                 </div>
               </div>
 
-              <div>
+              <div
+                style={{
+                  border: "1px solid rgba(148, 163, 184, 0.12)",
+                  borderRadius: "18px",
+                  background: "rgba(2, 6, 23, 0.35)",
+                  padding: "16px",
+                }}
+              >
                 <div
                   style={{
-                    fontSize: "13px",
-                    fontWeight: 700,
-                    color: "#64748b",
-                    marginBottom: "6px",
+                    fontSize: "12px",
+                    fontWeight: 800,
+                    color: "#94a3b8",
+                    marginBottom: "8px",
+                    letterSpacing: "0.4px",
                   }}
                 >
                   JB COIN WALLET
@@ -344,34 +415,78 @@ function UpgradePageContent() {
                   style={{
                     fontSize: "24px",
                     fontWeight: 800,
-                    color: "#0f172a",
+                    color: "#f8fafc",
                   }}
                 >
                   {profileLoading ? "Loading..." : `${currentCoins.toLocaleString()} JB Coins`}
                 </div>
               </div>
 
-              <div>
+              <div
+                style={{
+                  border: "1px solid rgba(148, 163, 184, 0.12)",
+                  borderRadius: "18px",
+                  background: "rgba(2, 6, 23, 0.35)",
+                  padding: "16px",
+                }}
+              >
                 <div
                   style={{
-                    fontSize: "13px",
-                    fontWeight: 700,
-                    color: "#64748b",
-                    marginBottom: "6px",
+                    fontSize: "12px",
+                    fontWeight: 800,
+                    color: "#94a3b8",
+                    marginBottom: "8px",
+                    letterSpacing: "0.4px",
                   }}
                 >
-                  REDEEM PRICES
+                  NEED FOR PREMIUM
                 </div>
                 <div
                   style={{
-                    fontSize: "14px",
-                    color: "#475569",
-                    lineHeight: 1.8,
-                    fontWeight: 700,
+                    fontSize: "24px",
+                    fontWeight: 800,
+                    color: coinsNeededForPremium === 0 ? "#4ade80" : "#f8fafc",
                   }}
                 >
-                  <div>Premium = 2000 JB Coins</div>
-                  <div>Platinum = 2600 JB Coins</div>
+                  {profileLoading
+                    ? "Loading..."
+                    : coinsNeededForPremium === 0
+                      ? "Ready"
+                      : `${coinsNeededForPremium.toLocaleString()} more`}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid rgba(148, 163, 184, 0.12)",
+                  borderRadius: "18px",
+                  background: "rgba(2, 6, 23, 0.35)",
+                  padding: "16px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: 800,
+                    color: "#94a3b8",
+                    marginBottom: "8px",
+                    letterSpacing: "0.4px",
+                  }}
+                >
+                  NEED FOR PLATINUM
+                </div>
+                <div
+                  style={{
+                    fontSize: "24px",
+                    fontWeight: 800,
+                    color: coinsNeededForPlatinum === 0 ? "#e879f9" : "#f8fafc",
+                  }}
+                >
+                  {profileLoading
+                    ? "Loading..."
+                    : coinsNeededForPlatinum === 0
+                      ? "Ready"
+                      : `${coinsNeededForPlatinum.toLocaleString()} more`}
                 </div>
               </div>
             </div>
@@ -381,9 +496,9 @@ function UpgradePageContent() {
             <div
               style={{
                 marginBottom: "18px",
-                border: "1px solid #bbf7d0",
-                background: "#f0fdf4",
-                color: "#15803d",
+                border: "1px solid rgba(74, 222, 128, 0.30)",
+                background: "rgba(20, 83, 45, 0.34)",
+                color: "#86efac",
                 borderRadius: "16px",
                 padding: "14px 16px",
                 fontSize: "14px",
@@ -399,9 +514,9 @@ function UpgradePageContent() {
             <div
               style={{
                 marginBottom: "18px",
-                border: "1px solid #fecaca",
-                background: "#fef2f2",
-                color: "#b91c1c",
+                border: "1px solid rgba(248, 113, 113, 0.28)",
+                background: "rgba(127, 29, 29, 0.34)",
+                color: "#fca5a5",
                 borderRadius: "16px",
                 padding: "14px 16px",
                 fontSize: "14px",
@@ -416,53 +531,62 @@ function UpgradePageContent() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))",
               gap: "18px",
-              marginBottom: "28px",
+              marginBottom: "24px",
             }}
           >
             <div
               style={{
-                border: "1px solid #e2e8f0",
-                borderRadius: "22px",
-                background: "#ffffff",
-                padding: "22px",
-                boxShadow: "0 8px 20px rgba(15, 23, 42, 0.04)",
+                ...pageCardStyle,
+                padding: "24px",
+                background: "rgba(15, 23, 42, 0.82)",
               }}
             >
               <div
                 style={{
-                  fontSize: "14px",
-                  fontWeight: 700,
-                  color: "#64748b",
+                  fontSize: "13px",
+                  fontWeight: 800,
+                  color: "#94a3b8",
                   marginBottom: "10px",
+                  letterSpacing: "0.5px",
                 }}
               >
                 FREE
               </div>
+
               <div
                 style={{
-                  fontSize: "32px",
+                  fontSize: "34px",
                   fontWeight: 800,
-                  color: "#0f172a",
+                  color: "#f8fafc",
                   marginBottom: "4px",
                 }}
               >
                 ₱0
               </div>
+
               <div
                 style={{
                   fontSize: "14px",
-                  color: "#64748b",
+                  color: "#94a3b8",
                   marginBottom: "18px",
                 }}
               >
                 basic access
               </div>
 
-              <div style={{ display: "grid", gap: "10px", fontSize: "14px", color: "#475569" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gap: "10px",
+                  fontSize: "14px",
+                  color: "#cbd5e1",
+                  lineHeight: 1.6,
+                }}
+              >
                 <div>✔ Access free files</div>
-                <div>✔ Can browse all categories</div>
+                <div>✔ Browse all categories</div>
                 <div>✖ Sponsored step on free downloads</div>
                 <div>✖ No premium files</div>
                 <div>✖ No platinum files</div>
@@ -471,27 +595,31 @@ function UpgradePageContent() {
 
             <div
               style={{
-                border:
-                  selectedPlan === "premium" ? "2px solid #2563eb" : "1px solid #bfdbfe",
-                borderRadius: "22px",
-                background: "#ffffff",
-                padding: "22px",
-                boxShadow: "0 12px 28px rgba(37, 99, 235, 0.10)",
+                ...pageCardStyle,
+                padding: "24px",
                 position: "relative",
+                border:
+                  selectedPlan === "premium"
+                    ? "2px solid rgba(96, 165, 250, 0.90)"
+                    : "1px solid rgba(96, 165, 250, 0.20)",
+                background:
+                  "linear-gradient(180deg, rgba(30,41,59,0.96) 0%, rgba(15,23,42,0.92) 100%)",
+                boxShadow: "0 22px 50px rgba(37, 99, 235, 0.18)",
               }}
             >
               <div
                 style={{
                   position: "absolute",
-                  top: "-10px",
+                  top: "-11px",
                   left: "50%",
                   transform: "translateX(-50%)",
-                  background: "#2563eb",
+                  background: "linear-gradient(90deg, #2563eb, #38bdf8)",
                   color: "#fff",
                   padding: "6px 12px",
                   borderRadius: "999px",
                   fontSize: "12px",
-                  fontWeight: 700,
+                  fontWeight: 800,
+                  letterSpacing: "0.4px",
                 }}
               >
                 MOST POPULAR
@@ -499,29 +627,32 @@ function UpgradePageContent() {
 
               <div
                 style={{
-                  fontSize: "14px",
-                  fontWeight: 700,
-                  color: "#2563eb",
+                  fontSize: "13px",
+                  fontWeight: 800,
+                  color: "#93c5fd",
                   marginBottom: "10px",
+                  letterSpacing: "0.5px",
                 }}
               >
                 PREMIUM
               </div>
+
               <div
                 style={{
-                  fontSize: "32px",
+                  fontSize: "34px",
                   fontWeight: 800,
-                  color: "#0f172a",
+                  color: "#f8fafc",
                   marginBottom: "4px",
                 }}
               >
                 ₱149
               </div>
+
               <div
                 style={{
                   fontSize: "14px",
-                  color: "#64748b",
-                  marginBottom: "12px",
+                  color: "#94a3b8",
+                  marginBottom: "14px",
                 }}
               >
                 per month
@@ -530,8 +661,8 @@ function UpgradePageContent() {
               <div
                 style={{
                   marginBottom: "18px",
-                  border: "1px solid #dbeafe",
-                  background: "#eff6ff",
+                  border: "1px solid rgba(96,165,250,0.20)",
+                  background: "rgba(37, 99, 235, 0.10)",
                   borderRadius: "14px",
                   padding: "12px 14px",
                   textAlign: "center",
@@ -540,8 +671,8 @@ function UpgradePageContent() {
                 <div
                   style={{
                     fontSize: "12px",
-                    fontWeight: 700,
-                    color: "#1d4ed8",
+                    fontWeight: 800,
+                    color: "#93c5fd",
                     marginBottom: "4px",
                   }}
                 >
@@ -551,7 +682,7 @@ function UpgradePageContent() {
                   style={{
                     fontSize: "24px",
                     fontWeight: 800,
-                    color: "#0f172a",
+                    color: "#f8fafc",
                   }}
                 >
                   {premiumCoinCost.toLocaleString()}
@@ -559,7 +690,7 @@ function UpgradePageContent() {
                 <div
                   style={{
                     fontSize: "13px",
-                    color: "#475569",
+                    color: "#cbd5e1",
                     marginTop: "4px",
                   }}
                 >
@@ -567,7 +698,15 @@ function UpgradePageContent() {
                 </div>
               </div>
 
-              <div style={{ display: "grid", gap: "10px", fontSize: "14px", color: "#475569" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gap: "10px",
+                  fontSize: "14px",
+                  color: "#cbd5e1",
+                  lineHeight: 1.6,
+                }}
+              >
                 <div>✔ Access premium files</div>
                 <div>✔ Direct downloads</div>
                 <div>✔ No sponsored step on premium/free files</div>
@@ -585,14 +724,14 @@ function UpgradePageContent() {
                     width: "100%",
                     justifyContent: "center",
                     alignItems: "center",
-                    padding: "12px 18px",
+                    padding: "13px 18px",
                     borderRadius: "14px",
                     background: disablePremiumRedeem
-                      ? "#cbd5e1"
-                      : "linear-gradient(90deg, #1d4ed8, #2563eb)",
+                      ? "rgba(100, 116, 139, 0.5)"
+                      : "linear-gradient(90deg, #2563eb, #38bdf8)",
                     color: "#ffffff",
                     textDecoration: "none",
-                    fontWeight: 700,
+                    fontWeight: 800,
                     fontSize: "14px",
                     border: "none",
                     cursor: disablePremiumRedeem ? "not-allowed" : "pointer",
@@ -615,14 +754,14 @@ function UpgradePageContent() {
                     width: "100%",
                     justifyContent: "center",
                     alignItems: "center",
-                    padding: "12px 18px",
+                    padding: "13px 18px",
                     borderRadius: "14px",
-                    background: "linear-gradient(90deg, #0ea5e9, #4f46e5)",
-                    color: "#ffffff",
+                    background: "rgba(15, 23, 42, 0.8)",
+                    color: "#e2e8f0",
                     textDecoration: "none",
-                    fontWeight: 700,
+                    fontWeight: 800,
                     fontSize: "14px",
-                    border: "none",
+                    border: "1px solid rgba(96,165,250,0.28)",
                     cursor: "pointer",
                   }}
                 >
@@ -633,39 +772,64 @@ function UpgradePageContent() {
 
             <div
               style={{
+                ...pageCardStyle,
+                padding: "24px",
+                position: "relative",
                 border:
-                  selectedPlan === "platinum" ? "2px solid #a21caf" : "1px solid #e9d5ff",
-                borderRadius: "22px",
-                background: "#ffffff",
-                padding: "22px",
-                boxShadow: "0 12px 28px rgba(124, 58, 237, 0.10)",
+                  selectedPlan === "platinum"
+                    ? "2px solid rgba(232, 121, 249, 0.90)"
+                    : "1px solid rgba(232, 121, 249, 0.22)",
+                background:
+                  "linear-gradient(180deg, rgba(45,17,67,0.92) 0%, rgba(30,27,75,0.90) 100%)",
+                boxShadow: "0 24px 54px rgba(168, 85, 247, 0.22)",
               }}
             >
               <div
                 style={{
-                  fontSize: "14px",
-                  fontWeight: 700,
-                  color: "#a21caf",
+                  position: "absolute",
+                  top: "-11px",
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  background: "linear-gradient(90deg, #d946ef, #8b5cf6)",
+                  color: "#fff",
+                  padding: "6px 12px",
+                  borderRadius: "999px",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                  letterSpacing: "0.4px",
+                }}
+              >
+                BEST FOR EXCLUSIVES
+              </div>
+
+              <div
+                style={{
+                  fontSize: "13px",
+                  fontWeight: 800,
+                  color: "#f0abfc",
                   marginBottom: "10px",
+                  letterSpacing: "0.5px",
                 }}
               >
                 PLATINUM
               </div>
+
               <div
                 style={{
-                  fontSize: "32px",
+                  fontSize: "34px",
                   fontWeight: 800,
-                  color: "#0f172a",
+                  color: "#f8fafc",
                   marginBottom: "4px",
                 }}
               >
                 ₱299
               </div>
+
               <div
                 style={{
                   fontSize: "14px",
-                  color: "#64748b",
-                  marginBottom: "12px",
+                  color: "#c4b5fd",
+                  marginBottom: "14px",
                 }}
               >
                 per month
@@ -674,8 +838,8 @@ function UpgradePageContent() {
               <div
                 style={{
                   marginBottom: "18px",
-                  border: "1px solid #f5d0fe",
-                  background: "#fdf4ff",
+                  border: "1px solid rgba(232,121,249,0.22)",
+                  background: "rgba(217, 70, 239, 0.10)",
                   borderRadius: "14px",
                   padding: "12px 14px",
                   textAlign: "center",
@@ -684,8 +848,8 @@ function UpgradePageContent() {
                 <div
                   style={{
                     fontSize: "12px",
-                    fontWeight: 700,
-                    color: "#a21caf",
+                    fontWeight: 800,
+                    color: "#f0abfc",
                     marginBottom: "4px",
                   }}
                 >
@@ -695,7 +859,7 @@ function UpgradePageContent() {
                   style={{
                     fontSize: "24px",
                     fontWeight: 800,
-                    color: "#0f172a",
+                    color: "#f8fafc",
                   }}
                 >
                   {platinumCoinCost.toLocaleString()}
@@ -703,7 +867,7 @@ function UpgradePageContent() {
                 <div
                   style={{
                     fontSize: "13px",
-                    color: "#475569",
+                    color: "#e9d5ff",
                     marginTop: "4px",
                   }}
                 >
@@ -711,7 +875,15 @@ function UpgradePageContent() {
                 </div>
               </div>
 
-              <div style={{ display: "grid", gap: "10px", fontSize: "14px", color: "#475569" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gap: "10px",
+                  fontSize: "14px",
+                  color: "#e9d5ff",
+                  lineHeight: 1.6,
+                }}
+              >
                 <div>✔ Everything in Premium</div>
                 <div>✔ Access platinum-exclusive files</div>
                 <div>✔ Highest access level</div>
@@ -729,14 +901,14 @@ function UpgradePageContent() {
                     width: "100%",
                     justifyContent: "center",
                     alignItems: "center",
-                    padding: "12px 18px",
+                    padding: "13px 18px",
                     borderRadius: "14px",
                     background: disablePlatinumRedeem
-                      ? "#d8b4fe"
-                      : "linear-gradient(90deg, #c026d3, #7c3aed)",
+                      ? "rgba(126, 34, 206, 0.40)"
+                      : "linear-gradient(90deg, #d946ef, #8b5cf6)",
                     color: "#ffffff",
                     textDecoration: "none",
-                    fontWeight: 700,
+                    fontWeight: 800,
                     fontSize: "14px",
                     border: "none",
                     cursor: disablePlatinumRedeem ? "not-allowed" : "pointer",
@@ -759,14 +931,14 @@ function UpgradePageContent() {
                     width: "100%",
                     justifyContent: "center",
                     alignItems: "center",
-                    padding: "12px 18px",
+                    padding: "13px 18px",
                     borderRadius: "14px",
-                    background: "linear-gradient(90deg, #c026d3, #7c3aed)",
-                    color: "#ffffff",
+                    background: "rgba(30, 27, 75, 0.86)",
+                    color: "#f5d0fe",
                     textDecoration: "none",
-                    fontWeight: 700,
+                    fontWeight: 800,
                     fontSize: "14px",
-                    border: "none",
+                    border: "1px solid rgba(232,121,249,0.28)",
                     cursor: "pointer",
                   }}
                 >
@@ -778,25 +950,13 @@ function UpgradePageContent() {
 
           <div
             style={{
+              ...pageCardStyle,
+              padding: "16px",
               marginBottom: "24px",
-              display: "flex",
-              justifyContent: "center",
+              overflow: "hidden",
             }}
           >
-            <div
-              style={{
-                width: "100%",
-                maxWidth: "980px",
-                borderRadius: "24px",
-                background: "#ffffff",
-                border: "1px solid #dbe4f0",
-                boxShadow: "0 8px 18px rgba(15, 23, 42, 0.05)",
-                overflow: "hidden",
-                padding: "16px",
-              }}
-            >
-              <AdSlot code={IN_CONTENT_AD} />
-            </div>
+            <AdSlot code={IN_CONTENT_AD} />
           </div>
 
           {showPaymentBox ? (
@@ -811,9 +971,7 @@ function UpgradePageContent() {
               {selectedMethod === "coins" ? (
                 <div
                   style={{
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "22px",
-                    background: "#ffffff",
+                    ...pageCardStyle,
                     padding: "22px",
                   }}
                 >
@@ -821,10 +979,12 @@ function UpgradePageContent() {
                     style={{
                       border:
                         selectedPlan === "platinum"
-                          ? "1px solid #f5d0fe"
-                          : "1px solid #bfdbfe",
+                          ? "1px solid rgba(232,121,249,0.26)"
+                          : "1px solid rgba(96,165,250,0.24)",
                       background:
-                        selectedPlan === "platinum" ? "#fdf4ff" : "#eff6ff",
+                        selectedPlan === "platinum"
+                          ? "rgba(217,70,239,0.10)"
+                          : "rgba(37,99,235,0.10)",
                       borderRadius: "18px",
                       padding: "18px",
                       marginBottom: "20px",
@@ -834,8 +994,8 @@ function UpgradePageContent() {
                     <div
                       style={{
                         fontSize: "13px",
-                        fontWeight: 700,
-                        color: selectedPlan === "platinum" ? "#a21caf" : "#1d4ed8",
+                        fontWeight: 800,
+                        color: selectedPlan === "platinum" ? "#f0abfc" : "#93c5fd",
                         marginBottom: "8px",
                       }}
                     >
@@ -846,7 +1006,7 @@ function UpgradePageContent() {
                       style={{
                         fontSize: "32px",
                         fontWeight: 800,
-                        color: "#0f172a",
+                        color: "#f8fafc",
                       }}
                     >
                       {planCoinCost.toLocaleString()} JB Coins
@@ -855,7 +1015,7 @@ function UpgradePageContent() {
                     <div
                       style={{
                         fontSize: "14px",
-                        color: "#64748b",
+                        color: "#cbd5e1",
                         marginTop: "4px",
                       }}
                     >
@@ -865,9 +1025,9 @@ function UpgradePageContent() {
 
                   <div
                     style={{
-                      border: "1px solid #e2e8f0",
+                      border: "1px solid rgba(148,163,184,0.14)",
                       borderRadius: "18px",
-                      background: "#f8fafc",
+                      background: "rgba(2, 6, 23, 0.35)",
                       padding: "18px",
                       marginBottom: "20px",
                     }}
@@ -876,7 +1036,7 @@ function UpgradePageContent() {
                       style={{
                         fontSize: "18px",
                         fontWeight: 800,
-                        color: "#0f172a",
+                        color: "#f8fafc",
                         marginBottom: "12px",
                         textAlign: "center",
                       }}
@@ -894,48 +1054,69 @@ function UpgradePageContent() {
                     >
                       <div
                         style={{
-                          border: "1px solid #dbe4f0",
+                          border: "1px solid rgba(148,163,184,0.14)",
                           borderRadius: "14px",
-                          background: "#ffffff",
+                          background: "rgba(15, 23, 42, 0.7)",
                           padding: "14px",
                         }}
                       >
-                        <div style={{ fontSize: "12px", color: "#64748b", fontWeight: 700 }}>
+                        <div style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 800 }}>
                           CURRENT BALANCE
                         </div>
-                        <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", marginTop: "6px" }}>
+                        <div
+                          style={{
+                            fontSize: "24px",
+                            fontWeight: 800,
+                            color: "#f8fafc",
+                            marginTop: "6px",
+                          }}
+                        >
                           {profileLoading ? "Loading..." : `${currentCoins.toLocaleString()} JB Coins`}
                         </div>
                       </div>
 
                       <div
                         style={{
-                          border: "1px solid #dbe4f0",
+                          border: "1px solid rgba(148,163,184,0.14)",
                           borderRadius: "14px",
-                          background: "#ffffff",
+                          background: "rgba(15, 23, 42, 0.7)",
                           padding: "14px",
                         }}
                       >
-                        <div style={{ fontSize: "12px", color: "#64748b", fontWeight: 700 }}>
+                        <div style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 800 }}>
                           REQUIRED
                         </div>
-                        <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", marginTop: "6px" }}>
+                        <div
+                          style={{
+                            fontSize: "24px",
+                            fontWeight: 800,
+                            color: "#f8fafc",
+                            marginTop: "6px",
+                          }}
+                        >
                           {planCoinCost.toLocaleString()} JB Coins
                         </div>
                       </div>
 
                       <div
                         style={{
-                          border: "1px solid #dbe4f0",
+                          border: "1px solid rgba(148,163,184,0.14)",
                           borderRadius: "14px",
-                          background: "#ffffff",
+                          background: "rgba(15, 23, 42, 0.7)",
                           padding: "14px",
                         }}
                       >
-                        <div style={{ fontSize: "12px", color: "#64748b", fontWeight: 700 }}>
+                        <div style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 800 }}>
                           AFTER REDEEM
                         </div>
-                        <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", marginTop: "6px" }}>
+                        <div
+                          style={{
+                            fontSize: "24px",
+                            fontWeight: 800,
+                            color: "#f8fafc",
+                            marginTop: "6px",
+                          }}
+                        >
                           {Math.max(0, currentCoins - planCoinCost).toLocaleString()} JB Coins
                         </div>
                       </div>
@@ -944,12 +1125,16 @@ function UpgradePageContent() {
                     <div
                       style={{
                         borderRadius: "14px",
-                        background: hasEnoughCoins ? "#f0fdf4" : "#fef2f2",
-                        border: hasEnoughCoins ? "1px solid #bbf7d0" : "1px solid #fecaca",
+                        background: hasEnoughCoins
+                          ? "rgba(20, 83, 45, 0.34)"
+                          : "rgba(127, 29, 29, 0.34)",
+                        border: hasEnoughCoins
+                          ? "1px solid rgba(74,222,128,0.26)"
+                          : "1px solid rgba(248,113,113,0.24)",
                         padding: "14px",
                         fontSize: "14px",
-                        fontWeight: 700,
-                        color: hasEnoughCoins ? "#15803d" : "#b91c1c",
+                        fontWeight: 800,
+                        color: hasEnoughCoins ? "#86efac" : "#fca5a5",
                         textAlign: "center",
                       }}
                     >
@@ -959,6 +1144,37 @@ function UpgradePageContent() {
                           ? `You have enough JB Coins to redeem ${planTitle}.`
                           : `You need ${(planCoinCost - currentCoins).toLocaleString()} more JB Coins to redeem ${planTitle}.`}
                     </div>
+                  </div>
+
+                  <div
+                    style={{
+                      marginBottom: "18px",
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                      gap: "12px",
+                    }}
+                  >
+                    {[
+                      "Redeem is faster than manual payment review",
+                      "Membership updates after successful redeem",
+                      "Use your saved JB Coins anytime",
+                    ].map((item) => (
+                      <div
+                        key={item}
+                        style={{
+                          border: "1px solid rgba(148,163,184,0.14)",
+                          borderRadius: "14px",
+                          background: "rgba(15, 23, 42, 0.58)",
+                          padding: "14px",
+                          fontSize: "13px",
+                          fontWeight: 700,
+                          color: "#cbd5e1",
+                          textAlign: "center",
+                        }}
+                      >
+                        {item}
+                      </div>
+                    ))}
                   </div>
 
                   <form
@@ -983,11 +1199,11 @@ function UpgradePageContent() {
                         borderRadius: "14px",
                         background:
                           profileLoading || !profile || !hasEnoughCoins
-                            ? "#cbd5e1"
+                            ? "rgba(100, 116, 139, 0.5)"
                             : planGradient,
                         color: "#ffffff",
                         border: "none",
-                        fontWeight: 700,
+                        fontWeight: 800,
                         fontSize: "15px",
                         cursor:
                           profileLoading || !profile || !hasEnoughCoins
@@ -995,31 +1211,18 @@ function UpgradePageContent() {
                             : "pointer",
                         boxShadow:
                           selectedPlan === "platinum"
-                            ? "0 10px 20px rgba(124, 58, 237, 0.22)"
-                            : "0 10px 20px rgba(59, 130, 246, 0.22)",
+                            ? "0 10px 20px rgba(168, 85, 247, 0.24)"
+                            : "0 10px 20px rgba(59, 130, 246, 0.24)",
                       }}
                     >
                       Redeem {planTitle} with {planCoinCost.toLocaleString()} JB Coins
                     </button>
                   </form>
-
-                  <p
-                    style={{
-                      margin: "12px 0 0",
-                      fontSize: "13px",
-                      color: "#64748b",
-                      textAlign: "center",
-                    }}
-                  >
-                    This button needs a backend route at <strong>/api/upgrade/redeem-coins</strong> to deduct JB Coins and upgrade the membership automatically.
-                  </p>
                 </div>
               ) : (
                 <div
                   style={{
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "22px",
-                    background: "#ffffff",
+                    ...pageCardStyle,
                     padding: "22px",
                   }}
                 >
@@ -1031,14 +1234,14 @@ function UpgradePageContent() {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
-                      border: "1px solid #cbd5e1",
+                      border: "1px solid rgba(148,163,184,0.18)",
                       borderRadius: "16px",
-                      background: "#f8fafc",
+                      background: "rgba(2, 6, 23, 0.46)",
                       padding: "16px 18px",
                       cursor: "pointer",
                       fontSize: "18px",
                       fontWeight: 800,
-                      color: "#0f172a",
+                      color: "#f8fafc",
                     }}
                   >
                     <span>Payment Instructions for {planTitle}</span>
@@ -1050,10 +1253,12 @@ function UpgradePageContent() {
                       marginTop: "16px",
                       border:
                         selectedPlan === "platinum"
-                          ? "1px solid #f5d0fe"
-                          : "1px solid #bfdbfe",
+                          ? "1px solid rgba(232,121,249,0.24)"
+                          : "1px solid rgba(96,165,250,0.24)",
                       background:
-                        selectedPlan === "platinum" ? "#fdf4ff" : "#eff6ff",
+                        selectedPlan === "platinum"
+                          ? "rgba(217,70,239,0.10)"
+                          : "rgba(37,99,235,0.10)",
                       borderRadius: "18px",
                       padding: "18px",
                       marginBottom: "20px",
@@ -1063,8 +1268,8 @@ function UpgradePageContent() {
                     <div
                       style={{
                         fontSize: "13px",
-                        fontWeight: 700,
-                        color: selectedPlan === "platinum" ? "#a21caf" : "#1d4ed8",
+                        fontWeight: 800,
+                        color: selectedPlan === "platinum" ? "#f0abfc" : "#93c5fd",
                         marginBottom: "8px",
                       }}
                     >
@@ -1075,7 +1280,7 @@ function UpgradePageContent() {
                       style={{
                         fontSize: "32px",
                         fontWeight: 800,
-                        color: "#0f172a",
+                        color: "#f8fafc",
                       }}
                     >
                       {planPrice}
@@ -1084,7 +1289,7 @@ function UpgradePageContent() {
                     <div
                       style={{
                         fontSize: "14px",
-                        color: "#64748b",
+                        color: "#cbd5e1",
                         marginTop: "4px",
                       }}
                     >
@@ -1094,9 +1299,9 @@ function UpgradePageContent() {
 
                   <div
                     style={{
-                      border: "1px solid #e2e8f0",
+                      border: "1px solid rgba(148,163,184,0.14)",
                       borderRadius: "18px",
-                      background: "#f8fafc",
+                      background: "rgba(2, 6, 23, 0.35)",
                       padding: "18px",
                       marginBottom: "20px",
                     }}
@@ -1105,7 +1310,7 @@ function UpgradePageContent() {
                       style={{
                         fontSize: "18px",
                         fontWeight: 800,
-                        color: "#0f172a",
+                        color: "#f8fafc",
                         marginBottom: "10px",
                         textAlign: "center",
                       }}
@@ -1117,12 +1322,13 @@ function UpgradePageContent() {
                       style={{
                         margin: "0 0 14px",
                         fontSize: "14px",
-                        color: "#475569",
+                        color: "#cbd5e1",
                         lineHeight: 1.7,
                         textAlign: "center",
                       }}
                     >
-                      Send <strong>{planPrice}</strong> first, then fill out the form below and upload your receipt.
+                      Send <strong>{planPrice}</strong> first, then fill out the form
+                      below and upload your receipt for manual review.
                     </p>
 
                     <div
@@ -1150,10 +1356,22 @@ function UpgradePageContent() {
                             style={{
                               padding: "12px 16px",
                               borderRadius: "12px",
-                              border: active ? "2px solid #2563eb" : "1px solid #cbd5e1",
-                              background: active ? "#eff6ff" : "#ffffff",
-                              color: active ? "#1d4ed8" : "#334155",
-                              fontWeight: 700,
+                              border: active
+                                ? selectedPlan === "platinum"
+                                  ? "2px solid #e879f9"
+                                  : "2px solid #60a5fa"
+                                : "1px solid rgba(148,163,184,0.18)",
+                              background: active
+                                ? selectedPlan === "platinum"
+                                  ? "rgba(217,70,239,0.12)"
+                                  : "rgba(37,99,235,0.12)"
+                                : "rgba(15, 23, 42, 0.72)",
+                              color: active
+                                ? selectedPlan === "platinum"
+                                  ? "#f0abfc"
+                                  : "#93c5fd"
+                                : "#cbd5e1",
+                              fontWeight: 800,
                               fontSize: "14px",
                               cursor: "pointer",
                             }}
@@ -1166,8 +1384,8 @@ function UpgradePageContent() {
 
                     <div
                       style={{
-                        border: "1px solid #dbeafe",
-                        background: "#ffffff",
+                        border: "1px solid rgba(148,163,184,0.14)",
+                        background: "rgba(15, 23, 42, 0.78)",
                         borderRadius: "16px",
                         padding: "16px",
                         textAlign: "center",
@@ -1177,7 +1395,7 @@ function UpgradePageContent() {
                         style={{
                           fontSize: "15px",
                           fontWeight: 800,
-                          color: "#0f172a",
+                          color: "#f8fafc",
                           marginBottom: "10px",
                         }}
                       >
@@ -1193,23 +1411,42 @@ function UpgradePageContent() {
                           display: "block",
                           margin: "0 auto 12px",
                           borderRadius: "12px",
-                          border: "1px solid #e2e8f0",
+                          border: "1px solid rgba(148,163,184,0.18)",
                           background: "#fff",
                         }}
                       />
 
-                      <div style={{ fontSize: "14px", color: "#64748b" }}>
+                      <div style={{ fontSize: "14px", color: "#94a3b8" }}>
                         {paymentDetails.numberLabel}
                       </div>
-                      <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", marginTop: "4px" }}>
+                      <div
+                        style={{
+                          fontSize: "18px",
+                          fontWeight: 800,
+                          color: "#f8fafc",
+                          marginTop: "4px",
+                        }}
+                      >
                         {paymentDetails.number}
                       </div>
-                      <div style={{ fontSize: "13px", color: "#64748b", marginTop: "6px" }}>
+                      <div
+                        style={{
+                          fontSize: "13px",
+                          color: "#cbd5e1",
+                          marginTop: "6px",
+                        }}
+                      >
                         {paymentDetails.name}
                       </div>
 
                       {paymentDetails.extra ? (
-                        <div style={{ fontSize: "12px", color: "#64748b", marginTop: "8px" }}>
+                        <div
+                          style={{
+                            fontSize: "12px",
+                            color: "#94a3b8",
+                            marginTop: "8px",
+                          }}
+                        >
                           {paymentDetails.extra}
                         </div>
                       ) : null}
@@ -1219,27 +1456,58 @@ function UpgradePageContent() {
                       style={{
                         marginTop: "14px",
                         borderRadius: "14px",
-                        background: "#ffffff",
-                        border: "1px dashed #cbd5e1",
+                        background: "rgba(15, 23, 42, 0.76)",
+                        border: "1px dashed rgba(148,163,184,0.20)",
                         padding: "14px",
                         fontSize: "13px",
-                        color: "#475569",
-                        lineHeight: 1.7,
+                        color: "#cbd5e1",
+                        lineHeight: 1.8,
                       }}
                     >
                       <div><strong>How it works:</strong></div>
                       <div>1. Send payment for the selected membership.</div>
                       <div>2. Choose the payment method you used.</div>
                       <div>3. Enter the payment name and reference number.</div>
-                      <div>4. Upload your receipt.</div>
-                      <div>5. Wait for admin approval.</div>
+                      <div>4. Upload your receipt securely.</div>
+                      <div>5. Wait for admin approval and activation.</div>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: "14px",
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                        gap: "12px",
+                      }}
+                    >
+                      {[
+                        "Receipts are reviewed manually",
+                        "Make sure details match your receipt",
+                        "Activation happens after approval",
+                      ].map((item) => (
+                        <div
+                          key={item}
+                          style={{
+                            border: "1px solid rgba(148,163,184,0.14)",
+                            borderRadius: "14px",
+                            background: "rgba(15, 23, 42, 0.58)",
+                            padding: "14px",
+                            fontSize: "13px",
+                            fontWeight: 700,
+                            color: "#cbd5e1",
+                            textAlign: "center",
+                          }}
+                        >
+                          {item}
+                        </div>
+                      ))}
                     </div>
 
                     <p
                       style={{
                         marginTop: "10px",
                         fontSize: "12px",
-                        color: "#64748b",
+                        color: "#94a3b8",
                         textAlign: "center",
                       }}
                     >
@@ -1265,11 +1533,13 @@ function UpgradePageContent() {
                       defaultValue={formDefaultSubject}
                       style={{
                         width: "100%",
-                        border: "1px solid #cbd5e1",
+                        border: "1px solid rgba(148,163,184,0.18)",
                         borderRadius: "14px",
                         padding: "14px 16px",
                         fontSize: "15px",
                         outline: "none",
+                        background: "rgba(15, 23, 42, 0.82)",
+                        color: "#f8fafc",
                       }}
                     />
 
@@ -1287,11 +1557,13 @@ function UpgradePageContent() {
                         required
                         style={{
                           width: "100%",
-                          border: "1px solid #cbd5e1",
+                          border: "1px solid rgba(148,163,184,0.18)",
                           borderRadius: "14px",
                           padding: "14px 16px",
                           fontSize: "15px",
                           outline: "none",
+                          background: "rgba(15, 23, 42, 0.82)",
+                          color: "#f8fafc",
                         }}
                       />
 
@@ -1304,12 +1576,13 @@ function UpgradePageContent() {
                         }
                         style={{
                           width: "100%",
-                          border: "1px solid #cbd5e1",
+                          border: "1px solid rgba(148,163,184,0.18)",
                           borderRadius: "14px",
                           padding: "14px 16px",
                           fontSize: "15px",
                           outline: "none",
-                          background: "#fff",
+                          background: "rgba(15, 23, 42, 0.82)",
+                          color: "#f8fafc",
                         }}
                       >
                         <option value="gcash">GCash</option>
@@ -1323,11 +1596,13 @@ function UpgradePageContent() {
                         placeholder="Mobile number or bank account used for payment"
                         style={{
                           width: "100%",
-                          border: "1px solid #cbd5e1",
+                          border: "1px solid rgba(148,163,184,0.18)",
                           borderRadius: "14px",
                           padding: "14px 16px",
                           fontSize: "15px",
                           outline: "none",
+                          background: "rgba(15, 23, 42, 0.82)",
+                          color: "#f8fafc",
                         }}
                       />
 
@@ -1338,11 +1613,13 @@ function UpgradePageContent() {
                         required
                         style={{
                           width: "100%",
-                          border: "1px solid #cbd5e1",
+                          border: "1px solid rgba(148,163,184,0.18)",
                           borderRadius: "14px",
                           padding: "14px 16px",
                           fontSize: "15px",
                           outline: "none",
+                          background: "rgba(15, 23, 42, 0.82)",
+                          color: "#f8fafc",
                         }}
                       />
                     </div>
@@ -1354,22 +1631,24 @@ function UpgradePageContent() {
                       rows={6}
                       style={{
                         width: "100%",
-                        border: "1px solid #cbd5e1",
+                        border: "1px solid rgba(148,163,184,0.18)",
                         borderRadius: "14px",
                         padding: "14px 16px",
                         fontSize: "15px",
                         outline: "none",
                         resize: "vertical",
                         lineHeight: 1.6,
+                        background: "rgba(15, 23, 42, 0.82)",
+                        color: "#f8fafc",
                       }}
                     />
 
                     <div
                       style={{
-                        border: "1px dashed #cbd5e1",
+                        border: "1px dashed rgba(148,163,184,0.22)",
                         borderRadius: "14px",
                         padding: "16px",
-                        background: "#f8fafc",
+                        background: "rgba(15, 23, 42, 0.55)",
                       }}
                     >
                       <label
@@ -1378,8 +1657,8 @@ function UpgradePageContent() {
                           display: "block",
                           marginBottom: "8px",
                           fontSize: "14px",
-                          fontWeight: 700,
-                          color: "#334155",
+                          fontWeight: 800,
+                          color: "#e2e8f0",
                         }}
                       >
                         Upload receipt
@@ -1394,7 +1673,7 @@ function UpgradePageContent() {
                         style={{
                           width: "100%",
                           fontSize: "14px",
-                          color: "#475569",
+                          color: "#cbd5e1",
                         }}
                       />
 
@@ -1421,13 +1700,13 @@ function UpgradePageContent() {
                         background: planGradient,
                         color: "#ffffff",
                         border: "none",
-                        fontWeight: 700,
+                        fontWeight: 800,
                         fontSize: "15px",
                         cursor: "pointer",
                         boxShadow:
                           selectedPlan === "platinum"
-                            ? "0 10px 20px rgba(124, 58, 237, 0.22)"
-                            : "0 10px 20px rgba(59, 130, 246, 0.22)",
+                            ? "0 10px 20px rgba(168, 85, 247, 0.24)"
+                            : "0 10px 20px rgba(59, 130, 246, 0.24)",
                       }}
                     >
                       Request {planTitle} Access
@@ -1438,7 +1717,7 @@ function UpgradePageContent() {
                     style={{
                       margin: "12px 0 0",
                       fontSize: "13px",
-                      color: "#64748b",
+                      color: "#94a3b8",
                       textAlign: "center",
                     }}
                   >
@@ -1449,35 +1728,11 @@ function UpgradePageContent() {
             </div>
           ) : null}
 
-          <div
-            style={{
-              marginTop: "24px",
-              marginBottom: "24px",
-              display: "flex",
-              justifyContent: "center",
-            }}
-          >
-            <div
-              style={{
-                width: "100%",
-                maxWidth: "980px",
-                borderRadius: "24px",
-                background: "#ffffff",
-                border: "1px solid #dbe4f0",
-                boxShadow: "0 8px 18px rgba(15, 23, 42, 0.05)",
-                overflow: "hidden",
-                padding: "16px",
-              }}
-            >
-              <AdSlot code={IN_CONTENT_AD} />
-            </div>
-          </div>
-
           <footer
             style={{
               marginTop: "28px",
               padding: "18px 0 0",
-              borderTop: "1px solid #dbe4f0",
+              borderTop: "1px solid rgba(148, 163, 184, 0.12)",
               textAlign: "center",
             }}
           >
@@ -1486,11 +1741,44 @@ function UpgradePageContent() {
                 margin: 0,
                 fontSize: "13px",
                 color: "#94a3b8",
-                lineHeight: 1.6,
+                lineHeight: 1.7,
               }}
             >
               Choose the membership level that matches the content you want to unlock.
             </p>
+
+            <div
+              style={{
+                marginTop: "10px",
+                display: "flex",
+                justifyContent: "center",
+                gap: "12px",
+                flexWrap: "wrap",
+              }}
+            >
+              <Link
+                href="/dashboard"
+                style={{
+                  color: "#93c5fd",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  textDecoration: "none",
+                }}
+              >
+                Back to Dashboard
+              </Link>
+              <Link
+                href="/profile"
+                style={{
+                  color: "#c4b5fd",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  textDecoration: "none",
+                }}
+              >
+                View Profile
+              </Link>
+            </div>
           </footer>
         </div>
       </div>
@@ -1508,19 +1796,20 @@ export default function UpgradePage() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "linear-gradient(180deg, #eef4ff 0%, #f8fbff 45%, #ffffff 100%)",
+            background:
+              "radial-gradient(circle at top, rgba(59,130,246,0.18), transparent 22%), radial-gradient(circle at top right, rgba(217,70,239,0.14), transparent 24%), linear-gradient(180deg, #020617 0%, #0f172a 42%, #111827 100%)",
             fontFamily: "Arial, Helvetica, sans-serif",
           }}
         >
           <div
             style={{
-              border: "1px solid #e2e8f0",
-              background: "#ffffff",
+              border: "1px solid rgba(148,163,184,0.16)",
+              background: "rgba(15, 23, 42, 0.82)",
               borderRadius: "18px",
               padding: "18px 22px",
-              color: "#334155",
-              fontWeight: 700,
-              boxShadow: "0 8px 20px rgba(15, 23, 42, 0.06)",
+              color: "#e2e8f0",
+              fontWeight: 800,
+              boxShadow: "0 8px 20px rgba(2, 6, 23, 0.36)",
             }}
           >
             Loading upgrade page...

@@ -19,6 +19,9 @@ type UserRow = {
   jb_points?: number | null
   last_seen?: string | null
   created_at?: string | null
+  membership_payment_type?: string | null
+  membership_started_at?: string | null
+  membership_expires_at?: string | null
 }
 
 type AdminProfile = {
@@ -26,12 +29,33 @@ type AdminProfile = {
 }
 
 type CoinOperation = "add" | "subtract" | "set"
+type MembershipPaymentType = "none" | "monthly"
 
 function normalizeMembership(value?: string | null) {
   const membership = String(value || "").trim().toLowerCase()
   if (membership === "platinum") return "platinum"
   if (membership === "premium") return "premium"
   return "standard"
+}
+
+function formatLocalDateTimeInput(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  const hours = String(date.getHours()).padStart(2, "0")
+  const minutes = String(date.getMinutes()).padStart(2, "0")
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+function addMonths(dateValue: string, months: number) {
+  const date = new Date(dateValue)
+  if (Number.isNaN(date.getTime())) {
+    return ""
+  }
+
+  const next = new Date(date)
+  next.setMonth(next.getMonth() + months)
+  return formatLocalDateTimeInput(next)
 }
 
 export default function AdminUsersPage() {
@@ -52,6 +76,12 @@ export default function AdminUsersPage() {
   const [editAccountStatus, setEditAccountStatus] = useState("Active")
   const [editRole, setEditRole] = useState("user")
   const [editIsPremium, setEditIsPremium] = useState(false)
+
+  const [editMembershipPaymentType, setEditMembershipPaymentType] =
+    useState<MembershipPaymentType>("none")
+  const [editMembershipDurationMonths, setEditMembershipDurationMonths] = useState("1")
+  const [editMembershipStartedAt, setEditMembershipStartedAt] = useState("")
+  const [editMembershipExpiresAt, setEditMembershipExpiresAt] = useState("")
 
   const [editCoins, setEditCoins] = useState("")
   const [coinReason, setCoinReason] = useState("")
@@ -78,6 +108,19 @@ export default function AdminUsersPage() {
       selectedUser.membership || (selectedUser.is_premium ? "premium" : "standard")
     )
 
+    const defaultStart = selectedUser.membership_started_at
+      ? formatLocalDateTimeInput(new Date(selectedUser.membership_started_at))
+      : formatLocalDateTimeInput(new Date())
+
+    const existingExpires = selectedUser.membership_expires_at
+      ? formatLocalDateTimeInput(new Date(selectedUser.membership_expires_at))
+      : addMonths(defaultStart, 1)
+
+    const existingPaymentType =
+      String(selectedUser.membership_payment_type || "").trim().toLowerCase() === "monthly"
+        ? "monthly"
+        : "none"
+
     setEditFullName(selectedUser.full_name || selectedUser.name || "")
     setEditUsername(selectedUser.username || "")
     setEditMembership(normalizedMembership)
@@ -87,6 +130,11 @@ export default function AdminUsersPage() {
     setEditRole(String(selectedUser.role || "user"))
     setEditIsPremium(normalizedMembership === "premium" || normalizedMembership === "platinum")
 
+    setEditMembershipPaymentType(existingPaymentType)
+    setEditMembershipDurationMonths("1")
+    setEditMembershipStartedAt(defaultStart)
+    setEditMembershipExpiresAt(existingExpires)
+
     setEditCoins("")
     setCoinReason("")
     setCoinOperation("add")
@@ -95,6 +143,14 @@ export default function AdminUsersPage() {
     setIsEditingUserForm(false)
     setIsEditingCoinForm(false)
   }, [selectedUser])
+
+  useEffect(() => {
+    if (editMembershipPaymentType !== "monthly") return
+    if (!editMembershipStartedAt) return
+
+    const months = Math.max(1, Number(editMembershipDurationMonths) || 1)
+    setEditMembershipExpiresAt(addMonths(editMembershipStartedAt, months))
+  }, [editMembershipPaymentType, editMembershipDurationMonths, editMembershipStartedAt])
 
   async function checkAdminAndLoad() {
     try {
@@ -243,6 +299,19 @@ export default function AdminUsersPage() {
       const normalizedIsPremium =
         normalizedMembership === "premium" || normalizedMembership === "platinum"
 
+      const paymentType =
+        normalizedMembership === "standard" ? "none" : editMembershipPaymentType
+
+      const membershipStartedAt =
+        paymentType === "monthly" && editMembershipStartedAt
+          ? new Date(editMembershipStartedAt).toISOString()
+          : null
+
+      const membershipExpiresAt =
+        paymentType === "monthly" && editMembershipExpiresAt
+          ? new Date(editMembershipExpiresAt).toISOString()
+          : null
+
       const res = await fetch("/api/admin/users/update", {
         method: "POST",
         headers: {
@@ -257,6 +326,13 @@ export default function AdminUsersPage() {
           account_status: normalizedStatus,
           status: normalizedStatus,
           role: normalizedRole,
+          membership_payment_type: paymentType,
+          membership_duration_months:
+            paymentType === "monthly"
+              ? Math.max(1, Number(editMembershipDurationMonths) || 1)
+              : null,
+          membership_started_at: membershipStartedAt,
+          membership_expires_at: membershipExpiresAt,
         }),
       })
 
@@ -381,7 +457,7 @@ export default function AdminUsersPage() {
               <h1 className="text-3xl font-extrabold sm:text-4xl">Manage Registered Users</h1>
               <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-300 sm:text-base">
                 View registered accounts, monitor online status, and update membership,
-                status, roles, and JB Coins.
+                status, roles, monthly premium/platinum access, and JB Coins.
               </p>
             </div>
 
@@ -532,6 +608,22 @@ export default function AdminUsersPage() {
                         ? new Date(selectedUser.last_seen).toLocaleString()
                         : "No activity yet"}
                     </div>
+                    <div>
+                      <strong className="text-white">Current Payment Type:</strong>{" "}
+                      {selectedUser.membership_payment_type || "none"}
+                    </div>
+                    <div>
+                      <strong className="text-white">Membership Starts:</strong>{" "}
+                      {selectedUser.membership_started_at
+                        ? new Date(selectedUser.membership_started_at).toLocaleString()
+                        : "Not set"}
+                    </div>
+                    <div>
+                      <strong className="text-white">Membership Expires:</strong>{" "}
+                      {selectedUser.membership_expires_at
+                        ? new Date(selectedUser.membership_expires_at).toLocaleString()
+                        : "Not set"}
+                    </div>
                   </div>
                 </div>
 
@@ -578,6 +670,16 @@ export default function AdminUsersPage() {
                             nextMembership === "premium" || nextMembership === "platinum"
                           )
                           setIsEditingUserForm(true)
+
+                          if (nextMembership === "standard") {
+                            setEditMembershipPaymentType("none")
+                            setEditMembershipStartedAt("")
+                            setEditMembershipExpiresAt("")
+                          } else if (!editMembershipStartedAt) {
+                            const now = formatLocalDateTimeInput(new Date())
+                            setEditMembershipStartedAt(now)
+                            setEditMembershipExpiresAt(addMonths(now, 1))
+                          }
                         }}
                         className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none transition focus:border-blue-500"
                       >
@@ -636,14 +738,131 @@ export default function AdminUsersPage() {
 
                           if (!checked) {
                             setEditMembership("standard")
+                            setEditMembershipPaymentType("none")
+                            setEditMembershipStartedAt("")
+                            setEditMembershipExpiresAt("")
                           } else if (editMembership === "standard") {
+                            const now = formatLocalDateTimeInput(new Date())
                             setEditMembership("premium")
+                            setEditMembershipPaymentType("monthly")
+                            setEditMembershipStartedAt(now)
+                            setEditMembershipExpiresAt(addMonths(now, 1))
                           }
                         }}
                       />
                       Premium Access
                     </label>
                   </div>
+
+                  {editMembership !== "standard" ? (
+                    <div className="rounded-2xl border border-blue-500/20 bg-slate-950 p-4 sm:p-5">
+                      <div className="mb-4">
+                        <h3 className="text-lg font-extrabold text-white">
+                          Membership Payment Setup
+                        </h3>
+                        <p className="mt-1 text-sm text-slate-400">
+                          Set this user to monthly Premium or Platinum based on payment.
+                        </p>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <label className="mb-2 block text-sm font-bold text-slate-200">
+                            Payment Type
+                          </label>
+                          <select
+                            value={editMembershipPaymentType}
+                            onChange={(e) => {
+                              const nextType = e.target.value as MembershipPaymentType
+                              setEditMembershipPaymentType(nextType)
+                              setIsEditingUserForm(true)
+
+                              if (nextType === "monthly") {
+                                const baseStart =
+                                  editMembershipStartedAt || formatLocalDateTimeInput(new Date())
+                                setEditMembershipStartedAt(baseStart)
+                                setEditMembershipExpiresAt(
+                                  addMonths(
+                                    baseStart,
+                                    Math.max(1, Number(editMembershipDurationMonths) || 1)
+                                  )
+                                )
+                              } else {
+                                setEditMembershipStartedAt("")
+                                setEditMembershipExpiresAt("")
+                              }
+                            }}
+                            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none transition focus:border-blue-500"
+                          >
+                            <option value="none">No payment schedule</option>
+                            <option value="monthly">Monthly</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="mb-2 block text-sm font-bold text-slate-200">
+                            Duration
+                          </label>
+                          <select
+                            value={editMembershipDurationMonths}
+                            onChange={(e) => {
+                              setEditMembershipDurationMonths(e.target.value)
+                              setIsEditingUserForm(true)
+                            }}
+                            disabled={editMembershipPaymentType !== "monthly"}
+                            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none transition focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <option value="1">1 Month</option>
+                            <option value="2">2 Months</option>
+                            <option value="3">3 Months</option>
+                            <option value="6">6 Months</option>
+                            <option value="12">12 Months</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="mb-2 block text-sm font-bold text-slate-200">
+                            Start Date
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={editMembershipStartedAt}
+                            onChange={(e) => {
+                              setEditMembershipStartedAt(e.target.value)
+                              setIsEditingUserForm(true)
+                            }}
+                            disabled={editMembershipPaymentType !== "monthly"}
+                            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none transition focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-2 block text-sm font-bold text-slate-200">
+                            Expiry Date
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={editMembershipExpiresAt}
+                            onChange={(e) => {
+                              setEditMembershipExpiresAt(e.target.value)
+                              setIsEditingUserForm(true)
+                            }}
+                            disabled={editMembershipPaymentType !== "monthly"}
+                            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none transition focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-4 rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-sm font-bold text-blue-200">
+                        Selected Setup:{" "}
+                        {editMembershipPaymentType === "monthly"
+                          ? `${editMembership === "platinum" ? "Platinum" : "Premium"} for ${
+                              Number(editMembershipDurationMonths) || 1
+                            } month(s)`
+                          : `${editMembership === "platinum" ? "Platinum" : "Premium"} with no monthly schedule`}
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4 sm:p-5">
                     <div className="mb-4">

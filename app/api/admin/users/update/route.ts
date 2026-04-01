@@ -31,6 +31,19 @@ function normalizeAccountStatus(value?: string | null) {
   return "Active"
 }
 
+function normalizePaymentType(value?: string | null) {
+  const paymentType = String(value || "").trim().toLowerCase()
+  if (paymentType === "monthly") return "monthly"
+  return "none"
+}
+
+function safeIsoOrNull(value?: string | null) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toISOString()
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -92,17 +105,39 @@ export async function POST(req: Request) {
     const status = normalizeAccountStatus(body.status)
     const isPremium = membership === "premium" || membership === "platinum"
 
+    const paymentType =
+      membership === "standard"
+        ? "none"
+        : normalizePaymentType(body.membership_payment_type)
+
+    const membershipDurationMonths =
+      paymentType === "monthly"
+        ? Math.max(1, Number(body.membership_duration_months) || 1)
+        : null
+
+    const membershipStartedAt =
+      paymentType === "monthly" ? safeIsoOrNull(body.membership_started_at) : null
+
+    const membershipExpiresAt =
+      paymentType === "monthly" ? safeIsoOrNull(body.membership_expires_at) : null
+
+    const updatePayload = {
+      full_name: body.full_name ?? null,
+      username: body.username ?? null,
+      membership,
+      is_premium: isPremium,
+      account_status: accountStatus,
+      status,
+      role,
+      membership_payment_type: paymentType,
+      membership_duration_months: membershipDurationMonths,
+      membership_started_at: membershipStartedAt,
+      membership_expires_at: membershipExpiresAt,
+    }
+
     const { error } = await adminSupabase
       .from("profiles")
-      .update({
-        full_name: body.full_name ?? null,
-        username: body.username ?? null,
-        membership,
-        is_premium: isPremium,
-        account_status: accountStatus,
-        status,
-        role,
-      })
+      .update(updatePayload)
       .eq("id", body.id)
 
     if (error) {
@@ -114,6 +149,10 @@ export async function POST(req: Request) {
       membership,
       is_premium: isPremium,
       role,
+      membership_payment_type: paymentType,
+      membership_duration_months: membershipDurationMonths,
+      membership_started_at: membershipStartedAt,
+      membership_expires_at: membershipExpiresAt,
     })
   } catch (error) {
     console.error("Admin update user API error:", error)

@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation"
 
-export default function CategoryRedirect({
+export default async function CategoryRedirect({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
-  redirect(`/categories/${params.id}`)
+  const { id } = await params
+  redirect(`/categories/${id}`)
 }
