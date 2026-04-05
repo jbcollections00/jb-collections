@@ -7,7 +7,7 @@ import SiteHeader from "@/app/components/SiteHeader"
 
 type PaymentMethod = "gcash" | "maya"
 
-function parsePositiveNumber(value: string | null, fallback: number) {
+function parsePositiveNumber(value: string | null | undefined, fallback: number) {
   const parsed = Number(value)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
@@ -27,11 +27,11 @@ function formatCoins(value: number) {
 export default function PaymentPage() {
   const searchParams = useSearchParams()
 
-  const initialAmount = parsePositiveNumber(searchParams?.get("amount"), 500)
-  const initialCoins = parsePositiveNumber(searchParams?.get("coins"), 7500)
-  const initialLabel = searchParams?.get("label")?.trim() || "JB Coin Package"
+  const initialAmount = parsePositiveNumber(searchParams.get("amount"), 500)
+  const initialCoins = parsePositiveNumber(searchParams.get("coins"), 7500)
+  const initialLabel = searchParams.get("label")?.trim() || "JB Coin Package"
   const initialMethod =
-    searchParams?.get("method")?.toLowerCase() === "maya" ? "maya" : "gcash"
+    searchParams.get("method")?.toLowerCase() === "maya" ? "maya" : "gcash"
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
     initialMethod as PaymentMethod
@@ -142,9 +142,7 @@ export default function PaymentPage() {
 
         <div className="relative px-3 pb-8 pt-20 sm:px-4 sm:pb-10 sm:pt-24 lg:px-6">
           <div className="mx-auto max-w-6xl">
-            <div className="mb-4 flex flex-wrap items-center gap-3">
-             
-            </div>
+            <div className="mb-4 flex flex-wrap items-center gap-3"></div>
 
             <div className="mb-5 overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 p-4 shadow-2xl sm:p-5 lg:p-6">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
