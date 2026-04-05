@@ -160,15 +160,16 @@ function formatCoinAction(actionType?: string | null, description?: string | nul
   if (normalized === "redeem_premium") return "Redeemed Premium"
   if (normalized === "redeem_platinum") return "Redeemed Platinum"
   if (normalized === "admin_adjustment") return "Admin adjustment"
+  if (normalized === "daily_reward") return "Daily reward"
 
   return "JB Coin activity"
 }
 
 function formatHistoryDate(value?: string | null) {
-  if (!value) return "Unknown date"
+  if (!value) return "Recent activity"
 
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Unknown date"
+  if (Number.isNaN(date.getTime())) return "Recent activity"
 
   return new Intl.DateTimeFormat("en-PH", {
     timeZone: "Asia/Manila",
@@ -297,31 +298,31 @@ export default function ProfilePageClient() {
 
   const loadCoinHistory = useCallback(async () => {
     try {
+      if (!profile?.id) return
+
       setHistoryLoading(true)
 
-      const response = await fetch("/api/jb-coin-history?limit=12", {
-        method: "GET",
-        cache: "no-store",
-      })
+      const { data, error } = await supabase
+        .from("jb_coin_transactions")
+        .select("id, amount, action_type, file_id, created_at")
+        .eq("user_id", profile.id)
+        .order("created_at", { ascending: false })
+        .limit(12)
 
-      const data = (await response.json()) as {
-        success?: boolean
-        items?: CoinHistoryItem[]
-        error?: string
+      if (error) {
+        console.error("JB Coin history load error:", error)
+        setCoinHistory([])
+        return
       }
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to load JB Coin history.")
-      }
-
-      setCoinHistory(Array.isArray(data.items) ? data.items : [])
+      setCoinHistory(Array.isArray(data) ? (data as CoinHistoryItem[]) : [])
     } catch (err) {
       console.error("JB Coin history load error:", err)
       setCoinHistory([])
     } finally {
       setHistoryLoading(false)
     }
-  }, [])
+  }, [profile?.id, supabase])
 
   useEffect(() => {
     loadProfile(true)

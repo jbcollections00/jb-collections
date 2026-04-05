@@ -16,11 +16,12 @@ const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "🏠" },
   { label: "Profile", href: "/profile", icon: "👤" },
   { label: "Messages", href: "/messages", icon: "💬" },
+  { label: "JB STORE", href: "/upgrade", icon: "🪙" }, // ✅ ADDED
 ]
 
 export default function SiteHeader() {
   const rawPathname = usePathname()
-  const pathname = rawPathname ?? "" // ✅ FIX HERE
+  const pathname = rawPathname ?? ""
 
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])

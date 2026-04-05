@@ -139,27 +139,27 @@ export async function POST(req: Request) {
         console.error("Profile creation error:", profileError)
       }
 
-      // 🔥 +35 SIGNUP BONUS
+      // 🔥 +35 SIGNUP BONUS FOR ALL NEW USERS
       try {
         await supabase.rpc("add_jb_points", {
           p_user_id: newUser.id,
           p_action_type: "signup_bonus",
           p_points: 35,
           p_reference_id: `signup-${newUser.id}`,
-          p_note: "Signup reward",
+          p_note: "Signup reward: 35 JB Coins",
         })
       } catch (err) {
-        console.error("Signup points error:", err)
+        console.error("Signup bonus error:", err)
       }
 
-      // 🔥 +10 INVITE POINTS
+      // 🔥 REFERRAL BONUS ONLY IF A VALID REFERRER EXISTS
       if (referredByUserId) {
         try {
           await supabase.rpc("award_invite_points_for_signup", {
             p_new_user_id: newUser.id,
           })
         } catch (err) {
-          console.error("Referral points error:", err)
+          console.error("Referral bonus error:", err)
         }
       }
     }

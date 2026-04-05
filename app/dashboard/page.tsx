@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import PresenceTracker from "@/app/components/PresenceTracker"
 import SiteHeader from "@/app/components/SiteHeader"
+import DailyRewardCard from "@/app/components/DailyRewardCard"
 
 type Category = {
   id: string
@@ -486,6 +487,8 @@ export default function DashboardPage() {
         <SiteHeader />
 
         <div className="mx-auto w-full max-w-[1800px] px-4 pb-6 pt-24 sm:px-6 sm:pb-8 sm:pt-28 lg:px-8">
+          <DailyRewardCard />
+
           <section className="mt-2 rounded-[30px] border border-white/10 bg-white/[0.04] p-5 shadow-[0_25px_80px_rgba(0,0,0,0.35)] backdrop-blur-md sm:p-6 lg:p-7">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
