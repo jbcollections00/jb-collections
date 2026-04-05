@@ -26,12 +26,13 @@ function formatCoins(value: number) {
 
 export default function PaymentPage() {
   const searchParams = useSearchParams()
+  const params = searchParams ?? new URLSearchParams()
 
-  const initialAmount = parsePositiveNumber(searchParams.get("amount"), 500)
-  const initialCoins = parsePositiveNumber(searchParams.get("coins"), 7500)
-  const initialLabel = searchParams.get("label")?.trim() || "JB Coin Package"
+  const initialAmount = parsePositiveNumber(params.get("amount"), 500)
+  const initialCoins = parsePositiveNumber(params.get("coins"), 7500)
+  const initialLabel = params.get("label")?.trim() || "JB Coin Package"
   const initialMethod =
-    searchParams.get("method")?.toLowerCase() === "maya" ? "maya" : "gcash"
+    params.get("method")?.toLowerCase() === "maya" ? "maya" : "gcash"
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
     initialMethod as PaymentMethod
