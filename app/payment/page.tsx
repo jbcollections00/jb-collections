@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { Suspense, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import SiteHeader from "@/app/components/SiteHeader"
 
@@ -24,7 +24,7 @@ function formatCoins(value: number) {
   return `${new Intl.NumberFormat("en-PH").format(value)} JB Coins`
 }
 
-export default function PaymentPage() {
+function PaymentPageContent() {
   const searchParams = useSearchParams()
   const params = searchParams ?? new URLSearchParams()
 
@@ -437,6 +437,62 @@ export default function PaymentPage() {
                     {submitting ? "Submitting..." : "Submit Payment Proof"}
                   </button>
                 </form>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+export default function PaymentPage() {
+  return (
+    <Suspense fallback={<PaymentPageFallback />}>
+      <PaymentPageContent />
+    </Suspense>
+  )
+}
+
+function PaymentPageFallback() {
+  return (
+    <>
+      <SiteHeader />
+
+      <div className="min-h-screen bg-slate-950 text-white">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute left-[-120px] top-[80px] h-[260px] w-[260px] rounded-full bg-sky-500/15 blur-3xl" />
+          <div className="absolute right-[-120px] top-[140px] h-[260px] w-[260px] rounded-full bg-fuchsia-500/10 blur-3xl" />
+          <div className="absolute bottom-[120px] left-[10%] h-[220px] w-[220px] rounded-full bg-cyan-400/10 blur-3xl" />
+        </div>
+
+        <div className="relative px-3 pb-8 pt-20 sm:px-4 sm:pb-10 sm:pt-24 lg:px-6">
+          <div className="mx-auto max-w-6xl">
+            <div className="mb-5 overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 p-4 shadow-2xl sm:p-5 lg:p-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="max-w-3xl">
+                  <div className="mb-2 inline-flex rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200 sm:text-xs">
+                    Premium Checkout
+                  </div>
+
+                  <h1 className="text-2xl font-black tracking-tight text-white sm:text-3xl lg:text-4xl">
+                    Complete Your JB Coin Payment
+                  </h1>
+
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+                    Loading payment details...
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid items-start gap-5 xl:grid-cols-[0.92fr_1.08fr]">
+              <section className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-900/80 shadow-2xl backdrop-blur p-6">
+                <div className="text-sm text-slate-300">Loading payment options...</div>
+              </section>
+
+              <section className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-900/80 shadow-2xl backdrop-blur p-6">
+                <div className="text-sm text-slate-300">Loading payment form...</div>
               </section>
             </div>
           </div>
