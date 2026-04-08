@@ -31,6 +31,47 @@ type CoinHistoryItem = {
   created_at?: string | null
 }
 
+type DailyRewardStatus = {
+  ok?: boolean
+  claimed?: boolean
+  alreadyClaimed?: boolean
+  coins?: number
+  baseCoins?: number
+  streak?: number
+  streakBonus?: number
+  rewardDate?: string
+  nextClaimDate?: string
+  claimedAt?: string | null
+  lastClaimDate?: string | null
+  nextMilestone?: {
+    target?: number
+    remaining?: number
+    bonus?: number
+  } | null
+  message?: string
+  error?: string
+}
+
+type LeaderboardEntry = {
+  rank: number
+  id: string
+  display_name: string
+  username?: string | null
+  avatar_url?: string | null
+  initials?: string
+  coins: number
+  membership?: string
+  membership_label?: string
+  is_current_user?: boolean
+}
+
+type LeaderboardResponse = {
+  ok?: boolean
+  top?: LeaderboardEntry[]
+  me?: LeaderboardEntry | null
+  error?: string
+}
+
 type UsernameStatus =
   | { state: "idle"; message: "" }
   | { state: "checking"; message: "Checking username..." }
@@ -190,17 +231,26 @@ export default function ProfilePageClient() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [redeemingPlan, setRedeemingPlan] = useState<RedeemPlan | null>(null)
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [streakLoading, setStreakLoading] = useState(false)
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false)
+
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [authEmail, setAuthEmail] = useState("")
   const [editOpen, setEditOpen] = useState(false)
   const [saveMessage, setSaveMessage] = useState("")
   const [saveError, setSaveError] = useState("")
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview")
+
   const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>({
     state: "idle",
     message: "",
   })
+
   const [coinHistory, setCoinHistory] = useState<CoinHistoryItem[]>([])
+  const [dailyRewardStatus, setDailyRewardStatus] = useState<DailyRewardStatus | null>(null)
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
+  const [myLeaderboardRank, setMyLeaderboardRank] = useState<LeaderboardEntry | null>(null)
+
   const [coinPopup, setCoinPopup] = useState<{
     id: string
     amount: number
@@ -215,6 +265,7 @@ export default function ProfilePageClient() {
   const usernameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const popupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastRealtimeEventRef = useRef<string | null>(null)
+
   const originalProfileRef = useRef<{
     full_name: string
     username: string
@@ -344,9 +395,63 @@ export default function ProfilePageClient() {
     }
   }, [profile?.id, supabase])
 
+  const loadDailyRewardStatus = useCallback(async () => {
+    try {
+      setStreakLoading(true)
+
+      const response = await fetch("/api/daily-reward", {
+        method: "GET",
+        cache: "no-store",
+      })
+
+      const data = (await response.json()) as DailyRewardStatus
+
+      if (!response.ok) {
+        console.error("Daily reward status fetch error:", data?.error)
+        return
+      }
+
+      setDailyRewardStatus(data)
+    } catch (err) {
+      console.error("Daily reward status fetch error:", err)
+    } finally {
+      setStreakLoading(false)
+    }
+  }, [])
+
+  const loadLeaderboard = useCallback(async () => {
+    try {
+      setLeaderboardLoading(true)
+
+      const response = await fetch("/api/leaderboard", {
+        method: "GET",
+        cache: "no-store",
+      })
+
+      const data = (await response.json()) as LeaderboardResponse
+
+      if (!response.ok) {
+        console.error("Leaderboard fetch error:", data?.error)
+        return
+      }
+
+      setLeaderboard(Array.isArray(data.top) ? data.top : [])
+      setMyLeaderboardRank(data.me || null)
+    } catch (err) {
+      console.error("Leaderboard fetch error:", err)
+    } finally {
+      setLeaderboardLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     loadProfile(true)
   }, [loadProfile])
+
+  useEffect(() => {
+    void loadDailyRewardStatus()
+    void loadLeaderboard()
+  }, [loadDailyRewardStatus, loadLeaderboard])
 
   useEffect(() => {
     if (!profile?.id) return
@@ -385,7 +490,11 @@ export default function ProfilePageClient() {
           if (eventId && lastRealtimeEventRef.current === eventId) return
           if (eventId) lastRealtimeEventRef.current = eventId
 
-          const inserted = payload.new as { amount?: number; id?: string } | null
+          const inserted = payload.new as {
+            amount?: number
+            id?: string
+            type?: string
+          } | null
 
           if (inserted?.amount && Number(inserted.amount) > 0) {
             showCoinPopup(Number(inserted.amount), String(inserted.id || eventId || Date.now()))
@@ -393,6 +502,26 @@ export default function ProfilePageClient() {
 
           await loadProfile(false)
           await loadCoinHistory()
+          await loadDailyRewardStatus()
+          await loadLeaderboard()
+
+          window.dispatchEvent(new Event("jb-coins-updated"))
+
+          if (inserted?.amount && Number(inserted.amount) > 0) {
+            window.dispatchEvent(
+              new CustomEvent("jb-coins-popup", {
+                detail: { amount: Number(inserted.amount) },
+              })
+            )
+          }
+
+          if (inserted?.type === "daily_reward") {
+            window.dispatchEvent(
+              new CustomEvent("jb-daily-reward-claimed", {
+                detail: { coins: Number(inserted.amount || 0) },
+              })
+            )
+          }
         }
       )
       .subscribe()
@@ -400,7 +529,7 @@ export default function ProfilePageClient() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [profile?.id, supabase, loadProfile, loadCoinHistory, showCoinPopup])
+  }, [profile?.id, supabase, loadProfile, loadCoinHistory, loadDailyRewardStatus, loadLeaderboard, showCoinPopup])
 
   useEffect(() => {
     return () => {
@@ -689,6 +818,7 @@ export default function ProfilePageClient() {
 
       await loadProfile(false)
       await loadCoinHistory()
+      await loadLeaderboard()
     } catch (err) {
       const message = err instanceof Error ? err.message : "Redeem failed."
       setSaveError(message)
@@ -748,6 +878,10 @@ export default function ProfilePageClient() {
     : "Referral code unavailable"
 
   const jbPoints = Number(profile?.coins || 0)
+  const streak = Number(dailyRewardStatus?.streak || 0)
+  const streakBonus = Number(dailyRewardStatus?.streakBonus || 0)
+  const baseCoins = Number(dailyRewardStatus?.baseCoins || 15)
+  const nextMilestone = dailyRewardStatus?.nextMilestone || null
 
   const hasPremiumAccess =
     membershipLevel === "premium" ||
@@ -946,8 +1080,8 @@ export default function ProfilePageClient() {
             <StatCard label="Status" value={displayStatus} />
             <StatCard label="Username" value={profile?.username || "Not set"} />
             <StatCard
-              label="Profile Link"
-              value={profile?.username ? "Ready" : "Set username"}
+              label="Leaderboard Rank"
+              value={`#${myLeaderboardRank?.rank || "-"}`}
             />
           </section>
 
@@ -1207,7 +1341,7 @@ export default function ProfilePageClient() {
                   </p>
                   <h2 className="mt-1 text-xl font-black text-white">JB Rewards</h2>
                   <p className="mt-2 text-sm text-slate-400">
-                    Use your JB Coins to redeem membership rewards and track your recent activity.
+                    Use your JB Coins to redeem membership rewards, keep your streak, and climb the leaderboard.
                   </p>
                 </div>
 
@@ -1268,6 +1402,175 @@ export default function ProfilePageClient() {
                     </div>
                   </div>
 
+                  <div className="rounded-[24px] border border-orange-400/20 bg-[linear-gradient(135deg,rgba(251,146,60,0.14),rgba(239,68,68,0.08),rgba(15,23,42,0.9))] p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.16em] text-orange-200">
+                          Daily Streak
+                        </p>
+                        <h3 className="mt-1 text-3xl font-black text-white">
+                          🔥 {streak} Day{streak === 1 ? "" : "s"}
+                        </h3>
+                      </div>
+
+                      {streakLoading ? (
+                        <span className="text-xs font-bold text-orange-200">Loading...</span>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-xs uppercase tracking-wide text-slate-400">
+                          Base Daily Reward
+                        </p>
+                        <p className="mt-2 text-xl font-black text-amber-300">
+                          +{baseCoins} JB Coins
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-xs uppercase tracking-wide text-slate-400">
+                          Today&apos;s Streak Bonus
+                        </p>
+                        <p className="mt-2 text-xl font-black text-emerald-300">
+                          +{streakBonus} JB Coins
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <p className="text-xs uppercase tracking-wide text-slate-400">
+                        Next Milestone
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-white">
+                        {nextMilestone
+                          ? `Day ${nextMilestone.target} • ${nextMilestone.remaining} day${nextMilestone.remaining === 1 ? "" : "s"} left`
+                          : "Keep claiming daily"}
+                      </p>
+                      <p className="mt-1 text-sm text-orange-200">
+                        {nextMilestone
+                          ? `Bonus reward: +${nextMilestone.bonus} JB Coins`
+                          : "More bonus rewards ahead"}
+                      </p>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-3 text-center">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                          Day 3
+                        </p>
+                        <p className="mt-2 text-sm font-black text-yellow-300">+10</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-3 text-center">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                          Day 7
+                        </p>
+                        <p className="mt-2 text-sm font-black text-yellow-300">+40</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-3 text-center">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                          Day 14
+                        </p>
+                        <p className="mt-2 text-sm font-black text-yellow-300">+75</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-3 text-center">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                          Day 30
+                        </p>
+                        <p className="mt-2 text-sm font-black text-yellow-300">+200</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-[24px] border border-white/10 bg-slate-950 p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold uppercase tracking-[0.2em] text-sky-400">
+                          Leaderboard
+                        </p>
+                        <h3 className="mt-1 text-lg font-black text-white">
+                          Top JB Coin Holders
+                        </h3>
+                      </div>
+
+                      {leaderboardLoading ? (
+                        <span className="text-sm text-slate-400">Loading...</span>
+                      ) : null}
+                    </div>
+
+                    {myLeaderboardRank ? (
+                      <div className="mt-4 rounded-2xl border border-yellow-400/20 bg-yellow-500/10 p-4">
+                        <p className="text-xs uppercase tracking-wide text-yellow-300">
+                          Your Rank
+                        </p>
+                        <div className="mt-2 flex items-center justify-between gap-4">
+                          <div>
+                            <p className="text-lg font-black text-white">
+                              #{myLeaderboardRank.rank} {myLeaderboardRank.display_name}
+                            </p>
+                            <p className="text-sm text-yellow-200">
+                              {myLeaderboardRank.coins.toLocaleString()} JB Coins
+                            </p>
+                          </div>
+                          <div className="rounded-full bg-yellow-400 px-3 py-1 text-xs font-black text-slate-950">
+                            YOU
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-4 space-y-3">
+                      {!leaderboardLoading && leaderboard.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-6 text-center text-sm text-slate-400">
+                          No leaderboard data yet.
+                        </div>
+                      ) : null}
+
+                      {leaderboard.map((entry) => (
+                        <div
+                          key={entry.id}
+                          className={`flex items-center justify-between gap-4 rounded-2xl border px-4 py-4 ${
+                            entry.is_current_user
+                              ? "border-yellow-400/30 bg-yellow-500/10"
+                              : "border-white/10 bg-black/20"
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-800 text-sm font-black text-white ring-1 ring-white/10">
+                              {entry.avatar_url ? (
+                                <img
+                                  src={entry.avatar_url}
+                                  alt={entry.display_name}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <span>{entry.initials || "U"}</span>
+                              )}
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-black text-white">
+                                #{entry.rank} {entry.display_name}
+                              </p>
+                              <p className="truncate text-xs text-slate-400">
+                                {entry.username ? `@${entry.username}` : entry.membership_label || "User"}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 text-right">
+                            <p className="text-sm font-black text-yellow-300">
+                              {Number(entry.coins || 0).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-slate-400">JB Coins</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="rounded-[24px] border border-white/10 bg-slate-950 p-5">
                     <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
                       Referral Link
@@ -1302,10 +1605,14 @@ export default function ProfilePageClient() {
 
                       <button
                         type="button"
-                        onClick={() => void loadCoinHistory()}
+                        onClick={() => {
+                          void loadCoinHistory()
+                          void loadDailyRewardStatus()
+                          void loadLeaderboard()
+                        }}
                         className="rounded-2xl border border-white/10 bg-white/10 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/15"
                       >
-                        Refresh History
+                        Refresh Rewards
                       </button>
                     </div>
                   </div>
@@ -1424,6 +1731,12 @@ export default function ProfilePageClient() {
                     membershipLevel === "admin"
                       ? "Enabled"
                       : "Not active"}
+                  </DetailCard>
+                  <DetailCard label="Current Streak">
+                    {streak} Day{streak === 1 ? "" : "s"}
+                  </DetailCard>
+                  <DetailCard label="Leaderboard Rank">
+                    #{myLeaderboardRank?.rank || "-"}
                   </DetailCard>
 
                   {membershipLevel === "admin" ||

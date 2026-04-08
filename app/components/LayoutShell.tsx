@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useEffect } from "react"
 import AdSlot from "@/app/components/AdSlot"
 
 // 🔥 PUT YOUR REAL AD CODES HERE
@@ -26,6 +27,18 @@ export default function LayoutShell({
     pathname === "/" ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/signup")
+
+  useEffect(() => {
+    function handleGlobalCoinUpdate() {
+      console.log("Coins updated globally")
+    }
+
+    window.addEventListener("jb-coins-updated", handleGlobalCoinUpdate)
+
+    return () => {
+      window.removeEventListener("jb-coins-updated", handleGlobalCoinUpdate)
+    }
+  }, [])
 
   return (
     <div className="min-h-screen flex flex-col bg-[#020617] text-white">
