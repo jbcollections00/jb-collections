@@ -7,7 +7,8 @@ const LOGIN_PATH = "/login"
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl
 
-  const isProtectedAdminRoute = pathname.startsWith("/admin")
+  const isProtectedAdminRoute =
+    pathname === "/admin" || pathname.startsWith("/admin/")
 
   const isProtectedUserRoute =
     pathname === "/dashboard" ||
@@ -25,13 +26,20 @@ export function middleware(request: NextRequest) {
     pathname === "/download" ||
     pathname.startsWith("/download/")
 
-  if (isProtectedAdminRoute) {
+  // ✅ CHECK LOGIN COOKIE (IMPORTANT)
+  const hasAuthCookie =
+    request.cookies.get("sb-access-token") ||
+    request.cookies.get("sb:token")
+
+  // 🔒 ADMIN PROTECTION
+  if (isProtectedAdminRoute && !hasAuthCookie) {
     const adminLoginUrl = new URL(ADMIN_LOGIN_PATH, request.url)
     adminLoginUrl.searchParams.set("next", `${pathname}${search}`)
     return NextResponse.redirect(adminLoginUrl)
   }
 
-  if (isProtectedUserRoute) {
+  // 🔒 USER PROTECTION
+  if (isProtectedUserRoute && !hasAuthCookie) {
     const loginUrl = new URL(LOGIN_PATH, request.url)
     loginUrl.searchParams.set("next", `${pathname}${search}`)
     return NextResponse.redirect(loginUrl)

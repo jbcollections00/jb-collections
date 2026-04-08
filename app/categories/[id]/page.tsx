@@ -325,7 +325,7 @@ export default function CategoryPage() {
             <div className="h-[90px] w-full max-w-[728px] animate-pulse rounded-[20px] bg-slate-800" />
           </div>
 
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {Array.from({ length: 10 }).map((_, index) => (
               <div
                 key={index}
@@ -480,7 +480,7 @@ export default function CategoryPage() {
               files
             </div>
 
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {paginatedFiles.map((file) => {
                 const previewImage = getPreviewImage(file)
                 const type = getDisplayFileType(file)
