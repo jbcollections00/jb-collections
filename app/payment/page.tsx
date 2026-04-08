@@ -58,7 +58,7 @@ function PaymentPageContent() {
     if (paymentMethod === "maya") {
       return {
         label: "Maya",
-        accountName: "JONATHAN BARRUGA",
+        accountName: "JB COLLECTIONS",
         accountNumber: "09685289257",
         qr: "/maya-qr.jpg",
         helper: "Scan the Maya QR or send to the Maya number below.",
@@ -71,7 +71,7 @@ function PaymentPageContent() {
 
     return {
       label: "GCash",
-      accountName: "JONATHAN BARRUGA",
+      accountName: "JB COLLECTIONS",
       accountNumber: "09685289257",
       qr: "/gcash-qr.jpg",
       helper: "Scan the GCash QR or send to the GCash number below.",
