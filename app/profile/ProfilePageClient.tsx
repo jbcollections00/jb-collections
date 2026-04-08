@@ -19,17 +19,16 @@ type UserProfile = {
   role?: string | null
   bio?: string | null
   avatar_url?: string | null
-  jb_points?: number | null
+  coins?: number | null
   referral_code?: string | null
 }
 
 type CoinHistoryItem = {
   id: string
   amount?: number | null
-  action_type?: string | null
+  type?: string | null
   description?: string | null
   created_at?: string | null
-  file_id?: string | null
 }
 
 type UsernameStatus =
@@ -202,6 +201,10 @@ export default function ProfilePageClient() {
     message: "",
   })
   const [coinHistory, setCoinHistory] = useState<CoinHistoryItem[]>([])
+  const [coinPopup, setCoinPopup] = useState<{
+    id: string
+    amount: number
+  } | null>(null)
 
   const [fullNameInput, setFullNameInput] = useState("")
   const [usernameInput, setUsernameInput] = useState("")
@@ -210,6 +213,8 @@ export default function ProfilePageClient() {
 
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const usernameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const popupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastRealtimeEventRef = useRef<string | null>(null)
   const originalProfileRef = useRef<{
     full_name: string
     username: string
@@ -221,6 +226,21 @@ export default function ProfilePageClient() {
     bio: "",
     avatar_url: "",
   })
+
+  const showCoinPopup = useCallback((amount: number, id?: string) => {
+    if (amount <= 0) return
+
+    setCoinPopup({
+      id: id || `${Date.now()}`,
+      amount,
+    })
+
+    if (popupTimerRef.current) clearTimeout(popupTimerRef.current)
+
+    popupTimerRef.current = setTimeout(() => {
+      setCoinPopup(null)
+    }, 2500)
+  }, [])
 
   const loadProfile = useCallback(
     async (showLoader = true) => {
@@ -243,7 +263,7 @@ export default function ProfilePageClient() {
         const { data, error } = await supabase
           .from("profiles")
           .select(
-            "id, email, full_name, name, username, membership, account_status, status, is_premium, role, bio, avatar_url, jb_points, referral_code"
+            "id, email, full_name, name, username, membership, account_status, status, is_premium, role, bio, avatar_url, coins, referral_code"
           )
           .eq("id", user.id)
           .maybeSingle()
@@ -268,7 +288,7 @@ export default function ProfilePageClient() {
           role: null,
           bio: "",
           avatar_url: "",
-          jb_points: 0,
+          coins: 0,
           referral_code: "",
         }
 
@@ -303,21 +323,21 @@ export default function ProfilePageClient() {
       setHistoryLoading(true)
 
       const { data, error } = await supabase
-        .from("jb_coin_transactions")
-        .select("id, amount, action_type, file_id, created_at")
+        .from("coin_history")
+        .select("id, amount, type, description, created_at")
         .eq("user_id", profile.id)
         .order("created_at", { ascending: false })
         .limit(12)
 
       if (error) {
-        console.error("JB Coin history load error:", error)
+        console.error("Coin history load error:", error)
         setCoinHistory([])
         return
       }
 
       setCoinHistory(Array.isArray(data) ? (data as CoinHistoryItem[]) : [])
     } catch (err) {
-      console.error("JB Coin history load error:", err)
+      console.error("Coin history load error:", err)
       setCoinHistory([])
     } finally {
       setHistoryLoading(false)
@@ -343,6 +363,50 @@ export default function ProfilePageClient() {
       window.removeEventListener("focus", refresh)
     }
   }, [loadProfile, editOpen])
+
+  useEffect(() => {
+    if (!profile?.id) return
+
+    const channel = supabase
+      .channel(`profile-coins-${profile.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "coin_history",
+          filter: `user_id=eq.${profile.id}`,
+        },
+        async (payload) => {
+          const eventId =
+            String((payload.new as { id?: string } | null)?.id || "") ||
+            String((payload.old as { id?: string } | null)?.id || "")
+
+          if (eventId && lastRealtimeEventRef.current === eventId) return
+          if (eventId) lastRealtimeEventRef.current = eventId
+
+          const inserted = payload.new as { amount?: number; id?: string } | null
+
+          if (inserted?.amount && Number(inserted.amount) > 0) {
+            showCoinPopup(Number(inserted.amount), String(inserted.id || eventId || Date.now()))
+          }
+
+          await loadProfile(false)
+          await loadCoinHistory()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [profile?.id, supabase, loadProfile, loadCoinHistory, showCoinPopup])
+
+  useEffect(() => {
+    return () => {
+      if (popupTimerRef.current) clearTimeout(popupTimerRef.current)
+    }
+  }, [])
 
   const currentForm = useMemo(
     () => ({
@@ -683,7 +747,7 @@ export default function ProfilePageClient() {
     ? `${siteUrl}/signup?ref=${referralCode}`
     : "Referral code unavailable"
 
-  const jbPoints = Number(profile?.jb_points || 0)
+  const jbPoints = Number(profile?.coins || 0)
 
   const hasPremiumAccess =
     membershipLevel === "premium" ||
@@ -1280,7 +1344,7 @@ export default function ProfilePageClient() {
                         >
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-bold text-white">
-                              {formatCoinAction(item.action_type, item.description)}
+                              {formatCoinAction(item.type, item.description)}
                             </p>
                             <p className="mt-1 text-xs text-slate-400">
                               {formatHistoryDate(item.created_at)}
@@ -1379,6 +1443,26 @@ export default function ProfilePageClient() {
           )}
         </div>
       </div>
+
+      {coinPopup ? (
+        <div className="pointer-events-none fixed right-4 top-24 z-[9999] animate-bounce sm:right-6">
+          <div className="flex items-center gap-3 rounded-2xl border border-amber-300/40 bg-gradient-to-r from-yellow-300 via-amber-400 to-orange-400 px-4 py-3 shadow-2xl shadow-amber-900/30">
+            <img
+              src="/jb-coin.png"
+              alt="JB Coin"
+              className="h-9 w-9 object-contain drop-shadow"
+            />
+            <div className="leading-tight">
+              <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-slate-900/80">
+                JB Coins Added
+              </p>
+              <p className="text-lg font-black text-slate-950">
+                +{coinPopup.amount} JB Coins
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   )
 }
