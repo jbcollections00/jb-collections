@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import AdSlot from "@/app/components/AdSlot"
@@ -30,6 +30,8 @@ type RelatedFileRow = {
 }
 
 type EventType = "gate_view" | "premium_auto_download" | "download_click"
+
+type RewardNoticeType = "success" | "info"
 
 function getDisplayName(file: FileRow | null) {
   if (!file) return "Download"
@@ -72,13 +74,71 @@ export default function DownloadPageClient() {
   const [startingDownload, setStartingDownload] = useState(false)
   const [showStickyAd, setShowStickyAd] = useState(true)
 
+  const [rewardNotice, setRewardNotice] = useState("")
+  const [rewardNoticeType, setRewardNoticeType] = useState<RewardNoticeType>("success")
+
   const hasLoggedGateViewRef = useRef(false)
+  const rewardNoticeTimerRef = useRef<number | null>(null)
+
+  const clearRewardNoticeTimer = useCallback(() => {
+    if (rewardNoticeTimerRef.current) {
+      window.clearTimeout(rewardNoticeTimerRef.current)
+      rewardNoticeTimerRef.current = null
+    }
+  }, [])
+
+  const showRewardNotice = useCallback(
+    (text: string, type: RewardNoticeType = "success") => {
+      clearRewardNoticeTimer()
+      setRewardNotice(text)
+      setRewardNoticeType(type)
+
+      rewardNoticeTimerRef.current = window.setTimeout(() => {
+        setRewardNotice("")
+        rewardNoticeTimerRef.current = null
+      }, 2800)
+    },
+    [clearRewardNoticeTimer]
+  )
+
+  useEffect(() => {
+    return () => {
+      clearRewardNoticeTimer()
+    }
+  }, [clearRewardNoticeTimer])
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       setShareUrl(window.location.href)
     }
   }, [])
+
+  useEffect(() => {
+    const rewarded =
+      searchParams?.get("rewarded") === "1" || searchParams?.get("reward") === "earned"
+
+    const alreadyRewardedToday =
+      searchParams?.get("alreadyRewardedToday") === "1" ||
+      searchParams?.get("already_rewarded_today") === "1" ||
+      searchParams?.get("reward") === "today"
+
+    const rewardAmountRaw =
+      searchParams?.get("rewardAmount") || searchParams?.get("reward_amount") || "5"
+
+    const parsedRewardAmount = Number(rewardAmountRaw)
+    const rewardAmount = Number.isFinite(parsedRewardAmount) && parsedRewardAmount > 0
+      ? parsedRewardAmount
+      : 5
+
+    if (rewarded) {
+      showRewardNotice(`+${rewardAmount} JB Coins earned`, "success")
+      return
+    }
+
+    if (alreadyRewardedToday) {
+      showRewardNotice("Already rewarded today", "info")
+    }
+  }, [searchParams, showRewardNotice])
 
   useEffect(() => {
     if (!idOrSlug) return
@@ -617,6 +677,20 @@ export default function DownloadPageClient() {
           </div>
         ) : null}
       </div>
+
+      {rewardNotice ? (
+        <div className="pointer-events-none fixed bottom-24 right-4 z-[9999] sm:bottom-6 sm:right-6">
+          <div
+            className={`rounded-2xl border px-4 py-3 text-sm font-semibold shadow-2xl backdrop-blur-md ${
+              rewardNoticeType === "success"
+                ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                : "border-amber-300 bg-amber-50 text-amber-700"
+            }`}
+          >
+            {rewardNotice}
+          </div>
+        </div>
+      ) : null}
 
       {shouldShowStickyAd ? (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 py-2 backdrop-blur">
