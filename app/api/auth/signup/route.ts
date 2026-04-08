@@ -14,7 +14,6 @@ export async function POST(req: Request) {
     const password = String(formData.get("password") || "")
     const confirmPassword = String(formData.get("confirmPassword") || "")
 
-    // ✅ REFERRAL CODE
     const referralCodeFromForm = String(formData.get("referralCode") || "")
       .trim()
       .toUpperCase()
@@ -64,7 +63,6 @@ export async function POST(req: Request) {
       }
     )
 
-    // 🔥 SIGNUP USER
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
@@ -98,7 +96,6 @@ export async function POST(req: Request) {
 
       let referredByUserId: string | null = null
 
-      // 🔥 FIND REFERRER
       if (referralCode) {
         const { data: refUser, error: refUserError } = await supabase
           .from("profiles")
@@ -115,7 +112,7 @@ export async function POST(req: Request) {
         }
       }
 
-      // 🔥 CREATE PROFILE
+      // Create profile with starting 35 coins
       const { error: profileError } = await supabase
         .from("profiles")
         .upsert(
@@ -131,35 +128,68 @@ export async function POST(req: Request) {
             is_premium: false,
             role: "user",
             referred_by: referredByUserId,
+            coins: 35,
           },
           { onConflict: "id" }
         )
 
       if (profileError) {
         console.error("Profile creation error:", profileError)
+        return NextResponse.redirect(`${origin}/signup?error=profile-failed`, 303)
       }
 
-      // 🔥 +35 SIGNUP BONUS FOR ALL NEW USERS
-      try {
-        await supabase.rpc("add_jb_points", {
-          p_user_id: newUser.id,
-          p_action_type: "signup_bonus",
-          p_points: 35,
-          p_reference_id: `signup-${newUser.id}`,
-          p_note: "Signup reward: 35 JB Coins",
+      // Add signup bonus history
+      const { error: signupHistoryError } = await supabase
+        .from("coin_history")
+        .insert({
+          user_id: newUser.id,
+          amount: 35,
+          type: "signup_bonus",
+          description: "Signup reward: +35 JB Coins",
         })
-      } catch (err) {
-        console.error("Signup bonus error:", err)
+
+      if (signupHistoryError) {
+        console.error("Signup history insert error:", signupHistoryError)
       }
 
-      // 🔥 REFERRAL BONUS ONLY IF A VALID REFERRER EXISTS
+      // Referral reward for referrer only
       if (referredByUserId) {
-        try {
-          await supabase.rpc("award_invite_points_for_signup", {
-            p_new_user_id: newUser.id,
-          })
-        } catch (err) {
-          console.error("Referral bonus error:", err)
+        // Give reward to referrer
+        const { data: referrerProfile, error: referrerReadError } = await supabase
+          .from("profiles")
+          .select("coins")
+          .eq("id", referredByUserId)
+          .single()
+
+        if (referrerReadError) {
+          console.error("Referrer read error:", referrerReadError)
+        } else {
+          const currentCoins = Number(referrerProfile?.coins || 0)
+          const referralReward = 35
+
+          const { error: referrerUpdateError } = await supabase
+            .from("profiles")
+            .update({
+              coins: currentCoins + referralReward,
+            })
+            .eq("id", referredByUserId)
+
+          if (referrerUpdateError) {
+            console.error("Referrer coin update error:", referrerUpdateError)
+          } else {
+            const { error: referrerHistoryError } = await supabase
+              .from("coin_history")
+              .insert({
+                user_id: referredByUserId,
+                amount: referralReward,
+                type: "referral_bonus",
+                description: `Referral reward: +${referralReward} JB Coins`,
+              })
+
+            if (referrerHistoryError) {
+              console.error("Referrer history insert error:", referrerHistoryError)
+            }
+          }
         }
       }
     }

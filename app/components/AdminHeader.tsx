@@ -8,6 +8,10 @@ import { createClient } from "@/lib/supabase/client"
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: "🏠" },
   { label: "Categories", href: "/admin/categories", icon: "📂" },
+
+  // 🔥 ADD THIS
+  { label: "Payments", href: "/admin/upgrades", icon: "💰" },
+
   { label: "Messages", href: "/admin/messages", icon: "💬" },
   { label: "Upload Files", href: "/admin/files", icon: "📁" },
   { label: "Users", href: "/admin/users", icon: "👥" },
@@ -66,7 +70,6 @@ export default function AdminHeader() {
             </div>
           </Link>
 
-          {/* DESKTOP NAV */}
           <div className="ml-auto hidden items-center gap-2 lg:flex">
             {navItems.map((item) => {
               const active = isActive(item.href)
@@ -97,7 +100,6 @@ export default function AdminHeader() {
             </button>
           </div>
 
-          {/* MOBILE BUTTON */}
           <button
             type="button"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
@@ -107,7 +109,6 @@ export default function AdminHeader() {
           </button>
         </div>
 
-        {/* MOBILE MENU */}
         {mobileMenuOpen && (
           <div className="border-t border-slate-800 bg-slate-950 px-4 pb-4 pt-3 sm:px-6 lg:hidden">
             <div className="grid gap-2">
@@ -144,7 +145,6 @@ export default function AdminHeader() {
         )}
       </header>
 
-      {/* spacing */}
       <div className="h-20 sm:h-24" />
     </>
   )
