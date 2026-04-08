@@ -10,14 +10,15 @@ export async function POST(req: Request) {
     const password = String(formData.get("password") || "")
 
     if (!email || !password) {
-      return NextResponse.redirect(new URL("/login?error=invalid", req.url), {
-        status: 303,
-      })
+      return NextResponse.redirect(
+        new URL("/login?error=invalid", req.url),
+        { status: 303 }
+      )
     }
 
     const cookieStore = await cookies()
 
-    let response = NextResponse.next() // ✅ IMPORTANT CHANGE
+    let response = NextResponse.next()
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -52,18 +53,28 @@ export async function POST(req: Request) {
     })
 
     if (error || !data.user) {
-      return NextResponse.redirect(new URL("/login?error=invalid", req.url), {
-        status: 303,
-      })
+      return NextResponse.redirect(
+        new URL("/login?error=invalid", req.url),
+        { status: 303 }
+      )
     }
 
     const user = data.user
 
-    const { data: existingProfile } = await supabase
+    const { data: existingProfile, error: profileLookupError } = await supabase
       .from("profiles")
       .select("id")
       .eq("id", user.id)
       .maybeSingle()
+
+    if (profileLookupError) {
+      console.error("Profile lookup error:", profileLookupError)
+
+      return NextResponse.redirect(
+        new URL("/login?error=failed", req.url),
+        { status: 303 }
+      )
+    }
 
     if (!existingProfile) {
       const fullName =
@@ -74,7 +85,7 @@ export async function POST(req: Request) {
       const username =
         user.email?.split("@")[0]?.replace(/[^a-zA-Z0-9_]/g, "") || null
 
-      await supabase.from("profiles").insert({
+      const { error: insertError } = await supabase.from("profiles").insert({
         id: user.id,
         email: user.email ?? email,
         full_name: fullName,
@@ -87,21 +98,32 @@ export async function POST(req: Request) {
         role: "user",
         coins: 0,
       })
+
+      if (insertError) {
+        console.error("Profile insert error:", insertError)
+
+        return NextResponse.redirect(
+          new URL("/login?error=failed", req.url),
+          { status: 303 }
+        )
+      }
     }
 
-    // ✅ FORCE SESSION SAVE
     await supabase.auth.getUser()
 
-    // ✅ NOW REDIRECT AFTER COOKIE IS SET
-    return NextResponse.redirect(new URL("/dashboard", req.url), {
-      status: 303,
-      headers: response.headers,
-    })
+    return NextResponse.redirect(
+      new URL("/auth/callback?next=/dashboard", req.url),
+      {
+        status: 303,
+        headers: response.headers,
+      }
+    )
   } catch (error) {
     console.error("Login route error:", error)
 
-    return NextResponse.redirect(new URL("/login?error=failed", req.url), {
-      status: 303,
-    })
+    return NextResponse.redirect(
+      new URL("/login?error=failed", req.url),
+      { status: 303 }
+    )
   }
 }
