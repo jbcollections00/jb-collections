@@ -40,121 +40,81 @@ export async function POST(req: Request) {
     } = await supabase.auth.getUser()
 
     if (userError || !user) {
-      return NextResponse.json(
-        { ok: false, error: "Unauthorized." },
-        { status: 401 }
-      )
+      return NextResponse.json({ ok: false, error: "Unauthorized." }, { status: 401 })
     }
 
-    const { data: adminProfile, error: adminError } = await supabase
+    const { data: adminProfile } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .maybeSingle()
 
-    if (adminError || adminProfile?.role !== "admin") {
+    if (adminProfile?.role !== "admin") {
       return NextResponse.json(
         { ok: false, error: "Admin access required." },
         { status: 403 }
       )
     }
 
-    const { data: upgrade, error: upgradeError } = await supabase
+    const { data: upgrade } = await supabase
       .from("upgrades")
       .select("*")
       .eq("id", upgradeId)
       .maybeSingle()
 
-    if (upgradeError || !upgrade) {
+    if (!upgrade) {
       return NextResponse.json(
         { ok: false, error: "Upgrade request not found." },
         { status: 404 }
       )
     }
 
-    if (!upgrade.sender_id) {
-      return NextResponse.json(
-        { ok: false, error: "This request has no user attached." },
-        { status: 400 }
-      )
-    }
-
     if (upgrade.coins_credited) {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("jb_points")
+        .select("coins")
         .eq("id", upgrade.sender_id)
         .maybeSingle()
 
       return NextResponse.json({
         ok: true,
         alreadyCredited: true,
-        newCoins: Number(profile?.jb_points || 0),
-        message: "Coins were already credited for this payment.",
+        newCoins: Number(profile?.coins || 0),
       })
     }
 
     const coins = Number(upgrade.coins || 0)
-    if (!Number.isFinite(coins) || coins <= 0) {
+
+    if (!coins || coins <= 0) {
       return NextResponse.json(
-        { ok: false, error: "This payment request has no valid coin amount." },
+        { ok: false, error: "Invalid coin amount." },
         { status: 400 }
       )
     }
 
-    const { data: currentProfile, error: profileError } = await supabase
-      .from("profiles")
-      .select("jb_points, email, full_name")
-      .eq("id", upgrade.sender_id)
-      .maybeSingle()
+    // 🔥 CENTRAL SYSTEM (IMPORTANT)
+    const { error: coinError } = await supabase.rpc("handle_coin_change", {
+      p_user_id: upgrade.sender_id,
+      p_amount: coins,
+      p_type: "payment_credit",
+      p_description: "Payment approved - JB Coins added",
+    })
 
-    if (profileError) {
+    if (coinError) {
+      console.error("Coin system error:", coinError)
       return NextResponse.json(
-        { ok: false, error: "Failed to load user profile." },
+        { ok: false, error: "Failed to credit coins." },
         { status: 500 }
       )
     }
 
-    const currentCoins = Number(currentProfile?.jb_points || 0)
-    const newCoins = currentCoins + coins
-
-    const { error: updateProfileError } = await supabase
-      .from("profiles")
-      .update({ jb_points: newCoins })
-      .eq("id", upgrade.sender_id)
-
-    if (updateProfileError) {
-      return NextResponse.json(
-        { ok: false, error: "Failed to credit user coins." },
-        { status: 500 }
-      )
-    }
-
-    const packageLabel =
-      String(upgrade.package_label || "").trim() ||
-      String(upgrade.subject || "").trim() ||
-      "JB Coin top-up"
-
-    const { error: historyError } = await supabase
-      .from("coin_history")
-      .insert({
-        user_id: upgrade.sender_id,
-        amount: coins,
-        type: "credit",
-        source: "payment_approval",
-        description: `${packageLabel} approved payment`,
-        created_at: new Date().toISOString(),
-      })
-
-    if (historyError) {
-      console.error("Coin history insert error:", historyError)
-    }
-
+    // Update upgrade status
     const { error: approveError } = await supabase
       .from("upgrades")
       .update({
         status: "approved",
-        admin_reply: adminReply || "Payment approved and JB Coins credited successfully.",
+        admin_reply:
+          adminReply || "Payment approved and JB Coins credited successfully.",
         approved_at: new Date().toISOString(),
         approved_by: user.id,
         coins_credited: true,
@@ -164,42 +124,21 @@ export async function POST(req: Request) {
 
     if (approveError) {
       return NextResponse.json(
-        { ok: false, error: "Coins were credited but request status failed to update." },
+        { ok: false, error: "Failed to update request." },
         { status: 500 }
       )
     }
 
-    // ✅ EMAIL SEND (ADDED ONLY — SAFE)
+    // EMAIL (optional)
     try {
-      const resend = new Resend(process.env.RESEND_API_KEY!)
+      if (process.env.RESEND_API_KEY) {
+        const resend = new Resend(process.env.RESEND_API_KEY)
 
-      const recipientEmail =
-        currentProfile?.email || upgrade.email || null
-
-      if (recipientEmail) {
         await resend.emails.send({
           from: "JB Collections <noreply@jb-collections.com>",
-          to: recipientEmail,
+          to: upgrade.email,
           subject: "Payment Confirmed – JB Coins Added 💰",
-          html: `
-            <h2>Payment Successful 🎉</h2>
-            <p>Hello ${currentProfile?.full_name || "User"},</p>
-
-            <p>Your payment has been approved.</p>
-
-            <p><b>Package:</b> ${packageLabel}</p>
-            <p><b>Coins Added:</b> ${coins} JB Coins</p>
-            <p><b>Total Balance:</b> ${newCoins} JB Coins</p>
-
-            <br/>
-
-            <a href="https://jb-collections.com/dashboard">
-              Go to Dashboard
-            </a>
-
-            <br/><br/>
-            <p>JB Collections</p>
-          `,
+          html: `<p>Your payment has been approved. ${coins} JB Coins added.</p>`,
         })
       }
     } catch (err) {
@@ -208,9 +147,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      alreadyCredited: false,
-      newCoins,
-      message: "Payment approved and JB Coins credited successfully.",
+      newCoins: coins,
+      message: "Payment approved and coins credited.",
     })
   } catch (error) {
     console.error("Approve upgrade route error:", error)

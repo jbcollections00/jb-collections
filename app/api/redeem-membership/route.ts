@@ -48,7 +48,7 @@ export async function POST(req: Request) {
 
     const { data: myProfile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, role, membership, is_premium, jb_points")
+      .select("id, role, membership, is_premium, coins")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
     }
 
     const currentMembership = normalizeMembership(myProfile)
-    const currentCoins = Number(myProfile.jb_points || 0)
+    const currentCoins = Number(myProfile.coins || 0)
     const requiredCoins = PLAN_COST[plan]
 
     if (currentMembership === "admin") {
@@ -107,7 +107,23 @@ export async function POST(req: Request) {
       },
     })
 
-    const nextCoins = currentCoins - requiredCoins
+    // ✅ 1. Deduct coins using central system
+    const { error: deductError } = await adminDb.rpc("handle_coin_change", {
+      p_user_id: user.id,
+      p_amount: -requiredCoins,
+      p_type: "redeem_membership",
+      p_description: `Redeemed ${plan} membership (-${requiredCoins} JB Coins)`,
+    })
+
+    if (deductError) {
+      console.error("Coin deduction error:", deductError)
+      return NextResponse.json(
+        { error: "Failed to deduct coins." },
+        { status: 500 }
+      )
+    }
+
+    // ✅ 2. Update membership
     const nextMembership = plan
     const nextIsPremium = plan === "premium" || plan === "platinum"
 
@@ -116,11 +132,9 @@ export async function POST(req: Request) {
       .update({
         membership: nextMembership,
         is_premium: nextIsPremium,
-        jb_points: nextCoins,
       })
       .eq("id", user.id)
-      .gte("jb_points", requiredCoins)
-      .select("membership, is_premium, jb_points")
+      .select("membership, is_premium, coins")
       .single()
 
     if (updateError || !updatedProfile) {

@@ -26,10 +26,10 @@ export function middleware(request: NextRequest) {
     pathname === "/download" ||
     pathname.startsWith("/download/")
 
-  // ✅ CHECK LOGIN COOKIE (IMPORTANT)
-  const hasAuthCookie =
-    request.cookies.get("sb-access-token") ||
-    request.cookies.get("sb:token")
+  // ✅ FIX: detect ANY Supabase auth cookie
+  const hasAuthCookie = request.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith("sb-") && cookie.name.includes("auth-token"))
 
   // 🔒 ADMIN PROTECTION
   if (isProtectedAdminRoute && !hasAuthCookie) {

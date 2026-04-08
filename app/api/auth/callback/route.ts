@@ -2,13 +2,18 @@ import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
+export const runtime = "nodejs"
+
 export async function GET(req: Request) {
   const url = new URL(req.url)
   const origin = url.origin
 
   try {
-    // ✅ FIX: await cookies()
     const cookieStore = await cookies()
+
+    const response = NextResponse.redirect(`${origin}/dashboard`, {
+      status: 303,
+    })
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,26 +23,42 @@ export async function GET(req: Request) {
           get(name: string) {
             return cookieStore.get(name)?.value
           },
-          set(name: string, value: string, options: any) {
-            cookieStore.set({ name, value, ...options })
+          set(name: string, value: string, options: Record<string, any>) {
+            response.cookies.set({
+              name,
+              value,
+              ...options,
+            })
           },
-          remove(name: string, options: any) {
-            cookieStore.set({ name, value: "", ...options })
+          remove(name: string, options: Record<string, any>) {
+            response.cookies.set({
+              name,
+              value: "",
+              ...options,
+              maxAge: 0,
+            })
           },
         },
       }
     )
 
-    const { searchParams } = new URL(req.url)
-    const code = searchParams.get("code")
+    const code = url.searchParams.get("code")
 
     if (code) {
-      await supabase.auth.exchangeCodeForSession(code)
+      const { error } = await supabase.auth.exchangeCodeForSession(code)
+      if (error) {
+        console.error("Callback exchange error:", error)
+        return NextResponse.redirect(`${origin}/login?error=callback-failed`, {
+          status: 303,
+        })
+      }
     }
 
-    return NextResponse.redirect(`${origin}/dashboard`)
+    return response
   } catch (error) {
     console.error("Auth callback error:", error)
-    return NextResponse.redirect(`${origin}/login`)
+    return NextResponse.redirect(`${origin}/login?error=server-error`, {
+      status: 303,
+    })
   }
 }

@@ -2,23 +2,29 @@ import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
+export const runtime = "nodejs"
+
 export async function POST(req: Request) {
+  const url = new URL(req.url)
+  const origin = url.origin
+
   try {
     const formData = await req.formData()
 
-    const email = String(formData.get("email") || "").trim()
+    const email = String(formData.get("email") || "").trim().toLowerCase()
     const password = String(formData.get("password") || "")
 
     if (!email || !password) {
-      return NextResponse.redirect(
-        new URL("/login?error=invalid", req.url),
-        { status: 303 }
-      )
+      return NextResponse.redirect(`${origin}/login?error=missing-fields`, {
+        status: 303,
+      })
     }
 
     const cookieStore = await cookies()
 
-    let response = NextResponse.next()
+    const response = NextResponse.redirect(`${origin}/dashboard`, {
+      status: 303,
+    })
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -53,77 +59,17 @@ export async function POST(req: Request) {
     })
 
     if (error || !data.user) {
-      return NextResponse.redirect(
-        new URL("/login?error=invalid", req.url),
-        { status: 303 }
-      )
-    }
-
-    const user = data.user
-
-    const { data: existingProfile, error: profileLookupError } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("id", user.id)
-      .maybeSingle()
-
-    if (profileLookupError) {
-      console.error("Profile lookup error:", profileLookupError)
-
-      return NextResponse.redirect(
-        new URL("/login?error=failed", req.url),
-        { status: 303 }
-      )
-    }
-
-    if (!existingProfile) {
-      const fullName =
-        user.user_metadata?.full_name ||
-        user.user_metadata?.name ||
-        null
-
-      const username =
-        user.email?.split("@")[0]?.replace(/[^a-zA-Z0-9_]/g, "") || null
-
-      const { error: insertError } = await supabase.from("profiles").insert({
-        id: user.id,
-        email: user.email ?? email,
-        full_name: fullName,
-        name: fullName,
-        username,
-        membership: "standard",
-        account_status: "Active",
-        status: "Active",
-        is_premium: false,
-        role: "user",
-        coins: 0,
-      })
-
-      if (insertError) {
-        console.error("Profile insert error:", insertError)
-
-        return NextResponse.redirect(
-          new URL("/login?error=failed", req.url),
-          { status: 303 }
-        )
-      }
-    }
-
-    await supabase.auth.getUser()
-
-    return NextResponse.redirect(
-      new URL("/auth/callback?next=/dashboard", req.url),
-      {
+      console.error("Login failed:", error)
+      return NextResponse.redirect(`${origin}/login?error=invalid-login`, {
         status: 303,
-        headers: response.headers,
-      }
-    )
+      })
+    }
+
+    return response
   } catch (error) {
     console.error("Login route error:", error)
-
-    return NextResponse.redirect(
-      new URL("/login?error=failed", req.url),
-      { status: 303 }
-    )
+    return NextResponse.redirect(`${origin}/login?error=server-error`, {
+      status: 303,
+    })
   }
 }

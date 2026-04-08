@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
+export const runtime = "nodejs"
+
 export async function POST(req: Request) {
   const url = new URL(req.url)
   const origin = url.origin
@@ -23,20 +25,28 @@ export async function POST(req: Request) {
     const referralCode = referralCodeFromForm || referralCodeFromUrl || null
 
     if (!fullName || !email || !password || !confirmPassword) {
-      return NextResponse.redirect(`${origin}/signup?error=missing-fields`, 303)
+      return NextResponse.redirect(`${origin}/signup?error=missing-fields`, {
+        status: 303,
+      })
     }
 
     const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
     if (!emailValid) {
-      return NextResponse.redirect(`${origin}/signup?error=invalid-email`, 303)
+      return NextResponse.redirect(`${origin}/signup?error=invalid-email`, {
+        status: 303,
+      })
     }
 
     if (password.length < 6) {
-      return NextResponse.redirect(`${origin}/signup?error=password-too-short`, 303)
+      return NextResponse.redirect(`${origin}/signup?error=password-too-short`, {
+        status: 303,
+      })
     }
 
     if (password !== confirmPassword) {
-      return NextResponse.redirect(`${origin}/signup?error=password-mismatch`, 303)
+      return NextResponse.redirect(`${origin}/signup?error=password-mismatch`, {
+        status: 303,
+      })
     }
 
     const cookieStore = await cookies()
@@ -67,7 +77,7 @@ export async function POST(req: Request) {
       email,
       password,
       options: {
-        emailRedirectTo: `${origin}/auth/callback`,
+        emailRedirectTo: `${origin}/api/auth/callback`,
         data: {
           full_name: fullName,
           name: fullName,
@@ -82,10 +92,15 @@ export async function POST(req: Request) {
         message.includes("already registered") ||
         message.includes("user already registered")
       ) {
-        return NextResponse.redirect(`${origin}/signup?error=email-exists`, 303)
+        return NextResponse.redirect(`${origin}/signup?error=email-exists`, {
+          status: 303,
+        })
       }
 
-      return NextResponse.redirect(`${origin}/signup?error=failed`, 303)
+      console.error("Signup auth error:", signUpError)
+      return NextResponse.redirect(`${origin}/signup?error=failed`, {
+        status: 303,
+      })
     }
 
     const newUser = signUpData.user
@@ -112,7 +127,8 @@ export async function POST(req: Request) {
         }
       }
 
-      // Create profile with starting 35 coins
+      const signupReward = 35
+
       const { error: profileError } = await supabase
         .from("profiles")
         .upsert(
@@ -128,68 +144,47 @@ export async function POST(req: Request) {
             is_premium: false,
             role: "user",
             referred_by: referredByUserId,
-            coins: 35,
+            coins: 0,
           },
           { onConflict: "id" }
         )
 
       if (profileError) {
         console.error("Profile creation error:", profileError)
-        return NextResponse.redirect(`${origin}/signup?error=profile-failed`, 303)
-      }
-
-      // Add signup bonus history
-      const { error: signupHistoryError } = await supabase
-        .from("coin_history")
-        .insert({
-          user_id: newUser.id,
-          amount: 35,
-          type: "signup_bonus",
-          description: "Signup reward: +35 JB Coins",
+        return NextResponse.redirect(`${origin}/signup?error=profile-failed`, {
+          status: 303,
         })
-
-      if (signupHistoryError) {
-        console.error("Signup history insert error:", signupHistoryError)
       }
 
-      // Referral reward for referrer only
+      const { error: signupRewardError } = await supabase.rpc(
+        "handle_coin_change",
+        {
+          p_user_id: newUser.id,
+          p_amount: signupReward,
+          p_type: "signup_bonus",
+          p_description: `Signup reward: +${signupReward} JB Coins`,
+        }
+      )
+
+      if (signupRewardError) {
+        console.error("Signup reward RPC error:", signupRewardError)
+      }
+
       if (referredByUserId) {
-        // Give reward to referrer
-        const { data: referrerProfile, error: referrerReadError } = await supabase
-          .from("profiles")
-          .select("coins")
-          .eq("id", referredByUserId)
-          .single()
+        const referralReward = 35
 
-        if (referrerReadError) {
-          console.error("Referrer read error:", referrerReadError)
-        } else {
-          const currentCoins = Number(referrerProfile?.coins || 0)
-          const referralReward = 35
-
-          const { error: referrerUpdateError } = await supabase
-            .from("profiles")
-            .update({
-              coins: currentCoins + referralReward,
-            })
-            .eq("id", referredByUserId)
-
-          if (referrerUpdateError) {
-            console.error("Referrer coin update error:", referrerUpdateError)
-          } else {
-            const { error: referrerHistoryError } = await supabase
-              .from("coin_history")
-              .insert({
-                user_id: referredByUserId,
-                amount: referralReward,
-                type: "referral_bonus",
-                description: `Referral reward: +${referralReward} JB Coins`,
-              })
-
-            if (referrerHistoryError) {
-              console.error("Referrer history insert error:", referrerHistoryError)
-            }
+        const { error: referralRewardError } = await supabase.rpc(
+          "handle_coin_change",
+          {
+            p_user_id: referredByUserId,
+            p_amount: referralReward,
+            p_type: "referral_bonus",
+            p_description: `Referral reward: +${referralReward} JB Coins`,
           }
+        )
+
+        if (referralRewardError) {
+          console.error("Referral reward RPC error:", referralRewardError)
         }
       }
     }
@@ -198,9 +193,8 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("Signup route error:", error)
 
-    return NextResponse.redirect(
-      `${new URL(req.url).origin}/signup?error=failed`,
-      303
-    )
+    return NextResponse.redirect(`${new URL(req.url).origin}/signup?error=failed`, {
+      status: 303,
+    })
   }
 }
