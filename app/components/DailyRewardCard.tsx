@@ -28,7 +28,7 @@ export default function DailyRewardCard() {
   const [loading, setLoading] = useState(true)
   const [claiming, setClaiming] = useState(false)
   const [claimed, setClaimed] = useState(false)
-  const [coins, setCoins] = useState(5)
+  const [coins, setCoins] = useState(15)
   const [rewardDate, setRewardDate] = useState("")
   const [nextClaimDate, setNextClaimDate] = useState("")
   const [message, setMessage] = useState("")
@@ -73,6 +73,7 @@ export default function DailyRewardCard() {
 
   const loadStatus = useCallback(async () => {
     try {
+      clearTimers()
       setLoading(true)
       setMessage("")
 
@@ -85,15 +86,17 @@ export default function DailyRewardCard() {
 
       if (!res.ok || !data.ok) {
         setMessage(data.error || "Failed to load daily reward.")
+        setClaimed(false)
         setShowPopup(false)
         setShowMarquee(false)
         return
       }
 
       const alreadyClaimed = !!data.claimed
+      const rewardCoins = Number(data.coins || 15)
 
       setClaimed(alreadyClaimed)
-      setCoins(data.coins ?? 5)
+      setCoins(rewardCoins)
       setRewardDate(data.rewardDate ?? "")
       setNextClaimDate(data.nextClaimDate ?? "")
       setMessage("")
@@ -102,24 +105,29 @@ export default function DailyRewardCard() {
         setShowPopup(false)
         setShowMarquee(false)
         setPopupDismissed(false)
-      } else if (!popupDismissed) {
-        popupTimerRef.current = setTimeout(() => {
-          setShowPopup(true)
-          setShowMarquee(false)
-        }, 700)
-      } else {
+        return
+      }
+
+      if (popupDismissed) {
         setShowPopup(false)
         setShowMarquee(true)
+        return
       }
+
+      popupTimerRef.current = setTimeout(() => {
+        setShowPopup(true)
+        setShowMarquee(false)
+      }, 700)
     } catch (error) {
       console.error("Daily reward load error:", error)
       setMessage("Failed to load daily reward.")
+      setClaimed(false)
       setShowPopup(false)
       setShowMarquee(false)
     } finally {
       setLoading(false)
     }
-  }, [popupDismissed])
+  }, [clearTimers, popupDismissed])
 
   useEffect(() => {
     void loadStatus()
@@ -132,8 +140,10 @@ export default function DailyRewardCard() {
   const closePopup = useCallback(() => {
     setShowPopup(false)
     setPopupDismissed(true)
-    setShowMarquee(true)
-  }, [])
+    if (!claimed) {
+      setShowMarquee(true)
+    }
+  }, [claimed])
 
   const reopenPopup = useCallback(() => {
     setShowPopup(true)
@@ -154,20 +164,21 @@ export default function DailyRewardCard() {
       if (!res.ok || !data.ok) {
         if (data.alreadyClaimed) {
           setClaimed(true)
-          setCoins(data.coins ?? 5)
+          setCoins(Number(data.coins || 15))
           setRewardDate(data.rewardDate ?? "")
           setNextClaimDate(data.nextClaimDate ?? "")
           setMessage(data.message || "You already claimed today’s daily reward.")
           setShowPopup(false)
           setShowMarquee(false)
+          setPopupDismissed(false)
           return
         }
 
-        setMessage(data.error || "Failed to claim daily reward.")
+        setMessage(data.error || data.message || "Failed to claim daily reward.")
         return
       }
 
-      const rewardCoins = data.coins ?? 5
+      const rewardCoins = Number(data.coins || 15)
 
       setClaimed(true)
       setCoins(rewardCoins)
@@ -183,13 +194,28 @@ export default function DailyRewardCard() {
       successTimerRef.current = setTimeout(() => {
         setShowClaimSuccess(false)
       }, 2200)
+
+      window.dispatchEvent(new CustomEvent("jb-coins-updated"))
+      window.dispatchEvent(
+        new CustomEvent("jb-daily-reward-claimed", {
+          detail: {
+            coins: rewardCoins,
+            rewardDate: data.rewardDate ?? rewardDate,
+            nextClaimDate: data.nextClaimDate ?? nextClaimDate,
+          },
+        })
+      )
+
+      window.setTimeout(() => {
+        window.location.reload()
+      }, 900)
     } catch (error) {
       console.error("Daily reward claim error:", error)
       setMessage("Failed to claim daily reward.")
     } finally {
       setClaiming(false)
     }
-  }, [createCoinBurst])
+  }, [createCoinBurst, nextClaimDate, rewardDate])
 
   const marqueeText = useMemo(() => {
     return `Claim your daily JB Coins • Claim your daily JB Coins • Claim your daily JB Coins • `

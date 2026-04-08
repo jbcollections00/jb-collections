@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
+import { createClient as createSupabaseAdmin } from "@supabase/supabase-js"
 import { cookies } from "next/headers"
 
 export const runtime = "nodejs"
@@ -43,7 +44,7 @@ function getManilaDayRange(date = new Date()) {
   return { start, end }
 }
 
-async function createSupabase() {
+async function createSupabaseUserClient() {
   const cookieStore = await cookies()
 
   return createServerClient(
@@ -61,9 +62,25 @@ async function createSupabase() {
   )
 }
 
+function createSupabaseAdminClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Missing Supabase server environment variables.")
+  }
+
+  return createSupabaseAdmin(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+}
+
 export async function GET() {
   try {
-    const supabase = await createSupabase()
+    const supabase = await createSupabaseUserClient()
 
     const {
       data: { user },
@@ -120,7 +137,7 @@ export async function GET() {
 
 export async function POST() {
   try {
-    const supabase = await createSupabase()
+    const supabase = await createSupabaseUserClient()
 
     const {
       data: { user },
@@ -134,13 +151,14 @@ export async function POST() {
       )
     }
 
+    const adminDb = createSupabaseAdminClient()
+
     const today = getManilaDateString()
     const tomorrow = getTomorrowManilaDateString()
     const dailyCoins = 15
     const { start, end } = getManilaDayRange()
 
-    // hard check from coin_history first so duplicate claims are blocked
-    const { data: existingClaim, error: existingClaimError } = await supabase
+    const { data: existingClaim, error: existingClaimError } = await adminDb
       .from("coin_history")
       .select("id")
       .eq("user_id", user.id)
@@ -170,7 +188,7 @@ export async function POST() {
       })
     }
 
-    const { data: allowed, error: limitError } = await supabase.rpc(
+    const { data: allowed, error: limitError } = await adminDb.rpc(
       "check_coin_limit",
       {
         p_user_id: user.id,
@@ -199,7 +217,7 @@ export async function POST() {
       })
     }
 
-    const { error: rewardError } = await supabase.rpc("handle_coin_change", {
+    const { error: rewardError } = await adminDb.rpc("handle_coin_change", {
       p_user_id: user.id,
       p_amount: dailyCoins,
       p_type: "daily_reward",
