@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase-server"
 
+export const runtime = "nodejs"
+
 export async function GET() {
   try {
-    const supabase = createClient()
+    // ✅ FIX HERE (await!)
+    const supabase = await createClient()
 
     // get current week
-    const { data: weekData } = await supabase.rpc("get_week_start")
+    const { data: weekData, error: weekError } = await supabase.rpc("get_week_start")
+
+    if (weekError) throw weekError
+
     const weekStart = weekData
 
     // fetch leaderboard
@@ -28,9 +34,12 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
+      weekStart,
       leaderboard: data || [],
     })
   } catch (err: any) {
+    console.error("Leaderboard error:", err)
+
     return NextResponse.json({
       success: false,
       error: err.message,
