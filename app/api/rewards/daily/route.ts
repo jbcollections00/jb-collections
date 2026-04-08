@@ -120,6 +120,7 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       claimed: !!claimRow,
+      alreadyClaimed: !!claimRow,
       coins: claimRow?.amount ?? 15,
       rewardDate: today,
       nextClaimDate: tomorrow,
@@ -160,11 +161,12 @@ export async function POST() {
 
     const { data: existingClaim, error: existingClaimError } = await adminDb
       .from("coin_history")
-      .select("id")
+      .select("id, amount, created_at")
       .eq("user_id", user.id)
       .eq("type", "daily_reward")
       .gte("created_at", start)
       .lt("created_at", end)
+      .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle()
 
@@ -179,11 +181,12 @@ export async function POST() {
     if (existingClaim) {
       return NextResponse.json({
         ok: true,
-        claimed: false,
+        claimed: true,
         alreadyClaimed: true,
-        coins: dailyCoins,
+        coins: existingClaim.amount ?? dailyCoins,
         rewardDate: today,
         nextClaimDate: tomorrow,
+        claimedAt: existingClaim.created_at ?? null,
         message: "You already claimed today’s daily reward.",
       })
     }
@@ -206,13 +209,25 @@ export async function POST() {
     }
 
     if (!allowed) {
+      const { data: latestClaim } = await adminDb
+        .from("coin_history")
+        .select("id, amount, created_at")
+        .eq("user_id", user.id)
+        .eq("type", "daily_reward")
+        .gte("created_at", start)
+        .lt("created_at", end)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
       return NextResponse.json({
         ok: true,
-        claimed: false,
+        claimed: true,
         alreadyClaimed: true,
-        coins: dailyCoins,
+        coins: latestClaim?.amount ?? dailyCoins,
         rewardDate: today,
         nextClaimDate: tomorrow,
+        claimedAt: latestClaim?.created_at ?? null,
         message: "You already claimed today’s daily reward.",
       })
     }
@@ -232,13 +247,25 @@ export async function POST() {
       )
     }
 
+    const { data: newClaim } = await adminDb
+      .from("coin_history")
+      .select("id, amount, created_at")
+      .eq("user_id", user.id)
+      .eq("type", "daily_reward")
+      .gte("created_at", start)
+      .lt("created_at", end)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
     return NextResponse.json({
       ok: true,
       claimed: true,
       alreadyClaimed: false,
-      coins: dailyCoins,
+      coins: newClaim?.amount ?? dailyCoins,
       rewardDate: today,
       nextClaimDate: tomorrow,
+      claimedAt: newClaim?.created_at ?? null,
       message: "Daily reward claimed successfully.",
     })
   } catch (error) {

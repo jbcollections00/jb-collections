@@ -126,9 +126,8 @@ export default function DownloadPageClient() {
       searchParams?.get("rewardAmount") || searchParams?.get("reward_amount") || "5"
 
     const parsedRewardAmount = Number(rewardAmountRaw)
-    const rewardAmount = Number.isFinite(parsedRewardAmount) && parsedRewardAmount > 0
-      ? parsedRewardAmount
-      : 5
+    const rewardAmount =
+      Number.isFinite(parsedRewardAmount) && parsedRewardAmount > 0 ? parsedRewardAmount : 5
 
     if (rewarded) {
       showRewardNotice(`+${rewardAmount} JB Coins earned`, "success")
@@ -354,20 +353,47 @@ export default function DownloadPageClient() {
     }
   }
 
-  function handleDirectDownload() {
+  async function handleDirectDownload() {
     if (startingDownload || !file?.id) return
 
     setStartingDownload(true)
 
-    void logEvent(
-      "download_click",
-      {
-        source: unlockedFromQuery ? "gate_after_unlock" : "direct_button",
-      },
-      file.id
-    )
+    try {
+      void logEvent(
+        "download_click",
+        {
+          source: unlockedFromQuery ? "gate_after_unlock" : "direct_button",
+        },
+        file.id
+      )
 
-    window.location.href = `/api/download/${file.id}`
+      const res = await fetch(`/api/download/${file.id}?mode=json`, {
+        method: "GET",
+        headers: {
+          accept: "application/json",
+        },
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to start download")
+      }
+
+      if (data?.rewarded) {
+        showRewardNotice(`+${data.rewardAmount ?? 5} JB Coins earned`, "success")
+      } else if (data?.alreadyRewardedToday) {
+        showRewardNotice("Already rewarded today", "info")
+      }
+
+      window.setTimeout(() => {
+        window.location.href = data.downloadUrl
+      }, 900)
+    } catch (err) {
+      console.error("Download start error:", err)
+      setError(err instanceof Error ? err.message : "Failed to start download.")
+      setStartingDownload(false)
+    }
   }
 
   async function handleCopyLink() {
