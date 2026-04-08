@@ -2,7 +2,9 @@ import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
-function getManilaDateString(date = new Date()): string {
+export const runtime = "nodejs"
+
+function getManilaDateParts(date = new Date()) {
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Manila",
     year: "numeric",
@@ -15,13 +17,30 @@ function getManilaDateString(date = new Date()): string {
   const month = parts.find((part) => part.type === "month")?.value ?? "00"
   const day = parts.find((part) => part.type === "day")?.value ?? "00"
 
+  return { year, month, day }
+}
+
+function getManilaDateString(date = new Date()) {
+  const { year, month, day } = getManilaDateParts(date)
   return `${year}-${month}-${day}`
 }
 
-function getTomorrowManilaDateString(date = new Date()): string {
-  const now = new Date(date)
-  now.setUTCDate(now.getUTCDate() + 1)
-  return getManilaDateString(now)
+function getTomorrowManilaDateString(date = new Date()) {
+  const next = new Date(date)
+  next.setUTCDate(next.getUTCDate() + 1)
+  return getManilaDateString(next)
+}
+
+function getManilaDayRange(date = new Date()) {
+  const { year, month, day } = getManilaDateParts(date)
+  const start = `${year}-${month}-${day}T00:00:00+08:00`
+
+  const next = new Date(date)
+  next.setUTCDate(next.getUTCDate() + 1)
+  const nextParts = getManilaDateParts(next)
+  const end = `${nextParts.year}-${nextParts.month}-${nextParts.day}T00:00:00+08:00`
+
+  return { start, end }
 }
 
 async function createSupabase() {
@@ -48,36 +67,54 @@ export async function GET() {
 
     const {
       data: { user },
+      error: userError,
     } = await supabase.auth.getUser()
 
-    if (!user) {
-      return NextResponse.json({ ok: false }, { status: 401 })
+    if (userError || !user) {
+      return NextResponse.json(
+        { ok: false, error: "Unauthorized" },
+        { status: 401 }
+      )
     }
 
     const today = getManilaDateString()
     const tomorrow = getTomorrowManilaDateString()
+    const { start, end } = getManilaDayRange()
 
-    // check if already claimed via limit system
-    const { data } = await supabase
-      .from("user_coin_limits")
-      .select("claim_count")
+    const { data: claimRow, error: claimError } = await supabase
+      .from("coin_history")
+      .select("id, amount, created_at")
       .eq("user_id", user.id)
-      .eq("action", "daily_reward")
-      .eq("limit_date", today)
+      .eq("type", "daily_reward")
+      .gte("created_at", start)
+      .lt("created_at", end)
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle()
 
-    const claimed = (data?.claim_count || 0) >= 1
+    if (claimError) {
+      console.error("Daily reward status error:", claimError)
+      return NextResponse.json(
+        { ok: false, error: "Failed to load reward status" },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({
       ok: true,
-      claimed,
-      coins: 15,
+      claimed: !!claimRow,
+      coins: claimRow?.amount ?? 15,
       rewardDate: today,
       nextClaimDate: tomorrow,
+      claimedAt: claimRow?.created_at ?? null,
     })
   } catch (error) {
-    console.error(error)
-    return NextResponse.json({ ok: false }, { status: 500 })
+    console.error("Daily reward GET route error:", error)
+
+    return NextResponse.json(
+      { ok: false, error: "Failed to load reward status" },
+      { status: 500 }
+    )
   }
 }
 
@@ -87,43 +124,92 @@ export async function POST() {
 
     const {
       data: { user },
+      error: userError,
     } = await supabase.auth.getUser()
 
-    if (!user) {
-      return NextResponse.json({ ok: false }, { status: 401 })
+    if (userError || !user) {
+      return NextResponse.json(
+        { ok: false, error: "Unauthorized" },
+        { status: 401 }
+      )
     }
 
     const today = getManilaDateString()
     const tomorrow = getTomorrowManilaDateString()
     const dailyCoins = 15
+    const { start, end } = getManilaDayRange()
 
-    // ✅ ANTI-ABUSE CHECK
-    const { data: allowed } = await supabase.rpc("check_coin_limit", {
-      p_user_id: user.id,
-      p_action: "daily_reward",
-      p_limit: 1,
-    })
+    // hard check from coin_history first so duplicate claims are blocked
+    const { data: existingClaim, error: existingClaimError } = await supabase
+      .from("coin_history")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("type", "daily_reward")
+      .gte("created_at", start)
+      .lt("created_at", end)
+      .limit(1)
+      .maybeSingle()
 
-    if (!allowed) {
+    if (existingClaimError) {
+      console.error("Daily reward existing claim check error:", existingClaimError)
+      return NextResponse.json(
+        { ok: false, error: "Failed to verify reward status" },
+        { status: 500 }
+      )
+    }
+
+    if (existingClaim) {
       return NextResponse.json({
-        ok: false,
+        ok: true,
+        claimed: false,
         alreadyClaimed: true,
-        message: "You already claimed today’s reward.",
+        coins: dailyCoins,
+        rewardDate: today,
+        nextClaimDate: tomorrow,
+        message: "You already claimed today’s daily reward.",
       })
     }
 
-    // ✅ GIVE COINS (CENTRAL SYSTEM)
-    const { error: coinError } = await supabase.rpc("handle_coin_change", {
+    const { data: allowed, error: limitError } = await supabase.rpc(
+      "check_coin_limit",
+      {
+        p_user_id: user.id,
+        p_action: "daily_reward",
+        p_limit: 1,
+      }
+    )
+
+    if (limitError) {
+      console.error("Daily reward limit error:", limitError)
+      return NextResponse.json(
+        { ok: false, error: "Failed to verify daily limit" },
+        { status: 500 }
+      )
+    }
+
+    if (!allowed) {
+      return NextResponse.json({
+        ok: true,
+        claimed: false,
+        alreadyClaimed: true,
+        coins: dailyCoins,
+        rewardDate: today,
+        nextClaimDate: tomorrow,
+        message: "You already claimed today’s daily reward.",
+      })
+    }
+
+    const { error: rewardError } = await supabase.rpc("handle_coin_change", {
       p_user_id: user.id,
       p_amount: dailyCoins,
       p_type: "daily_reward",
       p_description: `Daily reward +${dailyCoins} JB Coins`,
     })
 
-    if (coinError) {
-      console.error(coinError)
+    if (rewardError) {
+      console.error("Daily reward coin change error:", rewardError)
       return NextResponse.json(
-        { ok: false, error: "Failed to add coins" },
+        { ok: false, error: "Failed to claim daily reward" },
         { status: 500 }
       )
     }
@@ -131,13 +217,18 @@ export async function POST() {
     return NextResponse.json({
       ok: true,
       claimed: true,
+      alreadyClaimed: false,
       coins: dailyCoins,
       rewardDate: today,
       nextClaimDate: tomorrow,
-      message: "Daily reward claimed!",
+      message: "Daily reward claimed successfully.",
     })
   } catch (error) {
-    console.error(error)
-    return NextResponse.json({ ok: false }, { status: 500 })
+    console.error("Daily reward POST route error:", error)
+
+    return NextResponse.json(
+      { ok: false, error: "Failed to claim daily reward" },
+      { status: 500 }
+    )
   }
 }
