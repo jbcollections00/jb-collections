@@ -155,19 +155,19 @@ export async function POST(req: NextRequest) {
             ? `Admin subtracted JB Coins from ${targetName}. Reason: ${reason}`
             : `Admin set JB Coins for ${targetName}. Reason: ${reason}`
 
-      const { error: txError } = await adminDb.from("jb_coin_transactions").insert({
+      const { error: historyError } = await adminDb.from("coin_history").insert({
         user_id: userId,
         amount: transactionAmount,
-        action_type:
+        type:
           operation === "add"
-            ? "admin_add_coins"
+            ? "admin_add"
             : operation === "subtract"
-              ? "admin_subtract_coins"
-              : "admin_set_coins",
+              ? "admin_subtract"
+              : "admin_set",
         description,
       })
 
-      if (txError) {
+      if (historyError) {
         await adminDb
           .from("profiles")
           .update({
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json(
           {
-            error: txError.message || "Failed to save coin transaction",
+            error: historyError.message || "Failed to save coin history",
           },
           { status: 500 }
         )
