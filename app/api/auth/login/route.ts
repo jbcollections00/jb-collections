@@ -17,9 +17,7 @@ export async function POST(req: Request) {
 
     const cookieStore = await cookies()
 
-    const response = NextResponse.redirect(new URL("/dashboard", req.url), {
-      status: 303,
-    })
+    let response = NextResponse.next() // ✅ IMPORTANT CHANGE
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -61,19 +59,11 @@ export async function POST(req: Request) {
 
     const user = data.user
 
-    const { data: existingProfile, error: profileLookupError } = await supabase
+    const { data: existingProfile } = await supabase
       .from("profiles")
       .select("id")
       .eq("id", user.id)
       .maybeSingle()
-
-    if (profileLookupError) {
-      console.error("Profile lookup error:", profileLookupError)
-
-      return NextResponse.redirect(new URL("/login?error=failed", req.url), {
-        status: 303,
-      })
-    }
 
     if (!existingProfile) {
       const fullName =
@@ -84,29 +74,29 @@ export async function POST(req: Request) {
       const username =
         user.email?.split("@")[0]?.replace(/[^a-zA-Z0-9_]/g, "") || null
 
-      const { error: insertError } = await supabase.from("profiles").insert({
+      await supabase.from("profiles").insert({
         id: user.id,
         email: user.email ?? email,
         full_name: fullName,
         name: fullName,
         username,
-        membership: "free",
-        account_status: "active",
-        status: "active",
+        membership: "standard",
+        account_status: "Active",
+        status: "Active",
         is_premium: false,
         role: "user",
+        coins: 0,
       })
-
-      if (insertError) {
-        console.error("Profile insert error:", insertError)
-
-        return NextResponse.redirect(new URL("/login?error=failed", req.url), {
-          status: 303,
-        })
-      }
     }
 
-    return response
+    // ✅ FORCE SESSION SAVE
+    await supabase.auth.getUser()
+
+    // ✅ NOW REDIRECT AFTER COOKIE IS SET
+    return NextResponse.redirect(new URL("/dashboard", req.url), {
+      status: 303,
+      headers: response.headers,
+    })
   } catch (error) {
     console.error("Login route error:", error)
 
