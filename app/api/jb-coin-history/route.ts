@@ -6,10 +6,9 @@ export const runtime = "nodejs"
 type CoinHistoryRow = {
   id: string
   amount?: number | null
-  action_type?: string | null
+  type?: string | null
   description?: string | null
   created_at?: string | null
-  file_id?: string | null
 }
 
 export async function GET(req: NextRequest) {
@@ -31,8 +30,8 @@ export async function GET(req: NextRequest) {
       : 12
 
     const { data, error } = await supabase
-      .from("jb_coin_transactions")
-      .select("id, amount, action_type, description, created_at, file_id")
+      .from("coin_history") // ✅ FIXED
+      .select("id, amount, type, description, created_at") // ✅ FIXED
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(limit)
@@ -46,7 +45,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      items: (data || []) as CoinHistoryRow[],
+      items: data || [],
     })
   } catch (error) {
     console.error("JB Coin history route error:", error)

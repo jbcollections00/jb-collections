@@ -260,6 +260,9 @@ export default function ProfilePageClient() {
   const [usernameInput, setUsernameInput] = useState("")
   const [bioInput, setBioInput] = useState("")
   const [avatarUrlInput, setAvatarUrlInput] = useState("")
+  const [newPasswordInput, setNewPasswordInput] = useState("")
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState("")
+  const [passwordLoading, setPasswordLoading] = useState(false)
 
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const usernameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -827,6 +830,56 @@ export default function ProfilePageClient() {
     }
   }
 
+  async function handleChangePassword() {
+    try {
+      setSaveError("")
+      setSaveMessage("")
+
+      const trimmedNewPassword = newPasswordInput.trim()
+      const trimmedConfirmPassword = confirmPasswordInput.trim()
+
+      if (!trimmedNewPassword) {
+        setSaveError("Please enter your new password.")
+        return
+      }
+
+      if (trimmedNewPassword.length < 6) {
+        setSaveError("Password must be at least 6 characters.")
+        return
+      }
+
+      if (!trimmedConfirmPassword) {
+        setSaveError("Please confirm your new password.")
+        return
+      }
+
+      if (trimmedNewPassword !== trimmedConfirmPassword) {
+        setSaveError("Passwords do not match.")
+        return
+      }
+
+      setPasswordLoading(true)
+
+      const { error } = await supabase.auth.updateUser({
+        password: trimmedNewPassword,
+      })
+
+      if (error) {
+        setSaveError(error.message || "Failed to update password.")
+        return
+      }
+
+      setSaveMessage("Password updated successfully.")
+      setNewPasswordInput("")
+      setConfirmPasswordInput("")
+    } catch (err) {
+      console.error("Password update error:", err)
+      setSaveError("Something went wrong while updating password.")
+    } finally {
+      setPasswordLoading(false)
+    }
+  }
+
   const successParam = searchParams?.get("success") ?? ""
   const errorParam = searchParams?.get("error") ?? ""
 
@@ -1081,7 +1134,7 @@ export default function ProfilePageClient() {
             <StatCard label="Username" value={profile?.username || "Not set"} />
             <StatCard
               label="Leaderboard Rank"
-              value={`#${myLeaderboardRank?.rank || "-"}`}
+              value={leaderboardLoading ? "Loading..." : `#${myLeaderboardRank?.rank || "-"}`}
             />
           </section>
 
@@ -1341,7 +1394,7 @@ export default function ProfilePageClient() {
                   </p>
                   <h2 className="mt-1 text-xl font-black text-white">JB Rewards</h2>
                   <p className="mt-2 text-sm text-slate-400">
-                    Use your JB Coins to redeem membership rewards, keep your streak, and climb the leaderboard.
+                    Use your JB Coins to redeem membership rewards, keep your streak, and view the full leaderboard on its own page.
                   </p>
                 </div>
 
@@ -1485,93 +1538,6 @@ export default function ProfilePageClient() {
 
                 <div className="mt-4 grid gap-4 lg:grid-cols-2">
                   <div className="rounded-[24px] border border-white/10 bg-slate-950 p-5">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-bold uppercase tracking-[0.2em] text-sky-400">
-                          Leaderboard
-                        </p>
-                        <h3 className="mt-1 text-lg font-black text-white">
-                          Top JB Coin Holders
-                        </h3>
-                      </div>
-
-                      {leaderboardLoading ? (
-                        <span className="text-sm text-slate-400">Loading...</span>
-                      ) : null}
-                    </div>
-
-                    {myLeaderboardRank ? (
-                      <div className="mt-4 rounded-2xl border border-yellow-400/20 bg-yellow-500/10 p-4">
-                        <p className="text-xs uppercase tracking-wide text-yellow-300">
-                          Your Rank
-                        </p>
-                        <div className="mt-2 flex items-center justify-between gap-4">
-                          <div>
-                            <p className="text-lg font-black text-white">
-                              #{myLeaderboardRank.rank} {myLeaderboardRank.display_name}
-                            </p>
-                            <p className="text-sm text-yellow-200">
-                              {myLeaderboardRank.coins.toLocaleString()} JB Coins
-                            </p>
-                          </div>
-                          <div className="rounded-full bg-yellow-400 px-3 py-1 text-xs font-black text-slate-950">
-                            YOU
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-
-                    <div className="mt-4 space-y-3">
-                      {!leaderboardLoading && leaderboard.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-6 text-center text-sm text-slate-400">
-                          No leaderboard data yet.
-                        </div>
-                      ) : null}
-
-                      {leaderboard.map((entry) => (
-                        <div
-                          key={entry.id}
-                          className={`flex items-center justify-between gap-4 rounded-2xl border px-4 py-4 ${
-                            entry.is_current_user
-                              ? "border-yellow-400/30 bg-yellow-500/10"
-                              : "border-white/10 bg-black/20"
-                          }`}
-                        >
-                          <div className="flex min-w-0 items-center gap-3">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-800 text-sm font-black text-white ring-1 ring-white/10">
-                              {entry.avatar_url ? (
-                                <img
-                                  src={entry.avatar_url}
-                                  alt={entry.display_name}
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : (
-                                <span>{entry.initials || "U"}</span>
-                              )}
-                            </div>
-
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-black text-white">
-                                #{entry.rank} {entry.display_name}
-                              </p>
-                              <p className="truncate text-xs text-slate-400">
-                                {entry.username ? `@${entry.username}` : entry.membership_label || "User"}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="shrink-0 text-right">
-                            <p className="text-sm font-black text-yellow-300">
-                              {Number(entry.coins || 0).toLocaleString()}
-                            </p>
-                            <p className="text-xs text-slate-400">JB Coins</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="rounded-[24px] border border-white/10 bg-slate-950 p-5">
                     <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
                       Referral Link
                     </p>
@@ -1614,6 +1580,27 @@ export default function ProfilePageClient() {
                       >
                         Refresh Rewards
                       </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[24px] border border-white/10 bg-slate-950 p-5">
+                    <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
+                      Leaderboard Page
+                    </p>
+
+                    <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-4">
+                      <p className="text-sm font-semibold text-white">
+                        Open the full JB Coin leaderboard on its own page for a cleaner profile view.
+                      </p>
+                      <p className="mt-2 text-sm text-slate-400">
+                        Your current rank: {leaderboardLoading ? "Loading..." : `#${myLeaderboardRank?.rank || "-"}`}
+                      </p>
+                      <Link
+                        href="/leaderboard"
+                        className="mt-4 inline-flex rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 px-5 py-3 text-sm font-bold text-white transition hover:brightness-110"
+                      >
+                        Open Leaderboard
+                      </Link>
                     </div>
                   </div>
                 </div>
@@ -1709,9 +1696,43 @@ export default function ProfilePageClient() {
                     <span className="break-all">{displayEmail}</span>
                   </DetailCard>
                   <DetailCard label="Account Status">{displayStatus}</DetailCard>
-                  <DetailCard label="Password">
-                    Managed through your account login credentials
-                  </DetailCard>
+
+                  <div className="rounded-2xl border border-white/10 bg-slate-950 p-4">
+                    <p className="text-xs uppercase tracking-wide text-slate-400">
+                      Change Password
+                    </p>
+
+                    <div className="mt-3 grid gap-3">
+                      <input
+                        type="password"
+                        value={newPasswordInput}
+                        onChange={(e) => setNewPasswordInput(e.target.value)}
+                        placeholder="Enter new password"
+                        className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+                      />
+
+                      <input
+                        type="password"
+                        value={confirmPasswordInput}
+                        onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                        placeholder="Confirm new password"
+                        className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => void handleChangePassword()}
+                        disabled={passwordLoading}
+                        className="rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 px-5 py-3 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        {passwordLoading ? "Updating Password..." : "Change Password"}
+                      </button>
+
+                      <p className="text-xs text-slate-400">
+                        Use at least 6 characters for your new password.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1736,7 +1757,7 @@ export default function ProfilePageClient() {
                     {streak} Day{streak === 1 ? "" : "s"}
                   </DetailCard>
                   <DetailCard label="Leaderboard Rank">
-                    #{myLeaderboardRank?.rank || "-"}
+                    {leaderboardLoading ? "Loading..." : `#${myLeaderboardRank?.rank || "-"}`}
                   </DetailCard>
 
                   {membershipLevel === "admin" ||

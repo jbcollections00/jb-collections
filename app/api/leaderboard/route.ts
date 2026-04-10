@@ -16,31 +16,34 @@ type LeaderboardProfileRow = {
   role?: string | null
 }
 
+function requireEnv(name: string) {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`)
+  }
+  return value
+}
+
 async function createSupabaseUserClient() {
   const cookieStore = await cookies()
 
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-        set() {},
-        remove() {},
+  const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL")
+  const supabaseAnonKey = requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+
+  return createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value
       },
-    }
-  )
+      set() {},
+      remove() {},
+    },
+  })
 }
 
 function createSupabaseAdminClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error("Missing Supabase server environment variables.")
-  }
+  const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL")
+  const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY")
 
   return createSupabaseAdmin(supabaseUrl, serviceRoleKey, {
     auth: {
@@ -118,23 +121,25 @@ export async function GET() {
       )
     }
 
-    const leaderboardRows = (Array.isArray(topProfiles) ? topProfiles : []) as LeaderboardProfileRow[]
+    const leaderboardRows = Array.isArray(topProfiles)
+      ? (topProfiles as LeaderboardProfileRow[])
+      : []
 
-    const currentUserCoinsResult = await adminDb
+    const { data: currentUserProfile, error: currentUserError } = await adminDb
       .from("profiles")
-      .select("coins, full_name, name, username, avatar_url, membership, role")
+      .select("id, coins, full_name, name, username, avatar_url, membership, role")
       .eq("id", user.id)
       .maybeSingle()
 
-    if (currentUserCoinsResult.error) {
-      console.error("Current user leaderboard error:", currentUserCoinsResult.error)
+    if (currentUserError) {
+      console.error("Current user leaderboard error:", currentUserError)
       return NextResponse.json(
         { ok: false, error: "Failed to load your leaderboard rank" },
         { status: 500 }
       )
     }
 
-    const currentUserCoins = Number(currentUserCoinsResult.data?.coins || 0)
+    const currentUserCoins = Number(currentUserProfile?.coins || 0)
 
     const { count: higherCount, error: rankError } = await adminDb
       .from("profiles")
@@ -153,6 +158,7 @@ export async function GET() {
 
     const top = leaderboardRows.map((profile, index) => {
       const displayName = getDisplayName(profile)
+      const membership = getMembership(profile)
 
       return {
         rank: index + 1,
@@ -162,21 +168,26 @@ export async function GET() {
         avatar_url: profile.avatar_url || null,
         initials: getInitials(displayName),
         coins: Number(profile.coins || 0),
-        membership: getMembership(profile),
-        membership_label: getMembershipLabel(getMembership(profile)),
+        membership,
+        membership_label: getMembershipLabel(membership),
         is_current_user: profile.id === user.id,
       }
     })
 
-    const currentUserProfile = currentUserCoinsResult.data as LeaderboardProfileRow | null
-    const currentUserDisplayName = getDisplayName(
-      currentUserProfile || {
-        id: user.id,
-        full_name: "",
-        name: "",
-        username: "",
-      }
-    )
+    const fallbackProfile: LeaderboardProfileRow = {
+      id: user.id,
+      full_name: "",
+      name: "",
+      username: "",
+      avatar_url: null,
+      coins: currentUserCoins,
+      membership: "standard",
+      role: null,
+    }
+
+    const safeCurrentUserProfile = (currentUserProfile as LeaderboardProfileRow | null) || fallbackProfile
+    const currentUserDisplayName = getDisplayName(safeCurrentUserProfile)
+    const currentUserMembership = getMembership(safeCurrentUserProfile)
 
     return NextResponse.json({
       ok: true,
@@ -185,21 +196,25 @@ export async function GET() {
         id: user.id,
         rank: yourRank,
         display_name: currentUserDisplayName,
-        username: currentUserProfile?.username || null,
-        avatar_url: currentUserProfile?.avatar_url || null,
+        username: safeCurrentUserProfile.username || null,
+        avatar_url: safeCurrentUserProfile.avatar_url || null,
         initials: getInitials(currentUserDisplayName),
         coins: currentUserCoins,
-        membership: getMembership(currentUserProfile || { id: user.id }),
-        membership_label: getMembershipLabel(
-          getMembership(currentUserProfile || { id: user.id })
-        ),
+        membership: currentUserMembership,
+        membership_label: getMembershipLabel(currentUserMembership),
       },
     })
   } catch (error) {
     console.error("Leaderboard route error:", error)
 
     return NextResponse.json(
-      { ok: false, error: "Failed to load leaderboard" },
+      {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to load leaderboard",
+      },
       { status: 500 }
     )
   }
