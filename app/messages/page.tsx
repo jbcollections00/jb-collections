@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   Check,
@@ -140,7 +140,7 @@ const EMOJIS = [
   "😅",
 ]
 
-export default function MessagesPage() {
+function MessagesPageContent() {
   const supabase = createClient()
   const router = useRouter()
   const pathname = usePathname()
@@ -3585,5 +3585,29 @@ export default function MessagesPage() {
         )}
       </main>
     </>
+  )
+}
+
+export default function MessagesPage() {
+  return (
+    <Suspense
+      fallback={
+        <>
+          <SiteHeader />
+          <main className="min-h-screen bg-[#020617] pt-24 text-white sm:pt-28">
+            <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(99,102,241,0.18),_transparent_30%),linear-gradient(180deg,_#030712_0%,_#020617_45%,_#061229_100%)]" />
+            <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-[1800px] items-center justify-center px-4 pb-6 sm:px-6 sm:pb-8 lg:px-8">
+              <div className="w-full max-w-xl rounded-[30px] border border-white/10 bg-white/[0.04] px-6 py-14 text-center shadow-[0_25px_80px_rgba(0,0,0,0.35)] backdrop-blur-md">
+                <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-sky-300/80">Messenger</div>
+                <h2 className="mt-3 text-2xl font-black text-white">Loading messages...</h2>
+                <p className="mt-2 text-sm text-slate-300">Please wait while we open your conversations.</p>
+              </div>
+            </div>
+          </main>
+        </>
+      }
+    >
+      <MessagesPageContent />
+    </Suspense>
   )
 }
