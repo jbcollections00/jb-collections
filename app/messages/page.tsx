@@ -697,16 +697,23 @@ export default function MessagesPage() {
           ? requestedConversationId
           : loadedConversations[0].conversation.id
 
-        syncConversationUrl(initialConversationId, "replace")
-        setSelectedConversationId(initialConversationId)
-        await loadMessages(initialConversationId, false)
-        await loadMessageReactions(initialConversationId)
+        if (initialConversationId) {
+          const conversationId = initialConversationId
+
+          syncConversationUrl(conversationId, "replace")
+          setSelectedConversationId(conversationId)
+          await loadMessages(conversationId, false)
+          await loadMessageReactions(conversationId)
+        } else {
+          syncConversationUrl(null, "replace")
+          setSelectedConversationId(null)
+          setMessages([])
+          setMessageReactionsMap({})
+        }
       } else {
         syncConversationUrl(null, "replace")
         setSelectedConversationId(null)
         setMessages([])
-        setMessageReactionsMap({})
-        setMessageReactionsMap({})
         setMessageReactionsMap({})
       }
 
