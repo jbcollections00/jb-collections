@@ -101,6 +101,18 @@ export default function DownloadPageClient() {
     [clearRewardNoticeTimer]
   )
 
+  function dispatchCoinPopup(amount: number, label: string) {
+    if (typeof window === "undefined") return
+
+    window.dispatchEvent(
+      new CustomEvent("jb-coins-popup", {
+        detail: { amount, label },
+      })
+    )
+
+    window.dispatchEvent(new Event("jb-coins-updated"))
+  }
+
   useEffect(() => {
     return () => {
       clearRewardNoticeTimer()
@@ -131,11 +143,13 @@ export default function DownloadPageClient() {
 
     if (rewarded) {
       showRewardNotice(`+${rewardAmount} JB Coins earned`, "success")
+      dispatchCoinPopup(rewardAmount, "Download reward")
       return
     }
 
     if (alreadyRewardedToday) {
       showRewardNotice("Already rewarded today", "info")
+      dispatchCoinPopup(0, "Already rewarded today")
     }
   }, [searchParams, showRewardNotice])
 
@@ -381,9 +395,12 @@ export default function DownloadPageClient() {
       }
 
       if (data?.rewarded) {
-        showRewardNotice(`+${data.rewardAmount ?? 5} JB Coins earned`, "success")
+        const rewardAmount = Number(data.rewardAmount ?? 5)
+        showRewardNotice(`+${rewardAmount} JB Coins earned`, "success")
+        dispatchCoinPopup(rewardAmount, "Download reward")
       } else if (data?.alreadyRewardedToday) {
         showRewardNotice("Already rewarded today", "info")
+        dispatchCoinPopup(0, "Already rewarded today")
       }
 
       window.setTimeout(() => {
@@ -562,7 +579,9 @@ export default function DownloadPageClient() {
                           disabled={startingDownload}
                           className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-6 py-3 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {startingDownload ? "Starting download..." : "Download Now"}
+                          {startingDownload
+                            ? "Starting download..."
+                            : "Download Now (+5 🪙 reward)"}
                         </button>
                       )}
 
@@ -583,7 +602,9 @@ export default function DownloadPageClient() {
                         disabled={startingDownload}
                         className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-6 py-3 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {startingDownload ? "Starting download..." : "Download Now"}
+                        {startingDownload
+                          ? "Starting download..."
+                          : "Download Now (+5 🪙 reward)"}
                       </button>
                     </div>
                   )}

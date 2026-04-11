@@ -1,8 +1,8 @@
+
 "use client"
 
-import Link from "next/link"
 import { Suspense, useMemo, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import SiteHeader from "@/app/components/SiteHeader"
 
 type PaymentMethod = "gcash" | "maya"
@@ -25,6 +25,7 @@ function formatCoins(value: number) {
 }
 
 function PaymentPageContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const params = searchParams ?? new URLSearchParams()
 
@@ -44,6 +45,8 @@ function PaymentPageContent() {
   )
   const [receipt, setReceipt] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
 
   const packageDetails = useMemo(
     () => ({
@@ -87,22 +90,34 @@ function PaymentPageContent() {
 
     try {
       setSubmitting(true)
+      setError("")
+      setSuccess("")
 
-      const formData = new FormData()
-      formData.append("subject", `JB Coin Payment - ${packageDetails.label}`)
-      formData.append("message", notes)
-      formData.append("payment_name", payerName)
-      formData.append("payment_method", paymentInfo.label)
-      formData.append("reference_number", referenceNumber)
-      formData.append("amount", String(packageDetails.amount))
-      formData.append("coins", String(packageDetails.coins))
-      formData.append("package_label", packageDetails.label)
-
-      if (receipt) {
-        formData.append("receipt", receipt)
+      if (!payerName.trim()) {
+        throw new Error("Payer name is required.")
       }
 
-      const response = await fetch("/api/upgrades/request", {
+      if (!referenceNumber.trim()) {
+        throw new Error("Reference number is required.")
+      }
+
+      if (!receipt) {
+        throw new Error("Please upload your payment proof.")
+      }
+
+      const formData = new FormData()
+      formData.append("amountPhp", String(packageDetails.amount))
+      formData.append("coins", String(packageDetails.coins))
+      formData.append("label", packageDetails.label)
+      formData.append("paymentMethod", paymentMethod)
+      formData.append("paymentReference", referenceNumber.trim())
+      formData.append("proof", receipt)
+
+      // Extra fields are optional metadata for future backend use.
+      formData.append("payerName", payerName.trim())
+      formData.append("notes", notes.trim())
+
+      const response = await fetch("/api/coin-purchases/create", {
         method: "POST",
         body: formData,
       })
@@ -113,8 +128,7 @@ function PaymentPageContent() {
         throw new Error(result?.error || "Failed to submit payment proof.")
       }
 
-      alert("Payment proof submitted successfully. Please wait for admin confirmation.")
-
+      setSuccess("Payment proof submitted successfully. Please wait for admin confirmation.")
       setPayerName("")
       setReferenceNumber("")
       setNotes(`I paid for ${packageDetails.label} - ${formatCoins(packageDetails.coins)}.`)
@@ -122,9 +136,16 @@ function PaymentPageContent() {
 
       const input = document.getElementById("receipt-upload") as HTMLInputElement | null
       if (input) input.value = ""
-    } catch (error) {
-      console.error("Payment submission failed:", error)
-      alert(error instanceof Error ? error.message : "Failed to submit payment proof.")
+
+      window.scrollTo({ top: 0, behavior: "smooth" })
+    } catch (submitError) {
+      console.error("Payment submission failed:", submitError)
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Failed to submit payment proof."
+      )
+      window.scrollTo({ top: 0, behavior: "smooth" })
     } finally {
       setSubmitting(false)
     }
@@ -135,7 +156,7 @@ function PaymentPageContent() {
       <SiteHeader />
 
       <div className="min-h-screen bg-slate-950 text-white">
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute left-[-120px] top-[80px] h-[260px] w-[260px] rounded-full bg-sky-500/15 blur-3xl" />
           <div className="absolute right-[-120px] top-[140px] h-[260px] w-[260px] rounded-full bg-fuchsia-500/10 blur-3xl" />
           <div className="absolute bottom-[120px] left-[10%] h-[220px] w-[220px] rounded-full bg-cyan-400/10 blur-3xl" />
@@ -143,7 +164,15 @@ function PaymentPageContent() {
 
         <div className="relative px-3 pb-8 pt-20 sm:px-4 sm:pb-10 sm:pt-24 lg:px-6">
           <div className="mx-auto max-w-6xl">
-            <div className="mb-4 flex flex-wrap items-center gap-3"></div>
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => router.back()}
+                className="inline-flex items-center rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/10"
+              >
+                ← Back
+              </button>
+            </div>
 
             <div className="mb-5 overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 p-4 shadow-2xl sm:p-5 lg:p-6">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -183,6 +212,18 @@ function PaymentPageContent() {
                 </div>
               </div>
             </div>
+
+            {success ? (
+              <div className="mb-5 rounded-[22px] border border-emerald-400/20 bg-emerald-500/10 px-4 py-4 text-sm font-bold text-emerald-200">
+                {success}
+              </div>
+            ) : null}
+
+            {error ? (
+              <div className="mb-5 rounded-[22px] border border-red-400/20 bg-red-500/10 px-4 py-4 text-sm font-bold text-red-200">
+                {error}
+              </div>
+            ) : null}
 
             <div className="grid items-start gap-5 xl:grid-cols-[0.92fr_1.08fr]">
               <section className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-900/80 shadow-2xl backdrop-blur">
@@ -247,7 +288,7 @@ function PaymentPageContent() {
                           <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
                             Account Name
                           </div>
-                          <div className="mt-1 text-base font-bold text-white break-words">
+                          <div className="mt-1 break-words text-base font-bold text-white">
                             {paymentInfo.accountName}
                           </div>
                         </div>
@@ -308,7 +349,8 @@ function PaymentPageContent() {
                       <li>• Send the exact amount only.</li>
                       <li>• Make sure the payer name matches your receipt.</li>
                       <li>• Save your transaction reference number.</li>
-                      <li>• Upload a clear screenshot or PDF of your receipt.</li>
+                      <li>• Upload a clear screenshot of your receipt.</li>
+                      <li>• Coins are credited after admin approval.</li>
                     </ul>
                   </div>
                 </div>
@@ -320,7 +362,7 @@ function PaymentPageContent() {
                     Submit Payment Proof
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-slate-400">
-                    Fill in your payment details below so the admin can verify your top-up.
+                    Fill in your payment details below so the admin can verify your JB Coin top-up.
                   </p>
                 </div>
 
@@ -400,13 +442,13 @@ function PaymentPageContent() {
                       id="receipt-upload"
                       required
                       type="file"
-                      accept="image/*,.pdf"
+                      accept="image/png,image/jpeg,image/webp"
                       onChange={(e) => setReceipt(e.target.files?.[0] || null)}
                       className="block w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-slate-300 file:mr-4 file:rounded-xl file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-blue-700"
                     />
 
                     {receipt ? (
-                      <div className="mt-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200 break-words">
+                      <div className="mt-3 break-words rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
                         Selected file: {receipt.name}
                       </div>
                     ) : null}
@@ -436,6 +478,10 @@ function PaymentPageContent() {
                   >
                     {submitting ? "Submitting..." : "Submit Payment Proof"}
                   </button>
+
+                  <div className="rounded-[22px] border border-cyan-400/20 bg-cyan-500/10 p-4 text-sm text-cyan-100">
+                    After approval, your JB Coins will be credited securely to your account.
+                  </div>
                 </form>
               </section>
             </div>
@@ -460,7 +506,7 @@ function PaymentPageFallback() {
       <SiteHeader />
 
       <div className="min-h-screen bg-slate-950 text-white">
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute left-[-120px] top-[80px] h-[260px] w-[260px] rounded-full bg-sky-500/15 blur-3xl" />
           <div className="absolute right-[-120px] top-[140px] h-[260px] w-[260px] rounded-full bg-fuchsia-500/10 blur-3xl" />
           <div className="absolute bottom-[120px] left-[10%] h-[220px] w-[220px] rounded-full bg-cyan-400/10 blur-3xl" />
@@ -487,11 +533,11 @@ function PaymentPageFallback() {
             </div>
 
             <div className="grid items-start gap-5 xl:grid-cols-[0.92fr_1.08fr]">
-              <section className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-900/80 shadow-2xl backdrop-blur p-6">
+              <section className="rounded-[24px] border border-white/10 bg-slate-900/80 p-6 shadow-2xl backdrop-blur">
                 <div className="text-sm text-slate-300">Loading payment options...</div>
               </section>
 
-              <section className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-900/80 shadow-2xl backdrop-blur p-6">
+              <section className="rounded-[24px] border border-white/10 bg-slate-900/80 p-6 shadow-2xl backdrop-blur">
                 <div className="text-sm text-slate-300">Loading payment form...</div>
               </section>
             </div>

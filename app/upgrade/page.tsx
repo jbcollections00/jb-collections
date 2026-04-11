@@ -189,7 +189,7 @@ function StorePageContent() {
                         onClick={() => handleBuyClick(item.id)}
                         className={`inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r px-5 py-3 text-sm font-black text-white shadow-lg transition hover:opacity-95 ${item.gradient}`}
                       >
-                        Buy ₱{item.php} Package
+                        Buy ₱{item.php} Package • Get Coins
                       </button>
                     </div>
                   </article>

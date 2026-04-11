@@ -21,6 +21,16 @@ type FloatingCoin = {
   rotate: number
 }
 
+type ParticipantRow = {
+  conversation_id: string
+  last_read_at: string | null
+}
+
+type CoinPopupDetail = {
+  amount?: number
+  label?: string
+}
+
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "🏠" },
   { label: "Profile", href: "/profile", icon: "👤" },
@@ -39,13 +49,20 @@ export default function SiteHeader() {
   const [loggingOut, setLoggingOut] = useState(false)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [coins, setCoins] = useState(0)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   const [showCoinPopup, setShowCoinPopup] = useState(false)
   const [coinPopupAmount, setCoinPopupAmount] = useState(0)
+  const [coinPopupLabel, setCoinPopupLabel] = useState("JB Coins updated")
   const [burstCoins, setBurstCoins] = useState<FloatingCoin[]>([])
+
+  const [walletAnimate, setWalletAnimate] = useState(false)
+  const [walletShake, setWalletShake] = useState(false)
 
   const popupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const burstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const walletPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const walletShakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   function clearPopupTimers() {
     if (popupTimerRef.current) {
@@ -57,10 +74,45 @@ export default function SiteHeader() {
       clearTimeout(burstTimerRef.current)
       burstTimerRef.current = null
     }
+
+    if (walletPulseTimerRef.current) {
+      clearTimeout(walletPulseTimerRef.current)
+      walletPulseTimerRef.current = null
+    }
+
+    if (walletShakeTimerRef.current) {
+      clearTimeout(walletShakeTimerRef.current)
+      walletShakeTimerRef.current = null
+    }
+  }
+
+  function triggerWalletPulse() {
+    setWalletAnimate(true)
+
+    if (walletPulseTimerRef.current) {
+      clearTimeout(walletPulseTimerRef.current)
+    }
+
+    walletPulseTimerRef.current = setTimeout(() => {
+      setWalletAnimate(false)
+    }, 700)
+  }
+
+  function triggerWalletShake() {
+    setWalletShake(true)
+
+    if (walletShakeTimerRef.current) {
+      clearTimeout(walletShakeTimerRef.current)
+    }
+
+    walletShakeTimerRef.current = setTimeout(() => {
+      setWalletShake(false)
+    }, 550)
   }
 
   function createCoinBurst(amount: number) {
-    const total = Math.min(Math.max(amount + 4, 8), 18)
+    const safeAmount = Math.abs(amount)
+    const total = Math.min(Math.max(safeAmount + 4, 8), 18)
 
     const items: FloatingCoin[] = Array.from({ length: total }).map((_, index) => ({
       id: Date.now() + index,
@@ -78,21 +130,78 @@ export default function SiteHeader() {
     }, 2600)
   }
 
-  function showAnimatedCoinPopup(amount: number) {
-    if (!amount || amount <= 0) return
+  function showAnimatedCoinPopup(amount: number, label?: string) {
+    if (amount === 0) {
+      triggerWalletShake()
+      return
+    }
 
     clearPopupTimers()
     setCoinPopupAmount(amount)
+    setCoinPopupLabel(label?.trim() || (amount > 0 ? "JB Coins earned" : "JB Coins spent"))
     setShowCoinPopup(true)
     createCoinBurst(amount)
+
+    if (amount > 0) {
+      triggerWalletPulse()
+    } else {
+      triggerWalletShake()
+    }
 
     popupTimerRef.current = setTimeout(() => {
       setShowCoinPopup(false)
     }, 2200)
   }
 
+  async function loadUnreadCount(userId: string) {
+    try {
+      const { data: participants, error: participantsError } = await supabase
+        .from("conversation_participants")
+        .select("conversation_id, last_read_at")
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+
+      if (participantsError) {
+        throw participantsError
+      }
+
+      const participantRows = (participants as ParticipantRow[]) || []
+
+      if (participantRows.length === 0) {
+        setUnreadCount(0)
+        return
+      }
+
+      let totalUnread = 0
+
+      for (const row of participantRows) {
+        const since = row.last_read_at || "1970-01-01T00:00:00.000Z"
+
+        const { count, error: countError } = await supabase
+          .from("conversation_messages")
+          .select("*", { count: "exact", head: true })
+          .eq("conversation_id", row.conversation_id)
+          .is("deleted_at", null)
+          .neq("sender_id", userId)
+          .gt("created_at", since)
+
+        if (countError) {
+          throw countError
+        }
+
+        totalUnread += count || 0
+      }
+
+      setUnreadCount(totalUnread)
+    } catch (error) {
+      console.error("Failed to load unread count:", error)
+      setUnreadCount(0)
+    }
+  }
+
   useEffect(() => {
     let active = true
+    let currentUserId: string | null = null
 
     async function loadProfile() {
       const {
@@ -100,6 +209,8 @@ export default function SiteHeader() {
       } = await supabase.auth.getUser()
 
       if (!user || !active) return
+
+      currentUserId = user.id
 
       const { data } = await supabase
         .from("profiles")
@@ -111,37 +222,70 @@ export default function SiteHeader() {
         setProfile((data as UserProfile | null) || null)
         setCoins(Number(data?.coins || 0))
       }
+
+      await loadUnreadCount(user.id)
     }
 
-    loadProfile()
+    void loadProfile()
 
     function handleCoinUpdate() {
-      loadProfile()
+      void loadProfile()
+      triggerWalletPulse()
     }
 
     function handleDailyRewardClaimed(event: Event) {
       const customEvent = event as CustomEvent<{
         coins?: number
+        label?: string
       }>
       const amount = Number(customEvent.detail?.coins || 0)
+      const label = customEvent.detail?.label || "Daily reward claimed"
 
-      loadProfile()
-      showAnimatedCoinPopup(amount)
+      void loadProfile()
+      showAnimatedCoinPopup(amount, label)
     }
 
     function handleGenericCoinPopup(event: Event) {
-      const customEvent = event as CustomEvent<{
-        amount?: number
-      }>
+      const customEvent = event as CustomEvent<CoinPopupDetail>
       const amount = Number(customEvent.detail?.amount || 0)
+      const label = customEvent.detail?.label || ""
 
-      loadProfile()
-      showAnimatedCoinPopup(amount)
+      void loadProfile()
+      showAnimatedCoinPopup(amount, label)
+    }
+
+    function handleManualUnreadRefresh() {
+      if (currentUserId) {
+        void loadUnreadCount(currentUserId)
+      }
     }
 
     window.addEventListener("jb-coins-updated", handleCoinUpdate)
     window.addEventListener("jb-daily-reward-claimed", handleDailyRewardClaimed as EventListener)
     window.addEventListener("jb-coins-popup", handleGenericCoinPopup as EventListener)
+    window.addEventListener("jb-messages-updated", handleManualUnreadRefresh)
+
+    const channel = supabase
+      .channel("site-header-unread")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversation_messages" },
+        async () => {
+          if (currentUserId) {
+            await loadUnreadCount(currentUserId)
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversation_participants" },
+        async () => {
+          if (currentUserId) {
+            await loadUnreadCount(currentUserId)
+          }
+        }
+      )
+      .subscribe()
 
     return () => {
       active = false
@@ -149,6 +293,8 @@ export default function SiteHeader() {
       window.removeEventListener("jb-coins-updated", handleCoinUpdate)
       window.removeEventListener("jb-daily-reward-claimed", handleDailyRewardClaimed as EventListener)
       window.removeEventListener("jb-coins-popup", handleGenericCoinPopup as EventListener)
+      window.removeEventListener("jb-messages-updated", handleManualUnreadRefresh)
+      void supabase.removeChannel(channel)
     }
   }, [supabase])
 
@@ -171,6 +317,12 @@ export default function SiteHeader() {
       setMobileMenuOpen(false)
     }
   }
+
+  const displayName =
+    profile?.full_name?.trim() ||
+    profile?.name?.trim() ||
+    profile?.username?.trim() ||
+    "User"
 
   return (
     <>
@@ -200,8 +352,50 @@ export default function SiteHeader() {
           }
         }
 
+        @keyframes jbWalletPulse {
+          0% {
+            transform: scale(1);
+            box-shadow: 0 0 0 rgba(251, 191, 36, 0);
+          }
+          45% {
+            transform: scale(1.08);
+            box-shadow: 0 0 28px rgba(251, 191, 36, 0.45);
+          }
+          100% {
+            transform: scale(1);
+            box-shadow: 0 0 0 rgba(251, 191, 36, 0);
+          }
+        }
+
+        @keyframes jbWalletShake {
+          0%,
+          100% {
+            transform: translateX(0);
+          }
+          20% {
+            transform: translateX(-5px);
+          }
+          40% {
+            transform: translateX(5px);
+          }
+          60% {
+            transform: translateX(-4px);
+          }
+          80% {
+            transform: translateX(4px);
+          }
+        }
+
         .jb-coin-popup-in {
           animation: jbCoinPopupIn 0.28s ease-out;
+        }
+
+        .jb-wallet-pulse {
+          animation: jbWalletPulse 0.7s ease-out;
+        }
+
+        .jb-wallet-shake {
+          animation: jbWalletShake 0.55s ease-in-out;
         }
       `}</style>
 
@@ -219,7 +413,12 @@ export default function SiteHeader() {
               </div>
             </Link>
 
-            <div className="hidden items-center gap-2 rounded-full border border-white/20 bg-black/30 px-4 py-2 lg:flex">
+            <div
+              className={`hidden items-center gap-2 rounded-full border border-white/20 bg-black/30 px-4 py-2 transition lg:flex ${
+                walletAnimate ? "jb-wallet-pulse" : ""
+              } ${walletShake ? "jb-wallet-shake" : ""}`}
+              title={`${displayName} • ${coins.toLocaleString()} JB Coins`}
+            >
               <img src="/jb-coin.png" alt="JB Coin" className="h-5 w-5 object-contain" />
               <span className="text-sm font-bold text-yellow-300">
                 {coins.toLocaleString()} JB
@@ -237,12 +436,13 @@ export default function SiteHeader() {
             <div className="hidden items-center gap-2 lg:flex">
               {navItems.map((item) => {
                 const active = isActive(item.href)
+                const isMessages = item.href === "/messages"
 
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition ${
+                    className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
                       active
                         ? "bg-white text-blue-700 shadow-sm"
                         : "bg-white/10 text-white hover:bg-white/20"
@@ -250,6 +450,12 @@ export default function SiteHeader() {
                   >
                     <span>{item.icon}</span>
                     <span>{item.label}</span>
+
+                    {isMessages && unreadCount > 0 && (
+                      <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold leading-none text-white shadow-[0_4px_14px_rgba(239,68,68,0.45)]">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
+                    )}
                   </Link>
                 )
               })}
@@ -257,7 +463,7 @@ export default function SiteHeader() {
               <button
                 onClick={handleLogout}
                 disabled={loggingOut}
-                className="inline-flex items-center rounded-full bg-red-500 px-5 py-2 text-xs font-bold text-white hover:bg-red-600"
+                className="inline-flex items-center rounded-full bg-red-500 px-5 py-2 text-xs font-bold text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {loggingOut ? "..." : "Logout"}
               </button>
@@ -267,21 +473,37 @@ export default function SiteHeader() {
           {mobileMenuOpen && (
             <div className="border-t border-white/15 px-4 pb-4 pt-3 lg:hidden">
               <div className="grid gap-2">
-                <div className="flex items-center gap-2 rounded-xl bg-black/30 px-4 py-2 font-bold text-yellow-300">
+                <div
+                  className={`flex items-center gap-2 rounded-xl bg-black/30 px-4 py-2 font-bold text-yellow-300 transition ${
+                    walletAnimate ? "jb-wallet-pulse" : ""
+                  } ${walletShake ? "jb-wallet-shake" : ""}`}
+                >
                   <img src="/jb-coin.png" alt="JB Coin" className="h-5 w-5 object-contain" />
                   {coins.toLocaleString()} JB Coins
                 </div>
 
-                {navItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white"
-                  >
-                    {item.icon} {item.label}
-                  </Link>
-                ))}
+                {navItems.map((item) => {
+                  const isMessages = item.href === "/messages"
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center justify-between rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      <span>
+                        {item.icon} {item.label}
+                      </span>
+
+                      {isMessages && unreadCount > 0 && (
+                        <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold leading-none text-white shadow-[0_4px_14px_rgba(239,68,68,0.45)]">
+                          {unreadCount > 99 ? "99+" : unreadCount}
+                        </span>
+                      )}
+                    </Link>
+                  )
+                })}
 
                 <button
                   onClick={handleLogout}
@@ -303,8 +525,16 @@ export default function SiteHeader() {
               alt="JB Coin"
               className="mx-auto h-10 w-10 object-contain"
             />
-            <div className="mt-1 text-sm font-bold text-amber-300">
-              +{coinPopupAmount} JB Coins
+            <div
+              className={`mt-1 text-sm font-bold ${
+                coinPopupAmount >= 0 ? "text-amber-300" : "text-red-300"
+              }`}
+            >
+              {coinPopupAmount > 0 ? "+" : ""}
+              {coinPopupAmount} JB Coins
+            </div>
+            <div className="mt-1 text-[11px] font-semibold text-white/70">
+              {coinPopupLabel}
             </div>
           </div>
         </div>

@@ -11,6 +11,11 @@ type DailyRewardRow = {
   created_at: string | null
 }
 
+type CoinSettingRow = {
+  key: string
+  value_integer: number | null
+}
+
 function requireEnv(name: string) {
   const value = process.env[name]
   if (!value) {
@@ -84,19 +89,31 @@ function shiftDateString(dateString: string, days: number) {
   return `${yyyy}-${mm}-${dd}`
 }
 
-function getBaseDailyCoins() {
-  return 15
+function getDefaultCoinSettings() {
+  return {
+    daily_reward_base: 15,
+    streak_bonus_3: 10,
+    streak_bonus_7: 40,
+    streak_bonus_14: 75,
+    streak_bonus_30: 200,
+  }
 }
 
-function getStreakBonus(streak: number) {
-  if (streak > 0 && streak % 30 === 0) return 200
-  if (streak > 0 && streak % 14 === 0) return 75
-  if (streak > 0 && streak % 7 === 0) return 40
-  if (streak > 0 && streak % 3 === 0) return 10
+function getStreakBonus(
+  streak: number,
+  settings: ReturnType<typeof getDefaultCoinSettings>
+) {
+  if (streak > 0 && streak % 30 === 0) return settings.streak_bonus_30
+  if (streak > 0 && streak % 14 === 0) return settings.streak_bonus_14
+  if (streak > 0 && streak % 7 === 0) return settings.streak_bonus_7
+  if (streak > 0 && streak % 3 === 0) return settings.streak_bonus_3
   return 0
 }
 
-function getNextStreakMilestone(streak: number) {
+function getNextStreakMilestone(
+  streak: number,
+  settings: ReturnType<typeof getDefaultCoinSettings>
+) {
   const milestones = [3, 7, 14, 30]
 
   for (const milestone of milestones) {
@@ -104,7 +121,7 @@ function getNextStreakMilestone(streak: number) {
       return {
         target: milestone,
         remaining: milestone - streak,
-        bonus: getStreakBonus(milestone),
+        bonus: getStreakBonus(milestone, settings),
       }
     }
   }
@@ -113,7 +130,7 @@ function getNextStreakMilestone(streak: number) {
   return {
     target: next30,
     remaining: next30 - streak,
-    bonus: getStreakBonus(next30),
+    bonus: getStreakBonus(next30, settings),
   }
 }
 
@@ -194,6 +211,48 @@ function createSupabaseAdminClient() {
   })
 }
 
+async function loadCoinSettings(
+  adminDb: ReturnType<typeof createSupabaseAdminClient>
+) {
+  const defaults = getDefaultCoinSettings()
+
+  const { data, error } = await adminDb
+    .from("jb_coin_settings")
+    .select("key, value_integer")
+    .in("key", [
+      "daily_reward_base",
+      "streak_bonus_3",
+      "streak_bonus_7",
+      "streak_bonus_14",
+      "streak_bonus_30",
+    ])
+
+  if (error) {
+    console.error("Failed to load coin settings:", error)
+    return defaults
+  }
+
+  const rows = (Array.isArray(data) ? data : []) as CoinSettingRow[]
+
+  return {
+    daily_reward_base:
+      rows.find((row) => row.key === "daily_reward_base")?.value_integer ??
+      defaults.daily_reward_base,
+    streak_bonus_3:
+      rows.find((row) => row.key === "streak_bonus_3")?.value_integer ??
+      defaults.streak_bonus_3,
+    streak_bonus_7:
+      rows.find((row) => row.key === "streak_bonus_7")?.value_integer ??
+      defaults.streak_bonus_7,
+    streak_bonus_14:
+      rows.find((row) => row.key === "streak_bonus_14")?.value_integer ??
+      defaults.streak_bonus_14,
+    streak_bonus_30:
+      rows.find((row) => row.key === "streak_bonus_30")?.value_integer ??
+      defaults.streak_bonus_30,
+  }
+}
+
 async function loadRecentDailyRewardDates(
   adminDb: ReturnType<typeof createSupabaseAdminClient>,
   userId: string
@@ -233,11 +292,12 @@ export async function GET() {
     }
 
     const adminDb = createSupabaseAdminClient()
+    const settings = await loadCoinSettings(adminDb)
 
     const today = getManilaDateString()
     const tomorrow = getTomorrowManilaDateString()
     const { start, end } = getManilaDayRange()
-    const baseCoins = getBaseDailyCoins()
+    const baseCoins = Number(settings.daily_reward_base || 0)
 
     const { data: claimRow, error: claimError } = await supabase
       .from("coin_history")
@@ -260,7 +320,7 @@ export async function GET() {
 
     const rewardDates = await loadRecentDailyRewardDates(adminDb, user.id)
     const streakInfo = buildStreakFromDates(rewardDates, today)
-    const nextMilestone = getNextStreakMilestone(streakInfo.streak)
+    const nextMilestone = getNextStreakMilestone(streakInfo.streak, settings)
 
     return NextResponse.json({
       ok: true,
@@ -277,6 +337,7 @@ export async function GET() {
       claimedAt: claimRow?.created_at ?? null,
       lastClaimDate: streakInfo.lastClaimDate,
       nextMilestone,
+      settings,
     })
   } catch (error) {
     console.error("Daily reward GET route error:", error)
@@ -311,10 +372,11 @@ export async function POST() {
     }
 
     const adminDb = createSupabaseAdminClient()
+    const settings = await loadCoinSettings(adminDb)
 
     const today = getManilaDateString()
     const tomorrow = getTomorrowManilaDateString()
-    const baseCoins = getBaseDailyCoins()
+    const baseCoins = Number(settings.daily_reward_base || 0)
     const { start, end } = getManilaDayRange()
 
     const { data: existingClaim, error: existingClaimError } = await adminDb
@@ -340,7 +402,7 @@ export async function POST() {
     const currentStreakInfo = buildStreakFromDates(rewardDatesBeforeClaim, today)
 
     if (existingClaim) {
-      const nextMilestone = getNextStreakMilestone(currentStreakInfo.streak)
+      const nextMilestone = getNextStreakMilestone(currentStreakInfo.streak, settings)
 
       return NextResponse.json({
         ok: true,
@@ -355,6 +417,7 @@ export async function POST() {
         claimedAt: existingClaim.created_at ?? null,
         lastClaimDate: currentStreakInfo.lastClaimDate,
         nextMilestone,
+        settings,
         message: "You already claimed today’s daily reward.",
       })
     }
@@ -377,7 +440,7 @@ export async function POST() {
     }
 
     if (!allowed) {
-      const nextMilestone = getNextStreakMilestone(currentStreakInfo.streak)
+      const nextMilestone = getNextStreakMilestone(currentStreakInfo.streak, settings)
 
       return NextResponse.json({
         ok: true,
@@ -392,6 +455,7 @@ export async function POST() {
         claimedAt: null,
         lastClaimDate: currentStreakInfo.lastClaimDate,
         nextMilestone,
+        settings,
         message: "You already claimed today’s daily reward.",
       })
     }
@@ -400,7 +464,7 @@ export async function POST() {
       ? currentStreakInfo.streak + 1
       : 1
 
-    const streakBonus = getStreakBonus(newStreak)
+    const streakBonus = getStreakBonus(newStreak, settings)
     const totalReward = baseCoins + streakBonus
 
     const { error: rewardError } = await adminDb.rpc("handle_coin_change", {
@@ -436,7 +500,7 @@ export async function POST() {
       console.error("Daily reward new claim fetch error:", newClaimError)
     }
 
-    const nextMilestone = getNextStreakMilestone(newStreak)
+    const nextMilestone = getNextStreakMilestone(newStreak, settings)
 
     return NextResponse.json({
       ok: true,
@@ -451,6 +515,7 @@ export async function POST() {
       claimedAt: newClaim?.created_at ?? null,
       lastClaimDate: today,
       nextMilestone,
+      settings,
       message:
         streakBonus > 0
           ? `Daily reward claimed. Streak day ${newStreak} bonus unlocked!`

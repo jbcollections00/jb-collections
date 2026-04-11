@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase-server"
+import PublicProfileActions from "@/app/components/PublicProfileActions"
 
 type ProfileRow = {
   id: string
@@ -60,6 +61,10 @@ export default async function PublicProfilePage({
     notFound()
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   const { data, error } = await supabase
     .from("profiles")
     .select(
@@ -76,29 +81,35 @@ export default async function PublicProfilePage({
   const initials = getInitials(displayName)
   const membership = getMembership(data)
   const status = data.account_status || data.status || "Active"
+  const isOwner = Boolean(user?.id && user.id === data.id)
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
+      <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_25%),radial-gradient(circle_at_top_right,_rgba(99,102,241,0.18),_transparent_28%),linear-gradient(180deg,_#020617_0%,_#020617_55%,_#030712_100%)]" />
+
       <div className="mx-auto max-w-5xl px-4 py-10">
         <div className="mb-6">
           <Link
-            href="/profile"
+            href={isOwner ? "/profile" : "/dashboard"}
             className="inline-flex rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
           >
-            Back to Profile
+            {isOwner ? "Back to Profile" : "Back"}
           </Link>
         </div>
 
-        <section className="overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.22),transparent_32%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.18),transparent_28%),linear-gradient(135deg,#0f172a_0%,#111827_55%,#020617_100%)] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
+        <section className="relative overflow-hidden rounded-[34px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.26),transparent_30%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.22),transparent_28%),linear-gradient(135deg,#0f172a_0%,#111827_55%,#020617_100%)] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+          <div className="pointer-events-none absolute -left-10 top-10 h-48 w-48 rounded-full bg-cyan-400/10 blur-3xl" />
+          <div className="pointer-events-none absolute -right-10 top-0 h-56 w-56 rounded-full bg-violet-500/10 blur-3xl" />
+
+          <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center">
             {data.avatar_url ? (
               <img
                 src={data.avatar_url}
                 alt={displayName}
-                className="h-28 w-28 rounded-[28px] object-cover ring-2 ring-white/20"
+                className="h-28 w-28 rounded-[28px] object-cover ring-2 ring-white/20 shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
               />
             ) : (
-              <div className="flex h-28 w-28 items-center justify-center rounded-[28px] bg-white/10 text-3xl font-black ring-1 ring-white/10">
+              <div className="flex h-28 w-28 items-center justify-center rounded-[28px] bg-white/10 text-3xl font-black ring-1 ring-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
                 {initials}
               </div>
             )}
@@ -125,9 +136,15 @@ export default async function PublicProfilePage({
             </div>
           </div>
 
-          <div className="mt-6 rounded-[24px] border border-white/10 bg-white/5 p-4 text-sm text-white/90">
+          <div className="mt-6 rounded-[24px] border border-white/10 bg-white/5 p-4 text-sm leading-7 text-white/90 backdrop-blur-sm">
             {data.bio?.trim() || "This user has not added a bio yet."}
           </div>
+
+          <PublicProfileActions
+            username={normalizedUsername}
+            displayName={displayName}
+            isOwner={isOwner}
+          />
         </section>
       </div>
     </div>

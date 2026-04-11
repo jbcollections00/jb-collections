@@ -9,8 +9,10 @@ const navItems = [
   { label: "Dashboard", href: "/admin", icon: "🏠" },
   { label: "Categories", href: "/admin/categories", icon: "📂" },
 
-  // 🔥 ADD THIS
   { label: "Payments", href: "/admin/upgrades", icon: "💰" },
+
+  // 🔥 NEW (COIN PURCHASE SYSTEM)
+  { label: "Coin Purchases", href: "/admin/coin-purchases", icon: "🪙" },
 
   { label: "Messages", href: "/admin/messages", icon: "💬" },
   { label: "Upload Files", href: "/admin/files", icon: "📁" },

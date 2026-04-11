@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase-server"
 import { getSignedDownloadUrl } from "@/lib/r2"
@@ -36,6 +37,19 @@ type FileVersionRow = {
   mime_type?: string | null
   file_size_bytes?: number | null
   is_current?: boolean | null
+}
+
+type RewardResultReason =
+  | "awarded"
+  | "admin_skipped"
+  | "limit_disabled"
+  | "missing_env"
+  | "daily_limit_reached"
+  | "already_rewarded_today"
+
+type RewardResult = {
+  awarded: number
+  reason: RewardResultReason
 }
 
 function normalizeSiteUrl(url: string) {
@@ -92,18 +106,18 @@ async function awardDownloadCoins(params: {
   fileId: string
   fileTitle: string
   membershipLevel: MembershipLevel
-}) {
+}): Promise<RewardResult> {
   const { userId, fileId, fileTitle, membershipLevel } = params
 
   if (membershipLevel === "admin") {
-    return { awarded: 0, reason: "admin_skipped" as const }
+    return { awarded: 0, reason: "admin_skipped" }
   }
 
   const rewardAmount = 5
   const dailyLimit = getDailyDownloadRewardLimit(membershipLevel)
 
   if (dailyLimit <= 0) {
-    return { awarded: 0, reason: "limit_disabled" as const }
+    return { awarded: 0, reason: "limit_disabled" }
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -111,7 +125,7 @@ async function awardDownloadCoins(params: {
 
   if (!supabaseUrl || !serviceRoleKey) {
     console.warn("Download reward skipped: missing service role env vars.")
-    return { awarded: 0, reason: "missing_env" as const }
+    return { awarded: 0, reason: "missing_env" }
   }
 
   const adminDb = createSupabaseAdmin(supabaseUrl, serviceRoleKey, {
@@ -134,7 +148,7 @@ async function awardDownloadCoins(params: {
   }
 
   if (!allowed) {
-    return { awarded: 0, reason: "daily_limit_reached" as const }
+    return { awarded: 0, reason: "daily_limit_reached" }
   }
 
   const { data: existingReward, error: existingRewardError } = await adminDb
@@ -150,7 +164,7 @@ async function awardDownloadCoins(params: {
   }
 
   if (existingReward) {
-    return { awarded: 0, reason: "already_rewarded_today" as const }
+    return { awarded: 0, reason: "already_rewarded_today" }
   }
 
   const { error: insertRewardError } = await adminDb.from("download_rewards").insert({
@@ -161,7 +175,7 @@ async function awardDownloadCoins(params: {
 
   if (insertRewardError) {
     if ((insertRewardError as { code?: string }).code === "23505") {
-      return { awarded: 0, reason: "already_rewarded_today" as const }
+      return { awarded: 0, reason: "already_rewarded_today" }
     }
 
     throw new Error(insertRewardError.message || "Failed creating download reward marker.")
@@ -185,7 +199,7 @@ async function awardDownloadCoins(params: {
     throw new Error(coinError.message || "Failed rewarding download coins.")
   }
 
-  return { awarded: rewardAmount, reason: "awarded" as const }
+  return { awarded: rewardAmount, reason: "awarded" }
 }
 
 export async function GET(
@@ -198,6 +212,9 @@ export async function GET(
     if (!fileId) {
       return NextResponse.json({ error: "Missing file id" }, { status: 400 })
     }
+
+    const url = new URL(req.url)
+    const mode = url.searchParams.get("mode")
 
     const referer = req.headers.get("referer") || ""
     const allowedHost = normalizeSiteUrl(String(process.env.NEXT_PUBLIC_SITE_URL || ""))
@@ -383,6 +400,12 @@ export async function GET(
       })
       .eq("id", fileOnly.id)
 
+    let rewardResponse = {
+      rewarded: false,
+      alreadyRewardedToday: false,
+      rewardAmount: 0,
+    }
+
     try {
       const rewardResult = await awardDownloadCoins({
         userId: user.id,
@@ -392,8 +415,29 @@ export async function GET(
       })
 
       console.log("Download coin reward result:", rewardResult)
+
+      if (rewardResult.awarded > 0) {
+        rewardResponse = {
+          rewarded: true,
+          alreadyRewardedToday: false,
+          rewardAmount: rewardResult.awarded,
+        }
+      } else if (rewardResult.reason === "already_rewarded_today") {
+        rewardResponse = {
+          rewarded: false,
+          alreadyRewardedToday: true,
+          rewardAmount: 0,
+        }
+      }
     } catch (rewardError) {
       console.error("Download coin reward error:", rewardError)
+    }
+
+    if (mode === "json") {
+      return NextResponse.json({
+        downloadUrl: signedUrl,
+        ...rewardResponse,
+      })
     }
 
     return NextResponse.redirect(signedUrl, { status: 302 })

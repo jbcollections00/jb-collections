@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   Check,
   CornerDownLeft,
@@ -83,6 +83,14 @@ type TypingRow = {
   updated_at: string
 }
 
+type MessageReactionRow = {
+  id?: string
+  message_id: string
+  user_id: string
+  emoji: string
+  created_at?: string
+}
+
 type ConversationListItem = {
   conversation: ConversationRow
   participants: ConversationParticipantRow[]
@@ -90,11 +98,14 @@ type ConversationListItem = {
   lastMessage: ConversationMessageRow | null
   myParticipant: ConversationParticipantRow | null
   otherParticipant: ConversationParticipantRow | null
+  unreadCount: number
 }
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024
 const TYPING_STALE_MS = 6000
 const PRESENCE_STALE_MS = 90000
+
+const QUICK_REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "😡"]
 
 const EMOJIS = [
   "😀",
@@ -132,12 +143,20 @@ const EMOJIS = [
 export default function MessagesPage() {
   const supabase = createClient()
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const messageActionTimerRef = useRef<NodeJS.Timeout | null>(null)
   const actionMenuRef = useRef<HTMLDivElement | null>(null)
   const emojiPickerRef = useRef<HTMLDivElement | null>(null)
+  const reactionPickerRef = useRef<HTMLDivElement | null>(null)
+  const lastTapRef = useRef<{ messageId: string; at: number } | null>(null)
+  const reactionBurstTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const notifiedMessageIdsRef = useRef<Set<string>>(new Set())
+  const toastTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
 
   const [userId, setUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -177,10 +196,23 @@ export default function MessagesPage() {
   const [openMessageMenuId, setOpenMessageMenuId] = useState<string | null>(null)
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [openReactionPickerMessageId, setOpenReactionPickerMessageId] = useState<string | null>(null)
+  const [messageReactionsMap, setMessageReactionsMap] = useState<Record<string, MessageReactionRow[]>>({})
+  const [reactionBurst, setReactionBurst] = useState<{ messageId: string; emoji: string; key: string } | null>(null)
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
+  const [showSharedMediaPanel, setShowSharedMediaPanel] = useState(false)
+  const [sharedMediaTab, setSharedMediaTab] = useState<"photos" | "videos" | "audio" | "files">("photos")
+  const [toastNotification, setToastNotification] = useState<{
+    id: string
+    conversationId: string
+    senderName: string
+    text: string
+  } | null>(null)
 
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const [myCoins, setMyCoins] = useState(0)
+  const [coinShake, setCoinShake] = useState(false)
 
   const selectedConversation = useMemo(() => {
     return conversations.find((item) => item.conversation.id === selectedConversationId) || null
@@ -194,13 +226,131 @@ export default function MessagesPage() {
     return next
   }, [messages])
 
+  const totalUnreadCount = useMemo(() => {
+    return conversations.reduce((sum, item) => sum + (item.unreadCount || 0), 0)
+  }, [conversations])
+
+  const conversationFromUrl = searchParams.get("conversation")
+
+  const messageSendCost = editingMessageId ? 0 : attachment ? 10 : 5
+  const canAffordCurrentMessage = editingMessageId ? true : myCoins >= messageSendCost
+
   useEffect(() => {
     initializePage()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
+    if (loading) return
+    if (!conversations.length) return
+    if (!conversationFromUrl) return
+
+    const exists = conversations.some((item) => item.conversation.id === conversationFromUrl)
+    if (!exists) return
+    if (selectedConversationId === conversationFromUrl) return
+
+    setSelectedConversationId(conversationFromUrl)
+    void loadMessages(conversationFromUrl, false)
+    void loadMessageReactions(conversationFromUrl)
+    setMobileChatsOpen(false)
+    setOpenMessageMenuId(null)
+  }, [conversationFromUrl, conversations, loading, selectedConversationId])
+
+  useEffect(() => {
     if (!userId) return
+
+    const showIncomingNotification = (payload: {
+      id: string
+      conversation_id: string
+      sender_id: string | null
+      body: string | null
+      attachment_url: string | null
+    }) => {
+      if (!payload?.id || payload.sender_id === userId) return
+      if (notifiedMessageIdsRef.current.has(payload.id)) return
+      notifiedMessageIdsRef.current.add(payload.id)
+
+      const conversationItem = conversations.find(
+        (item) => item.conversation.id === payload.conversation_id
+      )
+
+      const senderName = getDisplayName(conversationItem?.otherUser || null)
+      const previewText = payload.body?.trim()
+        ? payload.body.trim()
+        : payload.attachment_url
+          ? `Sent ${getAttachmentKind(payload.attachment_url)}`
+          : "New message"
+
+      const shouldPopup =
+        selectedConversationId !== payload.conversation_id || document.hidden
+
+      if (!shouldPopup) return
+
+      if (typeof window !== "undefined") {
+        try {
+          const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+          if (AudioCtx) {
+            if (!audioContextRef.current) {
+              audioContextRef.current = new AudioCtx()
+            }
+            const context = audioContextRef.current
+            if (context.state === "suspended") {
+              void context.resume()
+            }
+            const oscillator = context.createOscillator()
+            const gain = context.createGain()
+            oscillator.type = "sine"
+            oscillator.frequency.setValueAtTime(880, context.currentTime)
+            oscillator.frequency.exponentialRampToValueAtTime(660, context.currentTime + 0.16)
+            gain.gain.setValueAtTime(0.0001, context.currentTime)
+            gain.gain.exponentialRampToValueAtTime(0.06, context.currentTime + 0.02)
+            gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.24)
+            oscillator.connect(gain)
+            gain.connect(context.destination)
+            oscillator.start()
+            oscillator.stop(context.currentTime + 0.24)
+          }
+        } catch (soundError) {
+          console.error("Notification sound error:", soundError)
+        }
+
+        if ("vibrate" in navigator) {
+          navigator.vibrate([120, 70, 120])
+        }
+      }
+
+      setToastNotification({
+        id: payload.id,
+        conversationId: payload.conversation_id,
+        senderName,
+        text: previewText,
+      })
+
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current)
+      }
+
+      toastTimerRef.current = setTimeout(() => {
+        setToastNotification((current) => (current?.id === payload.id ? null : current))
+      }, 4500)
+
+      if (typeof window !== "undefined" && "Notification" in window) {
+        if (Notification.permission === "granted") {
+          const notification = new Notification(senderName, {
+            body: previewText,
+            icon: "/jb-logo.png",
+          })
+
+          notification.onclick = () => {
+            window.focus()
+            void openConversation(payload.conversation_id, "push")
+            notification.close()
+          }
+        } else if (Notification.permission === "default") {
+          void Notification.requestPermission()
+        }
+      }
+    }
 
     const channel = supabase
       .channel(`messenger-user-${userId}`)
@@ -211,6 +361,7 @@ export default function MessagesPage() {
           await loadConversations(userId, false)
           if (selectedConversationId) {
             await loadMessages(selectedConversationId, false)
+            await loadMessageReactions(selectedConversationId)
           }
         }
       )
@@ -221,16 +372,48 @@ export default function MessagesPage() {
           await loadConversations(userId, false)
           if (selectedConversationId) {
             await loadMessages(selectedConversationId, false)
+            await loadMessageReactions(selectedConversationId)
           }
         }
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "conversation_messages" },
+        { event: "INSERT", schema: "public", table: "conversation_messages" },
+        async (payload) => {
+          showIncomingNotification(payload.new as {
+            id: string
+            conversation_id: string
+            sender_id: string | null
+            body: string | null
+            attachment_url: string | null
+          })
+
+          await loadConversations(userId, false)
+          if (selectedConversationId) {
+            await loadMessages(selectedConversationId, false)
+            await loadMessageReactions(selectedConversationId)
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "conversation_messages" },
         async () => {
           await loadConversations(userId, false)
           if (selectedConversationId) {
             await loadMessages(selectedConversationId, false)
+            await loadMessageReactions(selectedConversationId)
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "conversation_messages" },
+        async () => {
+          await loadConversations(userId, false)
+          if (selectedConversationId) {
+            await loadMessages(selectedConversationId, false)
+            await loadMessageReactions(selectedConversationId)
           }
         }
       )
@@ -248,12 +431,35 @@ export default function MessagesPage() {
           await loadTypingStates()
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversation_message_hidden" },
+        async () => {
+          await loadConversations(userId, false)
+          if (selectedConversationId) {
+            await loadMessages(selectedConversationId, false)
+            await loadMessageReactions(selectedConversationId)
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversation_message_reactions" },
+        async () => {
+          if (selectedConversationId) {
+            await loadMessageReactions(selectedConversationId)
+          }
+        }
+      )
       .subscribe()
 
     return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current)
+      }
       supabase.removeChannel(channel)
     }
-  }, [supabase, userId, selectedConversationId])
+  }, [supabase, userId, selectedConversationId, conversations])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -305,6 +511,100 @@ export default function MessagesPage() {
   useEffect(() => {
     if (!userId) return
 
+    const handleCoinsRefresh = () => {
+      void refreshMyCoins(userId)
+    }
+
+    window.addEventListener("jb-coins-updated", handleCoinsRefresh)
+    return () => {
+      window.removeEventListener("jb-coins-updated", handleCoinsRefresh)
+    }
+  }, [userId])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return
+    if (Notification.permission === "default") {
+      void Notification.requestPermission()
+    }
+  }, [])
+
+
+  async function refreshMyCoins(activeUserId: string) {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("coins")
+        .eq("id", activeUserId)
+        .maybeSingle()
+
+      if (error) throw error
+      setMyCoins(Number(data?.coins || 0))
+    } catch (err) {
+      console.error("Refresh coins error:", err)
+    }
+  }
+
+  function emitCoinPopup(amount: number, label: string) {
+    if (typeof window === "undefined") return
+    window.dispatchEvent(
+      new CustomEvent("jb-coins-popup", {
+        detail: { amount, label },
+      })
+    )
+  }
+
+  function triggerCoinShake(messageText: string) {
+    setError(messageText)
+    setCoinShake(true)
+    window.setTimeout(() => setCoinShake(false), 550)
+    emitCoinPopup(0, "Not enough coins")
+  }
+
+
+  function buildConversationUrl(conversationId: string | null) {
+    const params = new URLSearchParams(searchParams.toString())
+
+    if (conversationId) {
+      params.set("conversation", conversationId)
+    } else {
+      params.delete("conversation")
+    }
+
+    const query = params.toString()
+    return query ? `${pathname}?${query}` : pathname
+  }
+
+  function syncConversationUrl(conversationId: string | null, method: "push" | "replace" = "replace") {
+    const nextUrl = buildConversationUrl(conversationId)
+    const currentUrl = typeof window !== "undefined"
+      ? `${window.location.pathname}${window.location.search}`
+      : null
+
+    if (currentUrl === nextUrl) return
+
+    if (method === "push") {
+      router.push(nextUrl, { scroll: false })
+      return
+    }
+
+    router.replace(nextUrl, { scroll: false })
+  }
+
+  async function openConversation(conversationId: string, method: "push" | "replace" = "replace") {
+    syncConversationUrl(conversationId, method)
+    setSelectedConversationId(conversationId)
+    await loadMessages(conversationId, false)
+    await loadMessageReactions(conversationId)
+    setMobileChatsOpen(false)
+    setToastNotification(null)
+    setOpenMessageMenuId(null)
+    setMenuPosition(null)
+    setOpenReactionPickerMessageId(null)
+  }
+
+  useEffect(() => {
+    if (!userId) return
+
     void supabase.rpc("set_my_presence", { p_is_online: true })
 
     const handleVisible = () => {
@@ -333,6 +633,9 @@ export default function MessagesPage() {
       if (messageActionTimerRef.current) {
         clearTimeout(messageActionTimerRef.current)
       }
+      if (reactionBurstTimerRef.current) {
+        clearTimeout(reactionBurstTimerRef.current)
+      }
       if (selectedConversationId) {
         void stopTyping(selectedConversationId)
       }
@@ -351,6 +654,10 @@ export default function MessagesPage() {
 
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(target)) {
         setShowEmojiPicker(false)
+      }
+
+      if (reactionPickerRef.current && !reactionPickerRef.current.contains(target)) {
+        setOpenReactionPickerMessageId(null)
       }
     }
 
@@ -375,16 +682,32 @@ export default function MessagesPage() {
       }
 
       setUserId(user.id)
+      await refreshMyCoins(user.id)
 
       const loadedConversations = await loadConversations(user.id, false)
       await loadPresenceForCurrentConversations()
 
       if (loadedConversations.length > 0) {
-        setSelectedConversationId(loadedConversations[0].conversation.id)
-        await loadMessages(loadedConversations[0].conversation.id, false)
+        const requestedConversationId = searchParams.get("conversation")
+        const requestedConversationExists = requestedConversationId
+          ? loadedConversations.some((item) => item.conversation.id === requestedConversationId)
+          : false
+
+        const initialConversationId = requestedConversationExists
+          ? requestedConversationId
+          : loadedConversations[0].conversation.id
+
+        syncConversationUrl(initialConversationId, "replace")
+        setSelectedConversationId(initialConversationId)
+        await loadMessages(initialConversationId, false)
+        await loadMessageReactions(initialConversationId)
       } else {
+        syncConversationUrl(null, "replace")
         setSelectedConversationId(null)
         setMessages([])
+        setMessageReactionsMap({})
+        setMessageReactionsMap({})
+        setMessageReactionsMap({})
       }
 
       await loadTypingStates()
@@ -449,6 +772,19 @@ export default function MessagesPage() {
 
       const allParticipants = (participantRows as ConversationParticipantRow[]) || []
 
+      const { data: hiddenRows, error: hiddenError } = await supabase
+        .from("conversation_message_hidden")
+        .select("message_id")
+        .eq("user_id", activeUserId)
+
+      if (hiddenError) {
+        throw hiddenError
+      }
+
+      const hiddenMessageIds = new Set(
+        ((hiddenRows as { message_id: string }[] | null) || []).map((item) => item.message_id)
+      )
+
       const { data: messageRows, error: messagesError } = await supabase
         .from("conversation_messages")
         .select("*")
@@ -460,7 +796,9 @@ export default function MessagesPage() {
         throw messagesError
       }
 
-      const allMessages = (messageRows as ConversationMessageRow[]) || []
+      const allMessages = ((messageRows as ConversationMessageRow[]) || []).filter(
+        (item) => !hiddenMessageIds.has(item.id)
+      )
 
       const otherUserIds = Array.from(
         new Set(
@@ -491,14 +829,15 @@ export default function MessagesPage() {
           (item) => item.conversation_id === conversation.id
         )
 
+        const conversationMessages = allMessages.filter(
+          (item) => item.conversation_id === conversation.id
+        )
+
         const lastMessageForConversation =
-          [...allMessages]
-            .filter((item) => item.conversation_id === conversation.id)
-            .sort(
-              (a, b) =>
-                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-            )
-            .at(-1) || null
+          [...conversationMessages].sort(
+            (a, b) =>
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          ).at(-1) || null
 
         const myParticipant =
           participants.find((item) => item.user_id === activeUserId) || null
@@ -510,6 +849,15 @@ export default function MessagesPage() {
           ? profileMap.get(otherParticipant.user_id) || null
           : null
 
+        const lastReadAt = myParticipant?.last_read_at
+          ? new Date(myParticipant.last_read_at).getTime()
+          : 0
+
+        const unreadCount = conversationMessages.filter((item) => {
+          if (item.sender_id === activeUserId) return false
+          return new Date(item.created_at).getTime() > lastReadAt
+        }).length
+
         return {
           conversation,
           participants,
@@ -517,12 +865,22 @@ export default function MessagesPage() {
           lastMessage: lastMessageForConversation,
           myParticipant,
           otherParticipant,
+          unreadCount,
         }
       })
 
       setConversations(nextConversations)
 
       setSelectedConversationId((current) => {
+        const requestedConversationId = searchParams.get("conversation")
+        const requestedConversationExists = requestedConversationId
+          ? nextConversations.some((item) => item.conversation.id === requestedConversationId)
+          : false
+
+        if (requestedConversationExists) {
+          return requestedConversationId
+        }
+
         if (!current) return nextConversations[0]?.conversation.id || null
         const exists = nextConversations.some((item) => item.conversation.id === current)
         return exists ? current : nextConversations[0]?.conversation.id || null
@@ -553,12 +911,77 @@ export default function MessagesPage() {
         throw error
       }
 
-      setMessages((data as ConversationMessageRow[]) || [])
+      let nextMessages = (data as ConversationMessageRow[]) || []
+
+      if (userId) {
+        const { data: hiddenRows, error: hiddenError } = await supabase
+          .from("conversation_message_hidden")
+          .select("message_id")
+          .eq("user_id", userId)
+
+        if (hiddenError) {
+          throw hiddenError
+        }
+
+        const hiddenMessageIds = new Set(
+          ((hiddenRows as { message_id: string }[] | null) || []).map((item) => item.message_id)
+        )
+
+        nextMessages = nextMessages.filter((item) => !hiddenMessageIds.has(item.id))
+      }
+
+      setMessages(nextMessages)
     } catch (err) {
       console.error("Load messages error:", err)
       setError(err instanceof Error ? err.message : "Failed to load messages.")
     } finally {
       if (withLoader) setLoading(false)
+    }
+  }
+
+  async function loadMessageReactions(conversationId: string) {
+    try {
+      const { data: messageRows, error: messageError } = await supabase
+        .from("conversation_messages")
+        .select("id")
+        .eq("conversation_id", conversationId)
+        .is("deleted_at", null)
+
+      if (messageError) throw messageError
+
+      const messageIds = ((messageRows as { id: string }[] | null) || []).map((item) => item.id)
+
+      if (messageIds.length === 0) {
+        setMessageReactionsMap({})
+        return
+      }
+
+      const { data, error } = await supabase
+        .from("conversation_message_reactions")
+        .select("id, message_id, user_id, emoji, created_at")
+        .in("message_id", messageIds)
+
+      if (error) {
+        const message = String((error as { message?: string }).message || "")
+        if (message.toLowerCase().includes("relation") || message.toLowerCase().includes("does not exist")) {
+          setMessageReactionsMap({})
+          return
+        }
+        throw error
+      }
+
+      const rows = (data as MessageReactionRow[]) || []
+      const nextMap: Record<string, MessageReactionRow[]> = {}
+
+      rows.forEach((row) => {
+        if (!nextMap[row.message_id]) nextMap[row.message_id] = []
+        nextMap[row.message_id].push(row)
+      })
+
+      setMessageReactionsMap(nextMap)
+    } catch (err) {
+      console.error("Load reactions error:", err)
+      setMessageReactionsMap({})
     }
   }
 
@@ -708,31 +1131,90 @@ export default function MessagesPage() {
 
   async function startConversationWithUser(otherUserId: string) {
     try {
+      if (!userId) return
+
       setStartingChatUserId(otherUserId)
       setError("")
       setSuccess("")
 
-      const { data, error } = await supabase.rpc("create_direct_conversation", {
-        other_user_id: otherUserId,
-      })
+      const { data: myParticipantRows, error: myParticipantsError } = await supabase
+        .from("conversation_participants")
+        .select("*")
+        .eq("user_id", userId)
 
-      if (error) {
-        throw error
+      if (myParticipantsError) {
+        throw myParticipantsError
       }
 
-      const newConversationId = String(data || "")
-      if (!newConversationId) {
+      const myParticipants = (myParticipantRows as ConversationParticipantRow[]) || []
+      const myConversationIds = myParticipants.map((item) => item.conversation_id)
+
+      let conversationId: string | null = null
+
+      if (myConversationIds.length > 0) {
+        const { data: otherParticipantRows, error: otherParticipantsError } = await supabase
+          .from("conversation_participants")
+          .select("*")
+          .in("conversation_id", myConversationIds)
+          .eq("user_id", otherUserId)
+
+        if (otherParticipantsError) {
+          throw otherParticipantsError
+        }
+
+        const matchedOtherParticipant =
+          ((otherParticipantRows as ConversationParticipantRow[]) || [])[0] || null
+
+        if (matchedOtherParticipant) {
+          conversationId = matchedOtherParticipant.conversation_id
+
+          const myHiddenParticipant =
+            myParticipants.find((item) => item.conversation_id === conversationId) || null
+
+          if (myHiddenParticipant?.deleted_at) {
+            const { error: unhideError } = await supabase
+              .from("conversation_participants")
+              .update({ deleted_at: null })
+              .eq("conversation_id", conversationId)
+              .eq("user_id", userId)
+
+            if (unhideError) {
+              throw unhideError
+            }
+          }
+        }
+      }
+
+      if (!conversationId) {
+        const { data, error } = await supabase.rpc("create_direct_conversation", {
+          other_user_id: otherUserId,
+        })
+
+        if (error) {
+          throw error
+        }
+
+        conversationId = String(data || "")
+      }
+
+      if (!conversationId) {
         throw new Error("Conversation was not created.")
       }
 
-      const updated = await loadConversations(userId || "", false)
-      setSelectedConversationId(newConversationId)
-      await loadMessages(newConversationId, false)
+      await supabase
+        .from("conversations")
+        .update({
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", conversationId)
+
+      const updated = await loadConversations(userId, false)
+      await openConversation(conversationId, "push")
       await loadPresenceForCurrentConversations()
       await loadTypingStates()
 
-      if (!updated.some((item) => item.conversation.id === newConversationId)) {
-        await loadConversations(userId || "", false)
+      if (!updated.some((item) => item.conversation.id === conversationId)) {
+        await loadConversations(userId, false)
       }
 
       setUserSearch("")
@@ -755,6 +1237,10 @@ export default function MessagesPage() {
 
       if (userId) {
         await loadConversations(userId, false)
+      }
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("jb-messages-unread-updated"))
       }
     } catch (err) {
       console.error("Mark read error:", err)
@@ -816,6 +1302,11 @@ export default function MessagesPage() {
       return
     }
 
+    if (!editingMessageId && !canAffordCurrentMessage) {
+      triggerCoinShake(`Not enough JB Coins. You need ${messageSendCost} coins to send this.`)
+      return
+    }
+
     try {
       setSending(true)
       setError("")
@@ -872,36 +1363,48 @@ export default function MessagesPage() {
         }
       }
 
-      const { error: messageError } = await supabase
-        .from("conversation_messages")
-        .insert({
-          conversation_id: selectedConversationId,
-          sender_id: userId,
-          sender_role: "user",
-          body: message.trim() || null,
-          attachment_url: attachmentUrl,
-          reply_to_message_id: replyingTo?.id || null,
-          forwarded_from_message_id: null,
-          forwarded_by_user_id: null,
-        })
+      const res = await fetch("/api/messages/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          conversationId: selectedConversationId,
+          body: message.trim(),
+          attachmentUrl,
+          replyToMessageId: replyingTo?.id || null,
+          forwardedFromMessageId: null,
+          forwardedByUserId: null,
+        }),
+      })
 
-      if (messageError) {
-        throw messageError
+      const data = await res.json()
+
+      if (!res.ok) {
+        if (data?.code === "INSUFFICIENT_COINS") {
+          setMyCoins(Number(data?.current || 0))
+          triggerCoinShake(`Not enough JB Coins. You need ${data?.required || messageSendCost} coins.`)
+          return
+        }
+
+        throw new Error(data?.error || "Failed to send message.")
       }
 
-      await supabase
-        .from("conversations")
-        .update({
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", selectedConversationId)
+      setMyCoins(Number(data?.remainingCoins || 0))
+
+      if (Number(data?.cost || 0) > 0) {
+        emitCoinPopup(-Number(data.cost), attachment ? "Attachment message sent" : "Message sent")
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("jb-coins-updated"))
+        }
+      }
 
       await stopTyping(selectedConversationId)
 
       setMessage("")
       setAttachment(null)
       setReplyingTo(null)
-      setSuccess("Message sent.")
+      setSuccess(`Message sent. -${Number(data?.cost || 0)} JB Coins`)
       setMobileChatsOpen(false)
 
       const fileInput = document.getElementById("attachment-input") as HTMLInputElement | null
@@ -973,19 +1476,47 @@ export default function MessagesPage() {
     }
   }
 
-  function deleteForMe(messageId: string) {
-    setMessages((prev) => prev.filter((msg) => msg.id !== messageId))
+  async function deleteForMe(messageId: string) {
+    try {
+      if (!userId) {
+        alert("You must be logged in.")
+        return
+      }
 
-    if (editingMessageId === messageId) {
-      cancelEditing()
+      const { error } = await supabase
+        .from("conversation_message_hidden")
+        .upsert(
+          {
+            message_id: messageId,
+            user_id: userId,
+          },
+          { onConflict: "message_id,user_id" }
+        )
+
+      if (error) {
+        throw error
+      }
+
+      if (editingMessageId === messageId) {
+        cancelEditing()
+      }
+
+      if (replyingTo?.id === messageId) {
+        setReplyingTo(null)
+      }
+
+      setOpenMessageMenuId(null)
+      setMenuPosition(null)
+
+      if (selectedConversationId) {
+        await loadMessages(selectedConversationId, false)
+      }
+
+      await loadConversations(userId, false)
+    } catch (err) {
+      console.error("Delete for me error:", err)
+      alert(err instanceof Error ? err.message : "Failed to hide message.")
     }
-
-    if (replyingTo?.id === messageId) {
-      setReplyingTo(null)
-    }
-
-    setOpenMessageMenuId(null)
-    setMenuPosition(null)
   }
 
   async function deleteConversationForMe() {
@@ -1022,11 +1553,13 @@ export default function MessagesPage() {
 
       if (updated.length > 0) {
         const nextId = updated[0].conversation.id
-        setSelectedConversationId(nextId)
-        await loadMessages(nextId, false)
+        await openConversation(nextId, "replace")
       } else {
+        syncConversationUrl(null, "replace")
         setSelectedConversationId(null)
         setMessages([])
+        setMessageReactionsMap({})
+        setMessageReactionsMap({})
       }
 
       cancelEditing()
@@ -1187,6 +1720,138 @@ export default function MessagesPage() {
       setError(err instanceof Error ? err.message : "Failed to forward message.")
     } finally {
       setForwardingToConversationId(null)
+    }
+  }
+
+  function getReactionsForMessage(messageId: string) {
+    return messageReactionsMap[messageId] || []
+  }
+
+  function getMyReaction(messageId: string) {
+    if (!userId) return null
+    return getReactionsForMessage(messageId).find((item) => item.user_id === userId) || null
+  }
+
+  function getReactionSummary(messageId: string) {
+    const grouped = new Map<string, number>()
+
+    getReactionsForMessage(messageId).forEach((reaction) => {
+      grouped.set(reaction.emoji, (grouped.get(reaction.emoji) || 0) + 1)
+    })
+
+    return Array.from(grouped.entries())
+      .map(([emoji, count]) => ({ emoji, count }))
+      .sort((a, b) => b.count - a.count)
+  }
+
+  function getReactionTooltipText(messageId: string, emoji: string) {
+    const names = getReactionsForMessage(messageId)
+      .filter((reaction) => reaction.emoji === emoji)
+      .map((reaction) => {
+        if (reaction.user_id === userId) return "You"
+
+        if (selectedConversation?.otherParticipant?.user_id === reaction.user_id) {
+          return getDisplayName(selectedConversation.otherUser)
+        }
+
+        return "Someone"
+      })
+
+    return names.join(", ") || "No reactions yet"
+  }
+
+  function triggerReactionBurst(messageId: string, emoji: string) {
+    const key = `${messageId}-${emoji}-${Date.now()}`
+    setReactionBurst({ messageId, emoji, key })
+
+    if (reactionBurstTimerRef.current) {
+      clearTimeout(reactionBurstTimerRef.current)
+    }
+
+    reactionBurstTimerRef.current = setTimeout(() => {
+      setReactionBurst((current) => (current?.key === key ? null : current))
+    }, 700)
+  }
+
+  function handleMessageDoubleTap(messageId: string) {
+    const now = Date.now()
+    const lastTap = lastTapRef.current
+
+    if (lastTap && lastTap.messageId === messageId && now - lastTap.at < 300) {
+      lastTapRef.current = null
+      void toggleReaction(messageId, "❤️")
+      return
+    }
+
+    lastTapRef.current = { messageId, at: now }
+  }
+
+  async function toggleReaction(messageId: string, emoji: string) {
+    if (!userId) return
+
+    const previousMap = messageReactionsMap
+
+    try {
+      setError("")
+      setSuccess("")
+
+      const current = previousMap[messageId] || []
+      const existing = current.find((item) => item.user_id === userId) || null
+
+      const optimistic = existing?.emoji === emoji
+        ? current.filter((item) => item.user_id !== userId)
+        : [
+            ...current.filter((item) => item.user_id !== userId),
+            {
+              message_id: messageId,
+              user_id: userId,
+              emoji,
+            },
+          ]
+
+      setMessageReactionsMap((prev) => ({
+        ...prev,
+        [messageId]: optimistic,
+      }))
+
+      triggerReactionBurst(messageId, emoji)
+
+      if (existing?.emoji === emoji) {
+        const { error } = await supabase
+          .from("conversation_message_reactions")
+          .delete()
+          .eq("message_id", messageId)
+          .eq("user_id", userId)
+
+        if (error) throw error
+      } else {
+        const { error: deleteError } = await supabase
+          .from("conversation_message_reactions")
+          .delete()
+          .eq("message_id", messageId)
+          .eq("user_id", userId)
+
+        if (deleteError) throw deleteError
+
+        const { error: insertError } = await supabase
+          .from("conversation_message_reactions")
+          .insert({
+            message_id: messageId,
+            user_id: userId,
+            emoji,
+          })
+
+        if (insertError) throw insertError
+      }
+
+      setOpenReactionPickerMessageId(null)
+      if (selectedConversationId) {
+        await loadMessageReactions(selectedConversationId)
+      }
+    } catch (err) {
+      console.error("Toggle reaction error:", err)
+      setMessageReactionsMap(previousMap)
+      setError("Message reactions need a conversation_message_reactions table in Supabase.")
     }
   }
 
@@ -1484,6 +2149,10 @@ export default function MessagesPage() {
     return conversations
   }, [conversations])
 
+  function openConversationFromNotification(conversationId: string) {
+    void openConversation(conversationId, "push")
+  }
+
   const filteredForwardConversations = useMemo(() => {
     const term = forwardSearch.trim().toLowerCase()
 
@@ -1523,6 +2192,48 @@ export default function MessagesPage() {
     )
   }, [typingMap, selectedConversationId, userId])
 
+  const sharedAttachments = useMemo(() => {
+    return messages
+      .filter((item) => item.attachment_url)
+      .map((item) => {
+        const url = item.attachment_url as string
+        return {
+          messageId: item.id,
+          url,
+          kind: getAttachmentKind(url),
+          fileName: getAttachmentName(url),
+          createdAt: item.created_at,
+          isMine: item.sender_id === userId,
+          senderName: item.sender_id === userId
+            ? "You"
+            : getDisplayName(selectedConversation?.otherUser || null),
+        }
+      })
+      .sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
+  }, [messages, userId, selectedConversation])
+
+  const sharedPhotos = useMemo(
+    () => sharedAttachments.filter((item) => item.kind === "image"),
+    [sharedAttachments]
+  )
+
+  const sharedVideos = useMemo(
+    () => sharedAttachments.filter((item) => item.kind === "video"),
+    [sharedAttachments]
+  )
+
+  const sharedAudio = useMemo(
+    () => sharedAttachments.filter((item) => item.kind === "audio"),
+    [sharedAttachments]
+  )
+
+  const sharedFiles = useMemo(
+    () => sharedAttachments.filter((item) => item.kind === "file"),
+    [sharedAttachments]
+  )
+
   return (
     <>
       <SiteHeader />
@@ -1538,7 +2249,14 @@ export default function MessagesPage() {
                   <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-sky-300/80">
                     Messenger
                   </div>
-                  <h2 className="mt-2 text-2xl font-black text-white">Chats</h2>
+                  <h2 className="mt-2 flex items-center gap-2 text-2xl font-black text-white">
+                    <span>Chats</span>
+                    {totalUnreadCount > 0 && (
+                      <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-red-500 px-2 text-xs font-bold text-white shadow-lg shadow-red-950/40">
+                        {totalUnreadCount}
+                      </span>
+                    )}
+                  </h2>
                   <p className="mt-1 text-sm text-slate-300">
                     Find users and message them directly
                   </p>
@@ -1637,10 +2355,7 @@ export default function MessagesPage() {
                             key={item.conversation.id}
                             type="button"
                             onClick={() => {
-                              setSelectedConversationId(item.conversation.id)
-                              void loadMessages(item.conversation.id, false)
-                              setMobileChatsOpen(false)
-                              setOpenMessageMenuId(null)
+                              void openConversation(item.conversation.id, "push")
                             }}
                             className={`flex w-full items-center gap-3 rounded-[24px] border px-4 py-4 text-left transition ${
                               active
@@ -1655,13 +2370,21 @@ export default function MessagesPage() {
                               )}
                             </div>
 
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-base font-bold text-white">
-                                {otherName}
+                            <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-base font-bold text-white">
+                                  {otherName}
+                                </div>
+                                <div className="mt-1 truncate text-sm text-slate-300">
+                                  {subtitle}
+                                </div>
                               </div>
-                              <div className="mt-1 truncate text-sm text-slate-300">
-                                {subtitle}
-                              </div>
+
+                              {item.unreadCount > 0 && (
+                                <span className="inline-flex h-6 min-w-[24px] shrink-0 items-center justify-center rounded-full bg-red-500 px-2 text-xs font-bold text-white shadow-lg shadow-red-950/40">
+                                  {item.unreadCount > 99 ? "99+" : item.unreadCount}
+                                </span>
+                              )}
                             </div>
                           </button>
                         )
@@ -1678,10 +2401,15 @@ export default function MessagesPage() {
                       <button
                         type="button"
                         onClick={() => setMobileChatsOpen(true)}
-                        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sky-300 transition hover:bg-white/[0.1] lg:hidden"
+                        className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sky-300 transition hover:bg-white/[0.1] lg:hidden"
                         aria-label="Open chats"
                       >
                         <MessageSquare size={18} />
+                        {totalUnreadCount > 0 && (
+                          <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-lg shadow-red-950/40">
+                            {totalUnreadCount > 99 ? "99+" : totalUnreadCount}
+                          </span>
+                        )}
                       </button>
 
                       <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white shadow-lg shadow-blue-950/40">
@@ -1706,18 +2434,81 @@ export default function MessagesPage() {
                       </div>
                     </div>
 
-                    {selectedConversation && (
+                    <div className="flex shrink-0 items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => void deleteConversationForMe()}
-                        disabled={deletingChat}
-                        className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-red-400/20 bg-red-500/10 px-4 text-sm font-semibold text-red-300 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => setShowSharedMediaPanel(true)}
+                        disabled={!selectedConversation}
+                        className="inline-flex h-11 items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-semibold text-slate-200 transition hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        <Trash2 size={16} />
-                        <span className="hidden sm:inline">
-                          {deletingChat ? "Removing..." : "Hide Chat"}
-                        </span>
+                        <Paperclip size={16} />
+                        <span className="hidden sm:inline">Shared media</span>
                       </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 lg:hidden">
+                    <div className="relative">
+                      <Search
+                        size={16}
+                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                      />
+                      <input
+                        value={userSearch}
+                        onChange={(e) => setUserSearch(e.target.value)}
+                        placeholder="Search users to start a chat..."
+                        className="w-full rounded-2xl border border-white/10 bg-white/[0.05] py-3 pl-11 pr-14 text-sm text-white outline-none placeholder:text-slate-400 focus:border-sky-400"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setMobileChatsOpen(true)}
+                        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sky-300 transition hover:bg-white/[0.1]"
+                        aria-label="Open chats list"
+                        title="Open chats list"
+                      >
+                        <MessageSquare size={16} />
+                      </button>
+                    </div>
+
+                    {(userSearch.trim() || searchingUsers || userResults.length > 0) && (
+                      <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.04]">
+                        {searchingUsers ? (
+                          <div className="px-4 py-3 text-sm text-slate-300">Searching users...</div>
+                        ) : userResults.length === 0 ? (
+                          <div className="px-4 py-3 text-sm text-slate-300">No users found.</div>
+                        ) : (
+                          userResults.map((profile) => (
+                            <button
+                              key={profile.id}
+                              type="button"
+                              onClick={() => void startConversationWithUser(profile.id)}
+                              disabled={startingChatUserId === profile.id}
+                              className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left transition hover:bg-white/[0.05] disabled:opacity-60"
+                            >
+                              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-slate-200">
+                                <User size={16} />
+                                {isOnline(profile.id) && (
+                                  <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#0b1220] bg-emerald-400" />
+                                )}
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-bold text-white">
+                                  {getDisplayName(profile)}
+                                </div>
+                                <div className="truncate text-xs text-slate-400">
+                                  {isOnline(profile.id) ? "Active now" : getSubtitle(profile)}
+                                </div>
+                              </div>
+
+                              <div className="text-xs font-semibold text-sky-300">
+                                {startingChatUserId === profile.id ? "Opening..." : "Message"}
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1833,6 +2624,21 @@ export default function MessagesPage() {
                                     >
                                       <button
                                         type="button"
+                                        onClick={() => {
+                                          setOpenReactionPickerMessageId((current) =>
+                                            current === item.id ? null : item.id
+                                          )
+                                          setOpenMessageMenuId(null)
+                                          setMenuPosition(null)
+                                        }}
+                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
+                                      >
+                                        <Smile size={15} />
+                                        React
+                                      </button>
+
+                                      <button
+                                        type="button"
                                         onClick={() => startReply(item)}
                                         className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
                                       >
@@ -1883,12 +2689,50 @@ export default function MessagesPage() {
                                   </>
                                 )}
 
+                                {openReactionPickerMessageId === item.id && (
+                                  <div
+                                    ref={reactionPickerRef}
+                                    className={`absolute z-30 ${isMine ? "left-0" : "right-0"} -top-14 rounded-full border border-white/10 bg-[#091220]/95 px-2 py-2 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur-md`}
+                                  >
+                                    <div className="flex items-center gap-1">
+                                      {QUICK_REACTIONS.map((emoji) => {
+                                        const activeReaction = getMyReaction(item.id)?.emoji === emoji
+                                        return (
+                                          <button
+                                            key={`${item.id}-${emoji}`}
+                                            type="button"
+                                            onClick={() => void toggleReaction(item.id, emoji)}
+                                            title={getReactionTooltipText(item.id, emoji)}
+                                            className={`flex h-9 w-9 items-center justify-center rounded-full text-lg transition duration-150 hover:-translate-y-1 hover:scale-125 ${
+                                              activeReaction ? "bg-sky-500/20 ring-1 ring-sky-400/40" : "hover:bg-white/[0.08]"
+                                            }`}
+                                          >
+                                            {emoji}
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {reactionBurst?.messageId === item.id && (
+                                  <div className="pointer-events-none absolute inset-x-0 -top-12 z-20 flex justify-center">
+                                    <div
+                                      key={reactionBurst.key}
+                                      className="select-none text-3xl drop-shadow-[0_10px_24px_rgba(0,0,0,0.35)] animate-[bounce_0.7s_ease-out]"
+                                    >
+                                      {reactionBurst.emoji}
+                                    </div>
+                                  </div>
+                                )}
+
                                 <div
                                   className={`rounded-3xl px-4 py-3 text-sm shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-all ${
                                     isMine
                                       ? "rounded-br-lg bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white"
                                       : "rounded-bl-lg border border-white/10 bg-white/[0.07] text-slate-100"
                                   }`}
+                                  onMouseEnter={() => setOpenReactionPickerMessageId(item.id)}
                                 >
                                   {item.forwarded_from_message_id && (
                                     <div
@@ -1945,6 +2789,37 @@ export default function MessagesPage() {
                                 </div>
                               </div>
 
+                              {getReactionSummary(item.id).length > 0 && (
+                                <div
+                                  className={`mt-2 flex flex-wrap items-center gap-2 px-1 ${
+                                    isMine ? "justify-end" : "justify-start"
+                                  }`}
+                                >
+                                  {getReactionSummary(item.id).map((reaction) => {
+                                    const activeReaction = getMyReaction(item.id)?.emoji === reaction.emoji
+                                    return (
+                                      <button
+                                        key={`${item.id}-${reaction.emoji}`}
+                                        type="button"
+                                        title={getReactionTooltipText(item.id, reaction.emoji)}
+                                        onClick={() => void toggleReaction(item.id, reaction.emoji)}
+                                        className={`group relative inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold shadow-sm transition duration-150 hover:-translate-y-0.5 hover:scale-105 hover:brightness-110 ${
+                                          activeReaction
+                                            ? "border-sky-400/40 bg-sky-500/15 text-sky-100"
+                                            : "border-white/10 bg-white/[0.06] text-slate-200"
+                                        }`}
+                                      >
+                                        <span>{reaction.emoji}</span>
+                                        <span>{reaction.count}</span>
+                                        <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-full border border-white/10 bg-[#08111f]/95 px-2.5 py-1 text-[10px] font-medium text-white shadow-[0_10px_24px_rgba(0,0,0,0.35)] group-hover:block">
+                                          {getReactionTooltipText(item.id, reaction.emoji)}
+                                        </span>
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              )}
+
                               <div
                                 className={`mt-1 flex flex-wrap items-center gap-2 px-2 text-[11px] text-slate-400 ${
                                   isMine ? "justify-end" : "justify-start"
@@ -1957,9 +2832,22 @@ export default function MessagesPage() {
                                 )}
 
                                 {isMine && isMyLatest && isLastOfGroup && (
-                                  <span className="font-medium text-slate-400">
-                                    {lastSeenByOther ? "Seen" : "Sent"}
-                                  </span>
+                                  lastSeenByOther ? (
+                                    <span
+                                      className="inline-flex items-center gap-1.5 font-medium text-slate-300"
+                                      title={`Seen by ${getDisplayName(selectedConversation?.otherUser || null)}`}
+                                    >
+                                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white/15 text-[9px] text-white">
+                                        <User size={9} />
+                                      </span>
+                                      Seen
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 font-medium text-slate-400">
+                                      <Check size={12} />
+                                      Sent
+                                    </span>
+                                  )
                                 )}
                               </div>
                             </div>
@@ -2043,7 +2931,25 @@ export default function MessagesPage() {
                     )}
 
                     <form onSubmit={handleSendMessage} className="space-y-3">
-                      <div className="relative rounded-[30px] border border-white/10 bg-white/[0.05] p-2 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+                      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className={`rounded-full border px-3 py-1.5 text-xs font-bold ${coinShake ? "border-red-400/40 bg-red-500/15 text-red-200" : "border-amber-300/20 bg-amber-500/10 text-amber-200"}`}>
+                            Wallet: {myCoins.toLocaleString()} 🪙
+                          </div>
+                          {!editingMessageId && (
+                            <div className="rounded-full border border-sky-400/20 bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-200">
+                              Cost: {messageSendCost} 🪙
+                            </div>
+                          )}
+                        </div>
+                        {!editingMessageId && (
+                          <div className="text-xs font-semibold text-slate-400">
+                            Text message = 5 🪙 • With attachment = 10 🪙
+                          </div>
+                        )}
+                      </div>
+
+                      <div className={`relative rounded-[30px] border bg-white/[0.05] p-2 shadow-[0_10px_30px_rgba(0,0,0,0.25)] transition ${coinShake ? "border-red-400/40" : "border-white/10"}`}>
                         <div className="flex items-end gap-2">
                           <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-sky-300 transition hover:bg-white/[0.08]">
                             <Paperclip size={20} />
@@ -2106,11 +3012,24 @@ export default function MessagesPage() {
 
                           <button
                             type="submit"
-                            disabled={sending || uploading || !selectedConversationId}
-                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-                            title={editingMessageId ? "Save edit" : "Send message"}
+                            disabled={sending || uploading || !selectedConversationId || (!editingMessageId && !canAffordCurrentMessage)}
+                            className={`inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-white transition ${
+                              editingMessageId
+                                ? "bg-emerald-500 hover:bg-emerald-400"
+                                : canAffordCurrentMessage
+                                  ? "bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 hover:brightness-110"
+                                  : "bg-red-500/80"
+                            } disabled:cursor-not-allowed disabled:opacity-60`}
+                            title={editingMessageId ? "Save edit" : `Send message (${messageSendCost} JB Coins)`}
                           >
                             {editingMessageId ? <Check size={18} /> : <Send size={18} />}
+                            <span className="text-xs font-bold">
+                              {editingMessageId
+                                ? "Save"
+                                : sending || uploading
+                                  ? "Sending..."
+                                  : `Send (${messageSendCost} 🪙)`}
+                            </span>
                           </button>
                         </div>
 
@@ -2162,7 +3081,14 @@ export default function MessagesPage() {
                     <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-sky-300/80">
                       Messenger
                     </div>
-                    <h2 className="mt-2 text-2xl font-black text-white">Chats</h2>
+                    <h2 className="mt-2 flex items-center gap-2 text-2xl font-black text-white">
+                    <span>Chats</span>
+                    {totalUnreadCount > 0 && (
+                      <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-red-500 px-2 text-xs font-bold text-white shadow-lg shadow-red-950/40">
+                        {totalUnreadCount}
+                      </span>
+                    )}
+                  </h2>
                     <p className="mt-1 text-sm text-slate-300">
                       Find users and message them directly
                     </p>
@@ -2249,10 +3175,7 @@ export default function MessagesPage() {
                           key={item.conversation.id}
                           type="button"
                           onClick={() => {
-                            setSelectedConversationId(item.conversation.id)
-                            void loadMessages(item.conversation.id, false)
-                            setMobileChatsOpen(false)
-                            setOpenMessageMenuId(null)
+                            void openConversation(item.conversation.id, "push")
                           }}
                           className="flex w-full items-center gap-3 rounded-[24px] border border-sky-400/20 bg-sky-500/10 px-4 py-4 text-left transition hover:bg-sky-500/15"
                         >
@@ -2425,6 +3348,201 @@ export default function MessagesPage() {
                       ))
                     )}
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showSharedMediaPanel && (
+          <div className="fixed inset-0 z-[95] flex items-center justify-end bg-slate-950/70 backdrop-blur-sm">
+            <button
+              type="button"
+              onClick={() => setShowSharedMediaPanel(false)}
+              className="absolute inset-0"
+              aria-label="Close shared media panel"
+            />
+
+            <div className="relative z-10 h-full w-full max-w-2xl border-l border-white/10 bg-[#071122] shadow-[-20px_0_60px_rgba(0,0,0,0.35)]">
+              <div className="flex h-full flex-col">
+                <div className="border-b border-white/10 px-5 py-5 sm:px-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-sky-300/80">
+                        Messenger
+                      </div>
+                      <h3 className="mt-2 text-2xl font-black text-white">Shared media & files</h3>
+                      <p className="mt-1 text-sm text-slate-300">
+                        {selectedConversation
+                          ? `Everything shared with ${getDisplayName(selectedConversation.otherUser)}`
+                          : "Open a conversation to see shared media."}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowSharedMediaPanel(false)}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-slate-200 hover:bg-white/[0.1]"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-4 gap-2">
+                    {[
+                      { key: "photos", label: "Photos", count: sharedPhotos.length },
+                      { key: "videos", label: "Videos", count: sharedVideos.length },
+                      { key: "audio", label: "Audio", count: sharedAudio.length },
+                      { key: "files", label: "Files", count: sharedFiles.length },
+                    ].map((tab) => {
+                      const active = sharedMediaTab === tab.key
+                      return (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() =>
+                            setSharedMediaTab(tab.key as "photos" | "videos" | "audio" | "files")
+                          }
+                          className={`rounded-2xl border px-3 py-3 text-left transition ${
+                            active
+                              ? "border-sky-400/30 bg-sky-500/15 text-white"
+                              : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"
+                          }`}
+                        >
+                          <div className="text-sm font-bold">{tab.label}</div>
+                          <div className="mt-1 text-xs opacity-80">{tab.count} item{tab.count === 1 ? "" : "s"}</div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+                  {!selectedConversation ? (
+                    <div className="rounded-[24px] border border-white/10 bg-white/[0.04] px-5 py-10 text-center text-slate-300">
+                      Open a conversation first.
+                    </div>
+                  ) : sharedMediaTab === "photos" ? (
+                    sharedPhotos.length === 0 ? (
+                      <div className="rounded-[24px] border border-white/10 bg-white/[0.04] px-5 py-10 text-center text-slate-300">
+                        No photos shared yet.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        {sharedPhotos.map((item) => (
+                          <button
+                            key={item.messageId}
+                            type="button"
+                            onClick={() => setPreviewImageUrl(item.url)}
+                            className="overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.04] text-left transition hover:scale-[1.02] hover:border-sky-400/20"
+                          >
+                            <img
+                              src={item.url}
+                              alt={item.fileName}
+                              className="h-40 w-full object-cover"
+                              loading="lazy"
+                            />
+                            <div className="px-3 py-3">
+                              <div className="truncate text-sm font-semibold text-white">{item.fileName}</div>
+                              <div className="mt-1 text-xs text-slate-400">{item.senderName} • {formatTime(item.createdAt)}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  ) : sharedMediaTab === "videos" ? (
+                    sharedVideos.length === 0 ? (
+                      <div className="rounded-[24px] border border-white/10 bg-white/[0.04] px-5 py-10 text-center text-slate-300">
+                        No videos shared yet.
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {sharedVideos.map((item) => (
+                          <div
+                            key={item.messageId}
+                            className="overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.04]"
+                          >
+                            <video
+                              controls
+                              preload="metadata"
+                              className="block max-h-[320px] w-full bg-black"
+                            >
+                              <source src={item.url} />
+                            </video>
+                            <div className="flex items-center justify-between gap-3 px-4 py-3">
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-semibold text-white">{item.fileName}</div>
+                                <div className="mt-1 text-xs text-slate-400">{item.senderName} • {formatTime(item.createdAt)}</div>
+                              </div>
+                              <a
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-slate-200 hover:bg-white/[0.1]"
+                              >
+                                <Download size={16} />
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  ) : sharedMediaTab === "audio" ? (
+                    sharedAudio.length === 0 ? (
+                      <div className="rounded-[24px] border border-white/10 bg-white/[0.04] px-5 py-10 text-center text-slate-300">
+                        No audio shared yet.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {sharedAudio.map((item) => (
+                          <div
+                            key={item.messageId}
+                            className="rounded-[24px] border border-white/10 bg-white/[0.04] p-4"
+                          >
+                            <div className="mb-3 flex items-center gap-3">
+                              <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.08] text-sky-300">
+                                <Play size={16} />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-semibold text-white">{item.fileName}</div>
+                                <div className="mt-1 text-xs text-slate-400">{item.senderName} • {formatTime(item.createdAt)}</div>
+                              </div>
+                            </div>
+                            <audio controls className="w-full">
+                              <source src={item.url} />
+                            </audio>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  ) : sharedFiles.length === 0 ? (
+                    <div className="rounded-[24px] border border-white/10 bg-white/[0.04] px-5 py-10 text-center text-slate-300">
+                      No files shared yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {sharedFiles.map((item) => (
+                        <a
+                          key={item.messageId}
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 rounded-[24px] border border-white/10 bg-white/[0.04] px-4 py-4 transition hover:border-sky-400/20 hover:bg-white/[0.06]"
+                        >
+                          <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/[0.08] text-sky-300">
+                            <FileText size={18} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-semibold text-white">{item.fileName}</div>
+                            <div className="mt-1 text-xs text-slate-400">{item.senderName} • {formatTime(item.createdAt)}</div>
+                          </div>
+                          <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-slate-200">
+                            <Download size={16} />
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

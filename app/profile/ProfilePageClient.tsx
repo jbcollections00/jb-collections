@@ -1,7 +1,8 @@
+
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import SiteHeader from "@/app/components/SiteHeader"
@@ -75,10 +76,7 @@ type LeaderboardResponse = {
 type UsernameStatus =
   | { state: "idle"; message: "" }
   | { state: "checking"; message: "Checking username..." }
-  | {
-      state: "available"
-      message: "Username is available." | "This is your current username."
-    }
+  | { state: "available"; message: "Username is available." | "This is your current username." }
   | { state: "taken"; message: "Username is already taken." }
   | {
       state: "invalid"
@@ -88,6 +86,18 @@ type UsernameStatus =
 
 type ProfileTab = "overview" | "info" | "security"
 type RedeemPlan = "premium" | "platinum"
+
+type ProfileViewStats = {
+  views: number
+  visitors: number
+}
+
+type CoinToast = {
+  id: string
+  amount: number
+  label: string
+  kind: "earn" | "spend"
+}
 
 function normalizeMembership(profile: UserProfile | null) {
   const role = String(profile?.role || "").trim().toLowerCase()
@@ -111,25 +121,20 @@ function getMembershipBadgeClasses(level: string) {
   if (level === "admin") {
     return "inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-2 text-sm font-bold text-white"
   }
-
   if (level === "platinum") {
     return "inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-fuchsia-600 to-pink-600 px-4 py-2 text-sm font-bold text-white"
   }
-
   if (level === "premium") {
     return "inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-sm font-bold text-white"
   }
-
   return "inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-bold text-white"
 }
 
 function getInitials(name: string) {
   const cleaned = name.trim()
   if (!cleaned) return "U"
-
   const parts = cleaned.split(/\s+/).filter(Boolean)
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-
   return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase()
 }
 
@@ -148,39 +153,9 @@ function tabClass(active: boolean) {
     : "rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/10"
 }
 
-function StatCard({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
-  return (
-    <div className="rounded-[24px] border border-white/10 bg-slate-900/80 p-4 shadow-sm ring-1 ring-white/5">
-      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">{label}</p>
-      <p className="mt-2 truncate text-xl font-black text-white sm:text-2xl">{value}</p>
-    </div>
-  )
-}
-
-function DetailCard({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950 p-4">
-      <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
-      <div className="mt-2 font-bold text-white">{children}</div>
-    </div>
-  )
-}
-
 function formatCoinAmount(amount: number) {
-  if (amount > 0) return `+${amount}`
-  return `${amount}`
+  if (amount > 0) return `+${amount.toLocaleString()}`
+  return `${amount.toLocaleString()}`
 }
 
 function getCoinAmountClasses(amount: number) {
@@ -201,6 +176,8 @@ function formatCoinAction(actionType?: string | null, description?: string | nul
   if (normalized === "redeem_platinum") return "Redeemed Platinum"
   if (normalized === "admin_adjustment") return "Admin adjustment"
   if (normalized === "daily_reward") return "Daily reward"
+  if (normalized === "spend_message") return "Messenger feature spent"
+  if (normalized === "profile_boost") return "Profile boost spent"
 
   return "JB Coin activity"
 }
@@ -221,6 +198,50 @@ function formatHistoryDate(value?: string | null) {
   }).format(date)
 }
 
+function SectionCard({
+  title,
+  subtitle,
+  children,
+  action,
+}: {
+  title: string
+  subtitle?: string
+  children: ReactNode
+  action?: ReactNode
+}) {
+  return (
+    <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-5 shadow-[0_15px_45px_rgba(0,0,0,0.35)] ring-1 ring-white/5 backdrop-blur">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-black text-white">{title}</h3>
+          {subtitle ? <p className="mt-1 text-sm text-slate-400">{subtitle}</p> : null}
+        </div>
+        {action}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="rounded-[24px] border border-white/10 bg-slate-900/80 p-4 shadow-sm ring-1 ring-white/5 transition duration-300 hover:-translate-y-1 hover:shadow-[0_15px_40px_rgba(0,0,0,0.4)]">
+      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">{label}</p>
+      <p className="mt-2 truncate text-xl font-black text-white sm:text-2xl">{value}</p>
+      {hint ? <p className="mt-2 text-xs text-slate-500">{hint}</p> : null}
+    </div>
+  )
+}
+
+function DetailCard({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-950 p-4 transition duration-300 hover:-translate-y-1 hover:shadow-[0_15px_40px_rgba(0,0,0,0.32)]">
+      <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
+      <div className="mt-2 break-words font-bold text-white">{children}</div>
+    </div>
+  )
+}
+
 export default function ProfilePageClient() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
@@ -233,6 +254,7 @@ export default function ProfilePageClient() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [streakLoading, setStreakLoading] = useState(false)
   const [leaderboardLoading, setLeaderboardLoading] = useState(false)
+  const [viewStatsLoading, setViewStatsLoading] = useState(false)
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [authEmail, setAuthEmail] = useState("")
@@ -250,11 +272,14 @@ export default function ProfilePageClient() {
   const [dailyRewardStatus, setDailyRewardStatus] = useState<DailyRewardStatus | null>(null)
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [myLeaderboardRank, setMyLeaderboardRank] = useState<LeaderboardEntry | null>(null)
+  const [profileViewStats, setProfileViewStats] = useState<ProfileViewStats>({
+    views: 0,
+    visitors: 0,
+  })
 
-  const [coinPopup, setCoinPopup] = useState<{
-    id: string
-    amount: number
-  } | null>(null)
+  const [coinToasts, setCoinToasts] = useState<CoinToast[]>([])
+  const [walletPulse, setWalletPulse] = useState(false)
+  const [walletShake, setWalletShake] = useState(false)
 
   const [fullNameInput, setFullNameInput] = useState("")
   const [usernameInput, setUsernameInput] = useState("")
@@ -266,7 +291,6 @@ export default function ProfilePageClient() {
 
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const usernameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const popupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastRealtimeEventRef = useRef<string | null>(null)
 
   const originalProfileRef = useRef<{
@@ -281,19 +305,22 @@ export default function ProfilePageClient() {
     avatar_url: "",
   })
 
-  const showCoinPopup = useCallback((amount: number, id?: string) => {
-    if (amount <= 0) return
+  const addCoinToast = useCallback((amount: number, label: string) => {
+    if (amount === 0) return
+    const kind = amount > 0 ? "earn" : "spend"
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    setCoinToasts((prev) => [...prev, { id, amount, label, kind }])
+    if (amount > 0) setWalletPulse(true)
+    window.setTimeout(() => {
+      setCoinToasts((prev) => prev.filter((item) => item.id !== id))
+    }, 2400)
+    window.setTimeout(() => setWalletPulse(false), 900)
+  }, [])
 
-    setCoinPopup({
-      id: id || `${Date.now()}`,
-      amount,
-    })
-
-    if (popupTimerRef.current) clearTimeout(popupTimerRef.current)
-
-    popupTimerRef.current = setTimeout(() => {
-      setCoinPopup(null)
-    }, 2500)
+  const triggerInsufficientCoins = useCallback((message: string) => {
+    setSaveError(message)
+    setWalletShake(true)
+    window.setTimeout(() => setWalletShake(false), 550)
   }, [])
 
   const loadProfile = useCallback(
@@ -360,7 +387,7 @@ export default function ProfilePageClient() {
         setFullNameInput(original.full_name)
         setUsernameInput(original.username)
         setBioInput(original.bio)
-        setAvatarUrlInput(original.avatar_url)
+        setAvatarUrlInput(original.avatar_url || "")
       } catch (err) {
         console.error("Unexpected profile error:", err)
       } finally {
@@ -447,8 +474,42 @@ export default function ProfilePageClient() {
     }
   }, [])
 
+  const loadProfileViewStats = useCallback(async () => {
+    try {
+      setViewStatsLoading(true)
+
+      const username = normalizeUsername(profile?.username || "")
+      if (!username) {
+        setProfileViewStats({ views: 0, visitors: 0 })
+        return
+      }
+
+      const response = await fetch(`/api/profile/views?username=${encodeURIComponent(username)}`, {
+        method: "GET",
+        cache: "no-store",
+      })
+
+      if (!response.ok) {
+        setProfileViewStats({ views: 0, visitors: 0 })
+        return
+      }
+
+      const data = (await response.json()) as Partial<ProfileViewStats>
+
+      setProfileViewStats({
+        views: Number(data.views || 0),
+        visitors: Number(data.visitors || 0),
+      })
+    } catch (err) {
+      console.error("Profile views fetch error:", err)
+      setProfileViewStats({ views: 0, visitors: 0 })
+    } finally {
+      setViewStatsLoading(false)
+    }
+  }, [profile?.username])
+
   useEffect(() => {
-    loadProfile(true)
+    void loadProfile(true)
   }, [loadProfile])
 
   useEffect(() => {
@@ -462,14 +523,19 @@ export default function ProfilePageClient() {
   }, [profile?.id, loadCoinHistory])
 
   useEffect(() => {
+    if (!profile?.username) {
+      setProfileViewStats({ views: 0, visitors: 0 })
+      return
+    }
+    void loadProfileViewStats()
+  }, [profile?.username, loadProfileViewStats])
+
+  useEffect(() => {
     if (editOpen) return
 
-    const refresh = () => loadProfile(false)
+    const refresh = () => void loadProfile(false)
     window.addEventListener("focus", refresh)
-
-    return () => {
-      window.removeEventListener("focus", refresh)
-    }
+    return () => window.removeEventListener("focus", refresh)
   }, [loadProfile, editOpen])
 
   useEffect(() => {
@@ -497,34 +563,20 @@ export default function ProfilePageClient() {
             amount?: number
             id?: string
             type?: string
+            description?: string
           } | null
 
-          if (inserted?.amount && Number(inserted.amount) > 0) {
-            showCoinPopup(Number(inserted.amount), String(inserted.id || eventId || Date.now()))
+          if (inserted?.amount) {
+            addCoinToast(Number(inserted.amount), inserted.description || formatCoinAction(inserted.type))
           }
 
           await loadProfile(false)
           await loadCoinHistory()
           await loadDailyRewardStatus()
           await loadLeaderboard()
+          await loadProfileViewStats()
 
           window.dispatchEvent(new Event("jb-coins-updated"))
-
-          if (inserted?.amount && Number(inserted.amount) > 0) {
-            window.dispatchEvent(
-              new CustomEvent("jb-coins-popup", {
-                detail: { amount: Number(inserted.amount) },
-              })
-            )
-          }
-
-          if (inserted?.type === "daily_reward") {
-            window.dispatchEvent(
-              new CustomEvent("jb-daily-reward-claimed", {
-                detail: { coins: Number(inserted.amount || 0) },
-              })
-            )
-          }
         }
       )
       .subscribe()
@@ -532,13 +584,29 @@ export default function ProfilePageClient() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [profile?.id, supabase, loadProfile, loadCoinHistory, loadDailyRewardStatus, loadLeaderboard, showCoinPopup])
+  }, [
+    profile?.id,
+    supabase,
+    addCoinToast,
+    loadCoinHistory,
+    loadDailyRewardStatus,
+    loadLeaderboard,
+    loadProfile,
+    loadProfileViewStats,
+  ])
 
   useEffect(() => {
-    return () => {
-      if (popupTimerRef.current) clearTimeout(popupTimerRef.current)
+    const popupListener = (event: Event) => {
+      const detail = (event as CustomEvent<{ amount?: number; label?: string }>).detail
+      if (!detail?.amount) return
+      addCoinToast(Number(detail.amount), detail.label || "JB Coins updated")
     }
-  }, [])
+
+    window.addEventListener("jb-coins-popup", popupListener as EventListener)
+    return () => {
+      window.removeEventListener("jb-coins-popup", popupListener as EventListener)
+    }
+  }, [addCoinToast])
 
   const currentForm = useMemo(
     () => ({
@@ -623,7 +691,6 @@ export default function ProfilePageClient() {
 
   useEffect(() => {
     if (!editOpen) return
-
     if (usernameTimerRef.current) clearTimeout(usernameTimerRef.current)
 
     usernameTimerRef.current = setTimeout(() => {
@@ -701,10 +768,7 @@ export default function ProfilePageClient() {
             : prev
         )
 
-        if (showSuccess) {
-          setSaveMessage("Profile updated successfully.")
-        }
-
+        if (showSuccess) setSaveMessage("Profile updated successfully.")
         return true
       } catch (err) {
         console.error("Unexpected save error:", err)
@@ -714,15 +778,7 @@ export default function ProfilePageClient() {
         setSaving(false)
       }
     },
-    [
-      avatarUrlInput,
-      bioInput,
-      fullNameInput,
-      profile?.id,
-      supabase,
-      usernameInput,
-      usernameStatus.state,
-    ]
+    [avatarUrlInput, bioInput, fullNameInput, profile?.id, supabase, usernameInput, usernameStatus.state]
   )
 
   useEffect(() => {
@@ -741,16 +797,7 @@ export default function ProfilePageClient() {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
     }
-  }, [
-    editOpen,
-    hasUnsavedChanges,
-    fullNameInput,
-    usernameInput,
-    usernameStatus.state,
-    bioInput,
-    avatarUrlInput,
-    saveProfile,
-  ])
+  }, [editOpen, hasUnsavedChanges, fullNameInput, usernameInput, usernameStatus.state, saveProfile])
 
   async function handleAvatarUpload(file: File) {
     if (!profile?.id) return
@@ -763,11 +810,9 @@ export default function ProfilePageClient() {
       const extension = file.name.split(".").pop()?.toLowerCase() || "jpg"
       const filePath = `${profile.id}/${Date.now()}.${extension}`
 
-      const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(filePath, file, {
-          upsert: true,
-        })
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, file, {
+        upsert: true,
+      })
 
       if (uploadError) {
         console.error("Avatar upload error:", uploadError)
@@ -789,10 +834,17 @@ export default function ProfilePageClient() {
   }
 
   async function handleRedeem(plan: RedeemPlan) {
+    const cost = plan === "premium" ? 2000 : 2600
+    if (jbPoints < cost) {
+      triggerInsufficientCoins(`Not enough JB Coins. You need ${cost.toLocaleString()} coins.`)
+      return
+    }
+
     try {
       setRedeemingPlan(plan)
       setSaveError("")
       setSaveMessage("")
+      addCoinToast(-cost, plan === "premium" ? "Premium unlock" : "Platinum unlock")
 
       const response = await fetch("/api/redeem-membership", {
         method: "POST",
@@ -814,14 +866,13 @@ export default function ProfilePageClient() {
 
       setSaveMessage(
         data.message ||
-          (plan === "premium"
-            ? "Premium redeemed successfully."
-            : "Platinum redeemed successfully.")
+          (plan === "premium" ? "Premium redeemed successfully." : "Platinum redeemed successfully.")
       )
 
       await loadProfile(false)
       await loadCoinHistory()
       await loadLeaderboard()
+      await loadProfileViewStats()
     } catch (err) {
       const message = err instanceof Error ? err.message : "Redeem failed."
       setSaveError(message)
@@ -842,17 +893,14 @@ export default function ProfilePageClient() {
         setSaveError("Please enter your new password.")
         return
       }
-
       if (trimmedNewPassword.length < 6) {
         setSaveError("Password must be at least 6 characters.")
         return
       }
-
       if (!trimmedConfirmPassword) {
         setSaveError("Please confirm your new password.")
         return
       }
-
       if (trimmedNewPassword !== trimmedConfirmPassword) {
         setSaveError("Passwords do not match.")
         return
@@ -880,6 +928,40 @@ export default function ProfilePageClient() {
     }
   }
 
+  async function handleClaimDailyReward() {
+    try {
+      setSaveError("")
+      setSaveMessage("")
+
+      const response = await fetch("/api/daily-reward", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+
+      const data = (await response.json()) as DailyRewardStatus
+
+      if (!response.ok) {
+        setSaveError(data.error || data.message || "Failed to claim daily reward.")
+        return
+      }
+
+      const total = Number(data.coins || 0)
+      addCoinToast(total, "Daily reward claimed")
+      setSaveMessage(data.message || "Daily reward claimed successfully.")
+
+      await loadProfile(false)
+      await loadCoinHistory()
+      await loadDailyRewardStatus()
+      await loadLeaderboard()
+      await loadProfileViewStats()
+    } catch (err) {
+      console.error("Daily reward claim error:", err)
+      setSaveError("Failed to claim daily reward.")
+    }
+  }
+
   const successParam = searchParams?.get("success") ?? ""
   const errorParam = searchParams?.get("error") ?? ""
 
@@ -904,11 +986,7 @@ export default function ProfilePageClient() {
                 : ""
 
   const displayName =
-    profile?.full_name ||
-    profile?.name ||
-    profile?.username ||
-    authEmail.split("@")[0] ||
-    "User"
+    profile?.full_name || profile?.name || profile?.username || authEmail.split("@")[0] || "User"
 
   const displayEmail = profile?.email || authEmail || "No email"
   const membershipLevel = normalizeMembership(profile)
@@ -921,28 +999,20 @@ export default function ProfilePageClient() {
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
     (typeof window !== "undefined" ? window.location.origin : "https://jb-collections.com")
 
-  const publicProfileText = profile?.username
-    ? `${siteUrl}/u/${profile.username}`
-    : "Set username first"
-
+  const publicProfileText = profile?.username ? `${siteUrl}/u/${profile.username}` : "Set username first"
   const referralCode = profile?.referral_code?.trim() || ""
-  const referralLink = referralCode
-    ? `${siteUrl}/signup?ref=${referralCode}`
-    : "Referral code unavailable"
+  const referralLink = referralCode ? `${siteUrl}/signup?ref=${referralCode}` : "Referral code unavailable"
 
   const jbPoints = Number(profile?.coins || 0)
   const streak = Number(dailyRewardStatus?.streak || 0)
   const streakBonus = Number(dailyRewardStatus?.streakBonus || 0)
   const baseCoins = Number(dailyRewardStatus?.baseCoins || 15)
   const nextMilestone = dailyRewardStatus?.nextMilestone || null
+  const todayRewardCoins = Number(dailyRewardStatus?.coins || baseCoins + streakBonus || 15)
 
   const hasPremiumAccess =
-    membershipLevel === "premium" ||
-    membershipLevel === "platinum" ||
-    membershipLevel === "admin"
-
-  const hasPlatinumAccess =
-    membershipLevel === "platinum" || membershipLevel === "admin"
+    membershipLevel === "premium" || membershipLevel === "platinum" || membershipLevel === "admin"
+  const hasPlatinumAccess = membershipLevel === "platinum" || membershipLevel === "admin"
 
   const canRedeemPremium =
     membershipLevel !== "admin" &&
@@ -951,9 +1021,7 @@ export default function ProfilePageClient() {
     jbPoints >= 2000
 
   const canRedeemPlatinum =
-    membershipLevel !== "admin" &&
-    membershipLevel !== "platinum" &&
-    jbPoints >= 2600
+    membershipLevel !== "admin" && membershipLevel !== "platinum" && jbPoints >= 2600
 
   if (loading) {
     return (
@@ -961,8 +1029,8 @@ export default function ProfilePageClient() {
         <SiteHeader />
         <div className="min-h-screen bg-slate-950 pt-28">
           <div className="mx-auto max-w-7xl px-4 pb-10">
-            <div className="h-44 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
-            <div className="-mt-14 h-64 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
+            <div className="h-56 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
+            <div className="-mt-14 h-72 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
             <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
               {Array.from({ length: 4 }).map((_, index) => (
                 <div
@@ -982,7 +1050,153 @@ export default function ProfilePageClient() {
     <>
       <SiteHeader />
 
+      <style jsx>{`
+        @keyframes profileGlow {
+          0%,
+          100% {
+            transform: scale(1) translateY(0px);
+            opacity: 0.7;
+          }
+          50% {
+            transform: scale(1.08) translateY(-6px);
+            opacity: 1;
+          }
+        }
+
+        @keyframes coinFloat {
+          0%,
+          100% {
+            transform: translateY(0px) rotate(0deg);
+          }
+          50% {
+            transform: translateY(-8px) rotate(4deg);
+          }
+        }
+
+        @keyframes cardPulse {
+          0%,
+          100% {
+            box-shadow: 0 0 0 rgba(56, 189, 248, 0);
+          }
+          50% {
+            box-shadow: 0 0 38px rgba(56, 189, 248, 0.12);
+          }
+        }
+
+        @keyframes walletPulse {
+          0% {
+            transform: scale(1);
+          }
+          40% {
+            transform: scale(1.05);
+          }
+          100% {
+            transform: scale(1);
+          }
+        }
+
+        @keyframes walletShake {
+          0%,100% {
+            transform: translateX(0);
+          }
+          20% {
+            transform: translateX(-6px);
+          }
+          40% {
+            transform: translateX(6px);
+          }
+          60% {
+            transform: translateX(-5px);
+          }
+          80% {
+            transform: translateX(5px);
+          }
+        }
+
+        @keyframes coinToastIn {
+          0% {
+            opacity: 0;
+            transform: translateY(28px) scale(0.9);
+          }
+          18% {
+            opacity: 1;
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(-120px) scale(1.06);
+          }
+        }
+
+        @keyframes coinBurst {
+          0% {
+            transform: scale(0.85);
+            opacity: 0;
+          }
+          20% {
+            transform: scale(1.08);
+            opacity: 1;
+          }
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+
+        .profile-glow {
+          animation: profileGlow 8s ease-in-out infinite;
+        }
+
+        .coin-float {
+          animation: coinFloat 4s ease-in-out infinite;
+        }
+
+        .card-pulse {
+          animation: cardPulse 5s ease-in-out infinite;
+        }
+
+        .wallet-pulse {
+          animation: walletPulse 0.9s ease-out;
+        }
+
+        .wallet-shake {
+          animation: walletShake 0.55s ease-in-out;
+        }
+
+        .coin-toast {
+          animation: coinToastIn 2.4s ease-out forwards;
+        }
+
+        .coin-burst {
+          animation: coinBurst 0.32s ease-out;
+        }
+      `}</style>
+
       <div className="min-h-screen bg-slate-950 pt-28">
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.15),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(139,92,246,0.15),transparent_30%)]" />
+
+        <div className="pointer-events-none fixed inset-x-0 top-28 z-50 flex justify-center">
+          <div className="relative w-full max-w-7xl px-4">
+            {coinToasts.map((toast) => (
+              <div
+                key={toast.id}
+                className={`coin-toast absolute right-0 rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur ${
+                  toast.kind === "earn"
+                    ? "border-emerald-400/30 bg-emerald-500/15 text-emerald-300"
+                    : "border-red-400/30 bg-red-500/15 text-red-300"
+                }`}
+              >
+                <div className="coin-burst flex items-center gap-3 font-black">
+                  <span className="text-lg">{toast.kind === "earn" ? "🪙" : "💸"}</span>
+                  <div>
+                    <div>{formatCoinAmount(toast.amount)} JB Coins</div>
+                    <div className="text-xs font-semibold opacity-80">{toast.label}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div className="mx-auto max-w-7xl px-4 pb-10">
           {successMessage && (
             <div className="mb-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-300 shadow-sm">
@@ -1008,210 +1222,163 @@ export default function ProfilePageClient() {
             </div>
           )}
 
-          <section className="relative overflow-hidden rounded-[34px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.26),transparent_28%),radial-gradient(circle_at_top_right,rgba(99,102,241,0.25),transparent_30%),linear-gradient(135deg,#0ea5e9_0%,#2563eb_45%,#4f46e5_75%,#7c3aed_100%)] shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_40%)]" />
-            <div className="relative h-20 sm:h-14" />
-          </section>
+          <section className="relative overflow-hidden rounded-[36px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.28),transparent_30%),radial-gradient(circle_at_top_right,rgba(139,92,246,0.25),transparent_32%),linear-gradient(135deg,#0ea5e9_0%,#2563eb_40%,#4f46e5_70%,#7c3aed_100%)] shadow-[0_25px_80px_rgba(0,0,0,0.45)]">
+            <div className="profile-glow absolute -left-10 top-10 h-44 w-44 rounded-full bg-cyan-300/20 blur-3xl" />
+            <div className="profile-glow absolute right-8 top-4 h-48 w-48 rounded-full bg-fuchsia-300/18 blur-3xl" />
+            <div className="profile-glow absolute bottom-0 left-1/3 h-36 w-36 rounded-full bg-amber-300/18 blur-3xl" />
 
-          <section className="-mt-14 relative z-10 overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_32%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.14),transparent_28%),linear-gradient(135deg,#0f172a_0%,#111827_55%,#020617_100%)] p-6 text-white shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-                <div className="relative group w-fit">
+            <div className="relative px-6 py-8 sm:px-8 lg:px-10">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex items-center gap-5">
                   {profile?.avatar_url ? (
                     <img
                       src={profile.avatar_url}
                       alt={displayName}
-                      className="h-28 w-28 rounded-[28px] object-cover ring-2 ring-white/20 shadow-lg"
+                      className="h-24 w-24 rounded-[28px] border border-white/20 object-cover shadow-2xl"
                     />
                   ) : (
-                    <div className="flex h-28 w-28 items-center justify-center rounded-[28px] bg-white/10 text-3xl font-black ring-1 ring-white/10 shadow-lg">
+                    <div className="flex h-24 w-24 items-center justify-center rounded-[28px] border border-white/20 bg-white/10 text-3xl font-black text-white shadow-2xl">
                       {initials}
                     </div>
                   )}
 
-                  {editOpen && (
-                    <label className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-[28px] bg-black/55 opacity-0 transition group-hover:opacity-100">
-                      <span className="text-sm font-bold text-white">
-                        {uploadingAvatar ? "Uploading..." : "Change"}
-                      </span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        disabled={uploadingAvatar}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) void handleAvatarUpload(file)
-                        }}
-                      />
-                    </label>
-                  )}
+                  <div className="min-w-0">
+                    <div className={membershipBadgeClasses}>{displayMembership}</div>
+                    <h1 className="mt-3 truncate text-3xl font-black text-white sm:text-4xl">{displayName}</h1>
+                    <p className="mt-1 text-sm font-semibold text-cyan-100">{displayEmail}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.2em] text-cyan-100/70">{displayStatus}</p>
+                  </div>
                 </div>
 
-                <div>
-                  <p className="text-sm uppercase tracking-[0.2em] text-white/70">
-                    Account Profile
-                  </p>
-
-                  <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-5xl">
-                    {displayName}
-                  </h1>
-
-                  <p className="mt-2 text-sm text-white/75 sm:text-base">{displayEmail}</p>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <span className={membershipBadgeClasses}>{displayMembership}</span>
-
-                    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-bold text-white">
-                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
-                      {displayStatus}
-                    </span>
+                <div
+                  className={`rounded-[28px] border border-amber-300/20 bg-black/20 p-5 text-white shadow-2xl backdrop-blur ${
+                    walletPulse ? "wallet-pulse" : ""
+                  } ${walletShake ? "wallet-shake" : ""}`}
+                >
+                  <p className="text-xs uppercase tracking-[0.2em] text-amber-100/80">JB Coin Wallet</p>
+                  <div className="mt-2 flex items-end gap-3">
+                    <span className="coin-float text-4xl">🪙</span>
+                    <div>
+                      <p className="text-4xl font-black text-amber-200">{jbPoints.toLocaleString()}</p>
+                      <p className="text-sm font-semibold text-amber-100/80">Available right now</p>
+                    </div>
                   </div>
-
-                  <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-                    <span className="rounded-full border border-sky-400/20 bg-sky-500/10 px-3 py-1.5 text-sky-300">
-                      Public link: {publicProfileText}
-                    </span>
-
-                    {profile?.username ? (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard.writeText(publicProfileText)
-                            setSaveMessage("Profile link copied.")
-                            setSaveError("")
-                          } catch {
-                            setSaveError("Could not copy profile link.")
-                            setSaveMessage("")
-                          }
-                        }}
-                        className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 font-semibold text-white transition hover:bg-white/15"
-                      >
-                        Copy Link
-                      </button>
-                    ) : null}
+                  <div className="mt-4 grid gap-2 text-sm text-amber-50/90">
+                    <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                      <span>Premium unlock</span>
+                      <span className="font-black">2,000 🪙</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                      <span>Platinum unlock</span>
+                      <span className="font-black">2,600 🪙</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                      <span>Daily reward today</span>
+                      <span className="font-black text-emerald-200">+{todayRewardCoins.toLocaleString()} 🪙</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="mt-7 flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => {
-                    setEditOpen((prev) => !prev)
-                    setSaveMessage("")
-                    setSaveError("")
-                  }}
-                  className="rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 px-5 py-3 font-bold text-white shadow-lg shadow-blue-950/30 transition hover:brightness-110"
+                  onClick={() => setEditOpen((prev) => !prev)}
+                  className="rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-900 transition hover:scale-[1.02]"
                 >
-                  {editOpen ? "Close Editor" : "Edit Profile"}
+                  {editOpen ? "Close Edit Profile" : "Edit Profile"}
+                </button>
+
+                {profile?.username ? (
+                  <Link
+                    href={`/u/${profile.username}`}
+                    className="rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-black text-white transition hover:bg-white/15"
+                  >
+                    View Public Profile
+                  </Link>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(referralLink)}
+                  className="rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-black text-white transition hover:bg-white/15"
+                >
+                  Copy Referral Link
                 </button>
               </div>
             </div>
-
-            <div className="mt-6 rounded-[24px] border border-white/10 bg-white/5 p-4 text-sm text-white/90 backdrop-blur-sm">
-              {profile?.bio?.trim()
-                ? profile.bio
-                : "No bio yet. Open the profile editor and add a short introduction about yourself."}
-            </div>
           </section>
 
-          <section className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <StatCard label="JB Coins" value={jbPoints.toLocaleString()} hint="Your current balance" />
+            <StatCard label="Daily Streak" value={`${streak} Day${streak === 1 ? "" : "s"}`} hint="Keep claiming every day" />
             <StatCard
-              label="Membership"
-              value={
-                membershipLevel === "admin"
-                  ? "Admin"
-                  : membershipLevel === "platinum"
-                    ? "Platinum"
-                    : membershipLevel === "premium"
-                      ? "Premium"
-                      : "Standard"
-              }
+              label="Profile Views"
+              value={viewStatsLoading ? "Loading..." : profileViewStats.views.toLocaleString()}
+              hint="Total public profile views"
             />
-            <StatCard label="Status" value={displayStatus} />
-            <StatCard label="Username" value={profile?.username || "Not set"} />
             <StatCard
-              label="Leaderboard Rank"
-              value={leaderboardLoading ? "Loading..." : `#${myLeaderboardRank?.rank || "-"}`}
+              label="Unique Visitors"
+              value={viewStatsLoading ? "Loading..." : profileViewStats.visitors.toLocaleString()}
+              hint="Different people who visited"
             />
-          </section>
+          </div>
 
-          {editOpen && (
-            <>
-              <section className="mt-6">
-                <div className="rounded-[28px] border border-amber-400/30 bg-gradient-to-r from-amber-500/10 via-yellow-400/10 to-orange-500/10 p-5 shadow-lg">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <img
-                        src="/jb-coin.png"
-                        alt="JB Coin"
-                        className="h-14 w-14 object-contain drop-shadow-lg"
-                      />
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button type="button" onClick={() => setActiveTab("overview")} className={tabClass(activeTab === "overview")}>
+              Overview
+            </button>
+            <button type="button" onClick={() => setActiveTab("info")} className={tabClass(activeTab === "info")}>
+              Info
+            </button>
+            <button type="button" onClick={() => setActiveTab("security")} className={tabClass(activeTab === "security")}>
+              Security
+            </button>
+          </div>
 
-                      <div>
-                        <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-amber-200">
-                          JB Coins
-                        </p>
-                        <p className="mt-1 text-2xl font-black text-white sm:text-3xl">
-                          {jbPoints.toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="text-right text-xs font-bold text-amber-200">
-                      Balance
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <section className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/80 p-6 shadow-sm ring-1 ring-white/5">
-                <div className="mb-5">
-                  <h2 className="text-xl font-black text-white">Edit Your Profile</h2>
-                  <p className="mt-1 text-sm text-slate-400">
-                    Changes save automatically while you type.
-                  </p>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-2 block text-sm font-bold text-slate-200">
-                      Full Name
-                    </label>
+          {editOpen ? (
+            <div className="mt-6">
+              <SectionCard
+                title="Edit Profile"
+                subtitle="This autosaves while you type. You can also save manually."
+                action={
+                  <button
+                    type="button"
+                    onClick={() => void saveProfile(true)}
+                    disabled={saving}
+                    className="rounded-2xl bg-cyan-400 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {saving ? "Saving..." : "Save now"}
+                  </button>
+                }
+              >
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950 p-4">
+                    <label className="text-xs font-bold uppercase tracking-wide text-slate-400">Full Name</label>
                     <input
-                      type="text"
                       value={fullNameInput}
                       onChange={(e) => setFullNameInput(e.target.value)}
-                      className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+                      className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none ring-0 transition focus:border-cyan-400"
                       placeholder="Enter your full name"
                     />
                   </div>
 
-                  <div>
-                    <label className="mb-2 block text-sm font-bold text-slate-200">
-                      Username
-                    </label>
+                  <div className="rounded-2xl border border-white/10 bg-slate-950 p-4">
+                    <label className="text-xs font-bold uppercase tracking-wide text-slate-400">Username</label>
                     <input
-                      type="text"
                       value={usernameInput}
                       onChange={(e) => setUsernameInput(e.target.value)}
-                      className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
-                      placeholder="yourusername"
+                      className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none ring-0 transition focus:border-cyan-400"
+                      placeholder="username"
                     />
                     {usernameStatus.message ? (
                       <p
-                        className={`mt-2 text-sm font-medium ${
-                          usernameStatus.state === "available"
-                            ? "text-emerald-400"
+                        className={`mt-2 text-xs font-semibold ${
+                          usernameStatus.state === "taken" || usernameStatus.state === "invalid" || usernameStatus.state === "error"
+                            ? "text-red-300"
                             : usernameStatus.state === "checking"
-                              ? "text-slate-400"
-                              : usernameStatus.state === "taken" ||
-                                  usernameStatus.state === "invalid" ||
-                                  usernameStatus.state === "error"
-                                ? "text-red-400"
-                                : "text-slate-400"
+                              ? "text-amber-300"
+                              : "text-emerald-300"
                         }`}
                       >
                         {usernameStatus.message}
@@ -1219,584 +1386,392 @@ export default function ProfilePageClient() {
                     ) : null}
                   </div>
 
-                  <div className="sm:col-span-2">
-                    <label className="mb-2 block text-sm font-bold text-slate-200">
-                      Profile Image
-                    </label>
-
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                      {avatarUrlInput ? (
-                        <img
-                          src={avatarUrlInput}
-                          alt="Profile preview"
-                          className="h-24 w-24 rounded-2xl object-cover ring-1 ring-white/10"
-                        />
-                      ) : (
-                        <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-slate-950 text-lg font-bold text-slate-300 ring-1 ring-white/10">
-                          {initials}
-                        </div>
-                      )}
-
-                      <div className="flex-1">
-                        <label className="inline-flex cursor-pointer items-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-900 transition hover:bg-slate-200">
-                          {uploadingAvatar ? "Uploading..." : "Upload Image"}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            disabled={uploadingAvatar}
-                            onChange={(e) => {
-                              const file = e.target.files?.[0]
-                              if (file) void handleAvatarUpload(file)
-                            }}
-                          />
-                        </label>
-                        <p className="mt-2 text-sm text-slate-400">
-                          Upload a square image for the best result.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="mb-2 block text-sm font-bold text-slate-200">
-                      Bio
-                    </label>
+                  <div className="rounded-2xl border border-white/10 bg-slate-950 p-4 md:col-span-2">
+                    <label className="text-xs font-bold uppercase tracking-wide text-slate-400">Bio</label>
                     <textarea
                       value={bioInput}
                       onChange={(e) => setBioInput(e.target.value)}
                       rows={4}
-                      className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
-                      placeholder="Write a short bio about yourself"
+                      className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none ring-0 transition focus:border-cyan-400"
+                      placeholder="Tell people about yourself"
                     />
                   </div>
-                </div>
 
-                <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const ok = await saveProfile(true)
-                      if (ok) setEditOpen(false)
-                    }}
-                    disabled={saving || usernameStatus.state === "checking"}
-                    className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    {saving ? "Saving..." : "Save Now"}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditOpen(false)
-                      setSaveError("")
-                      setSaveMessage("")
-                      setUsernameStatus({ state: "idle", message: "" })
-
-                      const original = originalProfileRef.current
-                      setFullNameInput(original.full_name)
-                      setUsernameInput(original.username)
-                      setBioInput(original.bio)
-                      setAvatarUrlInput(original.avatar_url)
-                    }}
-                    className="rounded-2xl border border-white/10 bg-slate-950 px-5 py-3 text-sm font-bold text-slate-200 transition hover:bg-slate-900"
-                  >
-                    Cancel
-                  </button>
-
-                  <span className="text-sm text-slate-400">
-                    {saving
-                      ? "Saving changes..."
-                      : hasUnsavedChanges
-                        ? "Unsaved changes detected."
-                        : "All changes saved."}
-                  </span>
-                </div>
-              </section>
-            </>
-          )}
-
-          <section className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/80 p-4 shadow-sm ring-1 ring-white/5">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setActiveTab("overview")}
-                className={tabClass(activeTab === "overview")}
-              >
-                Overview
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("info")}
-                className={tabClass(activeTab === "info")}
-              >
-                Personal Info
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("security")}
-                className={tabClass(activeTab === "security")}
-              >
-                Security
-              </button>
-            </div>
-          </section>
-
-          {activeTab === "overview" && (
-            <>
-              <section className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <div className="lg:col-span-2 rounded-[32px] border border-white/10 bg-slate-900/80 p-6 shadow-sm ring-1 ring-white/5">
-                  <div className="mb-4">
-                    <p className="text-sm font-bold uppercase tracking-[0.2em] text-sky-400">
-                      About
-                    </p>
-                    <h2 className="mt-1 text-xl font-black text-white">Profile Overview</h2>
+                  <div className="rounded-2xl border border-white/10 bg-slate-950 p-4">
+                    <label className="text-xs font-bold uppercase tracking-wide text-slate-400">Avatar URL</label>
+                    <input
+                      value={avatarUrlInput}
+                      onChange={(e) => setAvatarUrlInput(e.target.value)}
+                      className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none ring-0 transition focus:border-cyan-400"
+                      placeholder="https://..."
+                    />
                   </div>
 
-                  <div className="rounded-[24px] border border-white/10 bg-slate-950 p-5">
-                    <p className="text-sm leading-7 text-slate-200">
-                      {profile?.bio?.trim()
-                        ? profile.bio
-                        : "No bio yet. Add a short intro so your profile looks more complete and premium."}
-                    </p>
-                  </div>
-
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <DetailCard label="Display Name">{displayName}</DetailCard>
-                    <DetailCard label="Public Profile">
-                      <span className="break-all">{publicProfileText}</span>
-                    </DetailCard>
-                  </div>
-                </div>
-
-                <div className="rounded-[32px] border border-white/10 bg-slate-900/80 p-6 shadow-sm ring-1 ring-white/5">
-                  <div className="mb-4">
-                    <p className="text-sm font-bold uppercase tracking-[0.2em] text-sky-400">
-                      Account
-                    </p>
-                    <h2 className="mt-1 text-xl font-black text-white">Quick Summary</h2>
-                  </div>
-
-                  <div className="space-y-4">
-                    <DetailCard label="Access Level">{displayMembership}</DetailCard>
-                    <DetailCard label="Status">{displayStatus}</DetailCard>
-                    <DetailCard label="Email">
-                      <span className="break-all">{displayEmail}</span>
-                    </DetailCard>
-                  </div>
-                </div>
-              </section>
-
-              <section className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/80 p-6 shadow-sm ring-1 ring-white/5">
-                <div className="mb-5">
-                  <p className="text-sm font-bold uppercase tracking-[0.2em] text-sky-400">
-                    Rewards
-                  </p>
-                  <h2 className="mt-1 text-xl font-black text-white">JB Rewards</h2>
-                  <p className="mt-2 text-sm text-slate-400">
-                    Use your JB Coins to redeem membership rewards, keep your streak, and view the full leaderboard on its own page.
-                  </p>
-                </div>
-
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-[24px] border border-white/10 bg-slate-950 p-5">
-                    <div className="flex items-center gap-4">
-                      <img
-                        src="/jb-coin.png"
-                        alt="JB Coin"
-                        className="h-16 w-16 object-contain drop-shadow-lg"
+                  <div className="rounded-2xl border border-white/10 bg-slate-950 p-4">
+                    <label className="text-xs font-bold uppercase tracking-wide text-slate-400">Upload Avatar</label>
+                    <label className="mt-2 flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-white/15 bg-slate-900 px-4 py-3 text-sm font-bold text-slate-200 transition hover:border-cyan-400/50">
+                      {uploadingAvatar ? "Uploading..." : "Choose image"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) void handleAvatarUpload(file)
+                        }}
                       />
-
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                          Your JB Coins
-                        </p>
-                        <p className="mt-1 text-4xl font-black text-yellow-400">
-                          {jbPoints}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-5 space-y-2 text-sm font-bold">
-                      <p className="text-amber-300">Redeem Premium = 2000 JB Coins</p>
-                      <p className="text-fuchsia-300">Redeem Platinum = 2600 JB Coins</p>
-                    </div>
-
-                    <div className="mt-5 grid gap-3">
-                      <button
-                        type="button"
-                        onClick={() => void handleRedeem("premium")}
-                        disabled={!canRedeemPremium || redeemingPlan !== null}
-                        className="rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 px-5 py-3 text-sm font-bold text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {redeemingPlan === "premium"
-                          ? "Redeeming Premium..."
-                          : hasPremiumAccess
-                            ? "Premium Already Active"
-                            : canRedeemPremium
-                              ? "Redeem Premium"
-                              : "Need 2000 JB Coins"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => void handleRedeem("platinum")}
-                        disabled={!canRedeemPlatinum || redeemingPlan !== null}
-                        className="rounded-2xl bg-gradient-to-r from-fuchsia-500 to-pink-500 px-5 py-3 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {redeemingPlan === "platinum"
-                          ? "Redeeming Platinum..."
-                          : hasPlatinumAccess
-                            ? "Platinum Already Active"
-                            : canRedeemPlatinum
-                              ? "Redeem Platinum"
-                              : "Need 2600 JB Coins"}
-                      </button>
-                    </div>
+                    </label>
                   </div>
+                </div>
+              </SectionCard>
+            </div>
+          ) : null}
 
-                  <div className="rounded-[24px] border border-orange-400/20 bg-[linear-gradient(135deg,rgba(251,146,60,0.14),rgba(239,68,68,0.08),rgba(15,23,42,0.9))] p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.16em] text-orange-200">
-                          Daily Streak
-                        </p>
-                        <h3 className="mt-1 text-3xl font-black text-white">
-                          🔥 {streak} Day{streak === 1 ? "" : "s"}
-                        </h3>
-                      </div>
+          {activeTab === "overview" ? (
+            <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr,0.95fr]">
+              <div className="space-y-6">
+                <SectionCard
+                  title="JB Coins Engine"
+                  subtitle="Make the economy obvious. Spending, earning, and value are shown clearly here."
+                >
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-[24px] border border-amber-400/20 bg-[linear-gradient(135deg,rgba(251,191,36,0.18),rgba(15,23,42,0.92))] p-5">
+                      <p className="text-xs uppercase tracking-[0.16em] text-amber-200">Daily Reward</p>
+                      <h3 className="mt-2 text-3xl font-black text-white">+{todayRewardCoins.toLocaleString()} JB Coins</h3>
+                      <p className="mt-2 text-sm text-amber-100/80">
+                        Base reward: +{baseCoins.toLocaleString()} • Streak bonus: +{streakBonus.toLocaleString()}
+                      </p>
 
-                      {streakLoading ? (
-                        <span className="text-xs font-bold text-orange-200">Loading...</span>
+                      <button
+                        type="button"
+                        onClick={() => void handleClaimDailyReward()}
+                        disabled={Boolean(dailyRewardStatus?.claimed || dailyRewardStatus?.alreadyClaimed || streakLoading)}
+                        className="mt-5 w-full rounded-2xl bg-amber-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {streakLoading
+                          ? "Loading..."
+                          : dailyRewardStatus?.claimed || dailyRewardStatus?.alreadyClaimed
+                            ? "Already claimed today"
+                            : `Claim +${todayRewardCoins.toLocaleString()} JB Coins`}
+                      </button>
+
+                      {dailyRewardStatus?.nextClaimDate ? (
+                        <p className="mt-3 text-xs text-slate-300">Next claim: {dailyRewardStatus.nextClaimDate}</p>
                       ) : null}
                     </div>
 
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <p className="text-xs uppercase tracking-wide text-slate-400">
-                          Base Daily Reward
-                        </p>
-                        <p className="mt-2 text-xl font-black text-amber-300">
-                          +{baseCoins} JB Coins
-                        </p>
-                      </div>
-
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <p className="text-xs uppercase tracking-wide text-slate-400">
-                          Today&apos;s Streak Bonus
-                        </p>
-                        <p className="mt-2 text-xl font-black text-emerald-300">
-                          +{streakBonus} JB Coins
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
-                      <p className="text-xs uppercase tracking-wide text-slate-400">
-                        Next Milestone
-                      </p>
-                      <p className="mt-2 text-sm font-bold text-white">
-                        {nextMilestone
-                          ? `Day ${nextMilestone.target} • ${nextMilestone.remaining} day${nextMilestone.remaining === 1 ? "" : "s"} left`
-                          : "Keep claiming daily"}
-                      </p>
-                      <p className="mt-1 text-sm text-orange-200">
-                        {nextMilestone
-                          ? `Bonus reward: +${nextMilestone.bonus} JB Coins`
-                          : "More bonus rewards ahead"}
-                      </p>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-3 text-center">
-                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                          Day 3
-                        </p>
-                        <p className="mt-2 text-sm font-black text-yellow-300">+10</p>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-3 text-center">
-                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                          Day 7
-                        </p>
-                        <p className="mt-2 text-sm font-black text-yellow-300">+40</p>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-3 text-center">
-                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                          Day 14
-                        </p>
-                        <p className="mt-2 text-sm font-black text-yellow-300">+75</p>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-3 text-center">
-                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                          Day 30
-                        </p>
-                        <p className="mt-2 text-sm font-black text-yellow-300">+200</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-[24px] border border-white/10 bg-slate-950 p-5">
-                    <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                      Referral Link
-                    </p>
-
-                    <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white break-all">
-                      {referralLink}
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            if (!referralCode) {
-                              setSaveError("Referral code unavailable.")
-                              setSaveMessage("")
-                              return
-                            }
-                            await navigator.clipboard.writeText(referralLink)
-                            setSaveMessage("Referral link copied.")
-                            setSaveError("")
-                          } catch {
-                            setSaveError("Could not copy referral link.")
-                            setSaveMessage("")
-                          }
-                        }}
-                        className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
-                      >
-                        Copy Referral Link
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void loadCoinHistory()
-                          void loadDailyRewardStatus()
-                          void loadLeaderboard()
-                        }}
-                        className="rounded-2xl border border-white/10 bg-white/10 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/15"
-                      >
-                        Refresh Rewards
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[24px] border border-white/10 bg-slate-950 p-5">
-                    <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                      Leaderboard Page
-                    </p>
-
-                    <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-4">
-                      <p className="text-sm font-semibold text-white">
-                        Open the full JB Coin leaderboard on its own page for a cleaner profile view.
-                      </p>
-                      <p className="mt-2 text-sm text-slate-400">
-                        Your current rank: {leaderboardLoading ? "Loading..." : `#${myLeaderboardRank?.rank || "-"}`}
-                      </p>
-                      <Link
-                        href="/leaderboard"
-                        className="mt-4 inline-flex rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 px-5 py-3 text-sm font-bold text-white transition hover:brightness-110"
-                      >
-                        Open Leaderboard
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 rounded-[24px] border border-white/10 bg-slate-950 p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-bold uppercase tracking-[0.2em] text-sky-400">
-                        History
-                      </p>
-                      <h3 className="mt-1 text-lg font-black text-white">
-                        Recent JB Coin Activity
-                      </h3>
-                    </div>
-
-                    {historyLoading ? (
-                      <span className="text-sm text-slate-400">Loading...</span>
-                    ) : null}
-                  </div>
-
-                  <div className="mt-4 space-y-3">
-                    {!historyLoading && coinHistory.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-6 text-center text-sm text-slate-400">
-                        No JB Coin activity yet.
-                      </div>
-                    ) : null}
-
-                    {coinHistory.map((item) => {
-                      const amount = Number(item.amount || 0)
-
-                      return (
-                        <div
-                          key={item.id}
-                          className="flex items-start justify-between gap-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-4"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-bold text-white">
-                              {formatCoinAction(item.type, item.description)}
-                            </p>
-                            <p className="mt-1 text-xs text-slate-400">
-                              {formatHistoryDate(item.created_at)}
-                            </p>
-                          </div>
-
-                          <div className="shrink-0 text-right">
-                            <p className={`text-sm font-black ${getCoinAmountClasses(amount)}`}>
-                              {formatCoinAmount(amount)} JB Coins
-                            </p>
-                          </div>
+                    <div className="rounded-[24px] border border-orange-400/20 bg-[linear-gradient(135deg,rgba(251,146,60,0.14),rgba(239,68,68,0.08),rgba(15,23,42,0.9))] p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-orange-200">Daily Streak</p>
+                          <h3 className="mt-1 text-3xl font-black text-white">🔥 {streak} Day{streak === 1 ? "" : "s"}</h3>
                         </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              </section>
-            </>
-          )}
+                        {streakLoading ? <span className="text-xs font-bold text-orange-200">Loading...</span> : null}
+                      </div>
 
-          {activeTab === "info" && (
-            <section className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/80 p-6 shadow-sm ring-1 ring-white/5">
-              <div className="mb-4">
-                <p className="text-sm font-bold uppercase tracking-[0.2em] text-sky-400">
-                  Account Details
-                </p>
-                <h2 className="mt-1 text-xl font-black text-white">
-                  Personal Information
-                </h2>
-              </div>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-xs uppercase tracking-wide text-slate-400">Base Daily Reward</p>
+                          <p className="mt-2 text-xl font-black text-amber-300">+{baseCoins} JB Coins</p>
+                        </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <DetailCard label="Full Name">{displayName}</DetailCard>
-                <DetailCard label="Email">
-                  <span className="break-all">{displayEmail}</span>
-                </DetailCard>
-                <DetailCard label="Username">{profile?.username || "Not set yet"}</DetailCard>
-                <DetailCard label="Bio">{profile?.bio || "No bio yet"}</DetailCard>
-              </div>
-            </section>
-          )}
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-xs uppercase tracking-wide text-slate-400">Today's Streak Bonus</p>
+                          <p className="mt-2 text-xl font-black text-emerald-300">+{streakBonus} JB Coins</p>
+                        </div>
+                      </div>
 
-          {activeTab === "security" && (
-            <section className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className="rounded-[32px] border border-white/10 bg-slate-900/80 p-6 shadow-sm ring-1 ring-white/5">
-                <div className="mb-4">
-                  <p className="text-sm font-bold uppercase tracking-[0.2em] text-sky-400">
-                    Security
-                  </p>
-                  <h2 className="mt-1 text-xl font-black text-white">Account Safety</h2>
-                </div>
-
-                <div className="grid gap-4">
-                  <DetailCard label="Login Email">
-                    <span className="break-all">{displayEmail}</span>
-                  </DetailCard>
-                  <DetailCard label="Account Status">{displayStatus}</DetailCard>
-
-                  <div className="rounded-2xl border border-white/10 bg-slate-950 p-4">
-                    <p className="text-xs uppercase tracking-wide text-slate-400">
-                      Change Password
-                    </p>
-
-                    <div className="mt-3 grid gap-3">
-                      <input
-                        type="password"
-                        value={newPasswordInput}
-                        onChange={(e) => setNewPasswordInput(e.target.value)}
-                        placeholder="Enter new password"
-                        className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
-                      />
-
-                      <input
-                        type="password"
-                        value={confirmPasswordInput}
-                        onChange={(e) => setConfirmPasswordInput(e.target.value)}
-                        placeholder="Confirm new password"
-                        className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => void handleChangePassword()}
-                        disabled={passwordLoading}
-                        className="rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 px-5 py-3 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-                      >
-                        {passwordLoading ? "Updating Password..." : "Change Password"}
-                      </button>
-
-                      <p className="text-xs text-slate-400">
-                        Use at least 6 characters for your new password.
-                      </p>
+                      {nextMilestone?.target ? (
+                        <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-xs uppercase tracking-wide text-slate-400">Next Milestone</p>
+                          <p className="mt-2 text-base font-bold text-white">
+                            Reach {Number(nextMilestone.target).toLocaleString()} days to unlock +{Number(nextMilestone.bonus || 0).toLocaleString()} bonus coins.
+                          </p>
+                          <p className="mt-1 text-sm text-slate-300">
+                            Remaining: {Number(nextMilestone.remaining || 0).toLocaleString()} day(s)
+                          </p>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
-                </div>
-              </div>
+                </SectionCard>
 
-              <div className="rounded-[32px] border border-white/10 bg-slate-900/80 p-6 shadow-sm ring-1 ring-white/5">
-                <div className="mb-4">
-                  <p className="text-sm font-bold uppercase tracking-[0.2em] text-sky-400">
-                    Membership
-                  </p>
-                  <h2 className="mt-1 text-xl font-black text-white">Plan & Access</h2>
-                </div>
+                <SectionCard
+                  title="Spend JB Coins"
+                  subtitle="Coin cost UI is visible directly on each action so users feel the economy immediately."
+                >
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="card-pulse rounded-[24px] border border-emerald-400/20 bg-[linear-gradient(135deg,rgba(16,185,129,0.12),rgba(15,23,42,0.95))] p-5">
+                      <p className="text-xs uppercase tracking-[0.16em] text-emerald-200">Upgrade</p>
+                      <h4 className="mt-2 text-xl font-black text-white">Premium Access</h4>
+                      <p className="mt-2 text-sm text-slate-300">Unlock premium features and better account status.</p>
+                      <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 font-black text-amber-200">
+                        Cost: 2,000 🪙
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleRedeem("premium")}
+                        disabled={redeemingPlan !== null || hasPremiumAccess}
+                        className={`mt-4 w-full rounded-2xl px-4 py-3 text-sm font-black text-white transition ${
+                          hasPremiumAccess
+                            ? "bg-slate-700 opacity-70"
+                            : canRedeemPremium
+                              ? "bg-emerald-500 hover:bg-emerald-400"
+                              : "bg-slate-700 hover:bg-slate-600"
+                        } disabled:cursor-not-allowed`}
+                      >
+                        {hasPremiumAccess
+                          ? "Already Active"
+                          : redeemingPlan === "premium"
+                            ? "Redeeming..."
+                            : canRedeemPremium
+                              ? "Redeem Premium"
+                              : "Need 2,000 JB Coins"}
+                      </button>
+                    </div>
 
-                <div className="grid gap-4">
-                  <DetailCard label="Current Plan">{displayMembership}</DetailCard>
-                  <DetailCard label="Premium Access">
-                    {membershipLevel === "premium" ||
-                    membershipLevel === "platinum" ||
-                    membershipLevel === "admin"
-                      ? "Enabled"
-                      : "Not active"}
-                  </DetailCard>
-                  <DetailCard label="Current Streak">
-                    {streak} Day{streak === 1 ? "" : "s"}
-                  </DetailCard>
-                  <DetailCard label="Leaderboard Rank">
-                    {leaderboardLoading ? "Loading..." : `#${myLeaderboardRank?.rank || "-"}`}
-                  </DetailCard>
+                    <div className="card-pulse rounded-[24px] border border-fuchsia-400/20 bg-[linear-gradient(135deg,rgba(217,70,239,0.12),rgba(15,23,42,0.95))] p-5">
+                      <p className="text-xs uppercase tracking-[0.16em] text-fuchsia-200">Upgrade</p>
+                      <h4 className="mt-2 text-xl font-black text-white">Platinum Access</h4>
+                      <p className="mt-2 text-sm text-slate-300">Your highest tier with stronger prestige and premium status.</p>
+                      <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 font-black text-amber-200">
+                        Cost: 2,600 🪙
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleRedeem("platinum")}
+                        disabled={redeemingPlan !== null || hasPlatinumAccess}
+                        className={`mt-4 w-full rounded-2xl px-4 py-3 text-sm font-black text-white transition ${
+                          hasPlatinumAccess
+                            ? "bg-slate-700 opacity-70"
+                            : canRedeemPlatinum
+                              ? "bg-fuchsia-500 hover:bg-fuchsia-400"
+                              : "bg-slate-700 hover:bg-slate-600"
+                        } disabled:cursor-not-allowed`}
+                      >
+                        {hasPlatinumAccess
+                          ? "Already Active"
+                          : redeemingPlan === "platinum"
+                            ? "Redeeming..."
+                            : canRedeemPlatinum
+                              ? "Redeem Platinum"
+                              : "Need 2,600 JB Coins"}
+                      </button>
+                    </div>
 
-                  {membershipLevel === "admin" ||
-                  membershipLevel === "premium" ||
-                  membershipLevel === "platinum" ? (
-                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-300">
-                      Your account already has elevated access.
+                    <div className="rounded-[24px] border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.10),rgba(15,23,42,0.95))] p-5 md:col-span-2 xl:col-span-1">
+                      <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">What Coins Can Do</p>
+                      <div className="mt-3 space-y-3">
+                        {[
+                          "Premium membership unlocks",
+                          "Platinum access upgrades",
+                          "Messaging and feature costs",
+                          "Future profile boosts and marketplace items",
+                        ].map((item) => (
+                          <div key={item} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-semibold text-white">
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </SectionCard>
+
+                <SectionCard title="Recent Coin Activity" subtitle="Users feel the economy more when history is visible.">
+                  {historyLoading ? (
+                    <div className="space-y-3">
+                      {Array.from({ length: 4 }).map((_, index) => (
+                        <div key={index} className="h-16 animate-pulse rounded-2xl border border-white/10 bg-slate-950" />
+                      ))}
+                    </div>
+                  ) : coinHistory.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950 p-6 text-sm font-semibold text-slate-400">
+                      No coin activity yet.
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-300">
-                      Earn more JB Coins to unlock Premium or Platinum access.
+                    <div className="space-y-3">
+                      {coinHistory.map((item) => {
+                        const amount = Number(item.amount || 0)
+                        return (
+                          <div
+                            key={item.id}
+                            className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-950 p-4 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-black text-white">
+                                {formatCoinAction(item.type, item.description)}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-400">{formatHistoryDate(item.created_at)}</p>
+                            </div>
+
+                            <div className={`text-lg font-black ${getCoinAmountClasses(amount)}`}>
+                              {formatCoinAmount(amount)} JB Coins
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
-                </div>
+                </SectionCard>
               </div>
-            </section>
-          )}
+
+              <div className="space-y-6">
+                <SectionCard title="Leaderboard" subtitle="Make coins social so the value feels bigger.">
+                  {leaderboardLoading ? (
+                    <div className="space-y-3">
+                      {Array.from({ length: 5 }).map((_, index) => (
+                        <div key={index} className="h-14 animate-pulse rounded-2xl border border-white/10 bg-slate-950" />
+                      ))}
+                    </div>
+                  ) : leaderboard.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950 p-6 text-sm font-semibold text-slate-400">
+                      No leaderboard data yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {leaderboard.map((entry) => (
+                        <div
+                          key={entry.id}
+                          className={`flex items-center justify-between gap-3 rounded-2xl border p-3 ${
+                            entry.is_current_user
+                              ? "border-amber-400/25 bg-amber-400/10"
+                              : "border-white/10 bg-slate-950"
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-sm font-black text-white">
+                              {entry.avatar_url ? (
+                                <img src={entry.avatar_url} alt={entry.display_name} className="h-11 w-11 rounded-2xl object-cover" />
+                              ) : (
+                                entry.initials || getInitials(entry.display_name)
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-black text-white">
+                                #{entry.rank} {entry.display_name}
+                              </p>
+                              <p className="truncate text-xs text-slate-400">
+                                {entry.membership_label || entry.membership || "User"}
+                                {entry.username ? ` • @${entry.username}` : ""}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-base font-black text-amber-300">{Number(entry.coins || 0).toLocaleString()}</p>
+                            <p className="text-xs text-slate-400">JB Coins</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {myLeaderboardRank ? (
+                    <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+                      <p className="text-xs uppercase tracking-wide text-cyan-200">Your Rank</p>
+                      <p className="mt-2 text-xl font-black text-white">#{myLeaderboardRank.rank}</p>
+                      <p className="mt-1 text-sm text-cyan-100">{Number(myLeaderboardRank.coins || 0).toLocaleString()} JB Coins</p>
+                    </div>
+                  ) : null}
+                </SectionCard>
+
+                <SectionCard title="Profile Details" subtitle="Useful links and identity details.">
+                  <div className="grid gap-3">
+                    <DetailCard label="Public Profile">{publicProfileText}</DetailCard>
+                    <DetailCard label="Referral Code">{referralCode || "No referral code yet"}</DetailCard>
+                    <DetailCard label="Referral Link">{referralLink}</DetailCard>
+                    <DetailCard label="Membership">{displayMembership}</DetailCard>
+                    <DetailCard label="Status">{displayStatus}</DetailCard>
+                  </div>
+                </SectionCard>
+              </div>
+            </div>
+          ) : null}
+
+          {activeTab === "info" ? (
+            <div className="mt-6 grid gap-6 lg:grid-cols-2">
+              <SectionCard title="Public Info" subtitle="This is what helps users trust your profile.">
+                <div className="grid gap-3">
+                  <DetailCard label="Full Name">{displayName}</DetailCard>
+                  <DetailCard label="Email">{displayEmail}</DetailCard>
+                  <DetailCard label="Username">{profile?.username ? `@${profile.username}` : "Not set"}</DetailCard>
+                  <DetailCard label="Bio">{profile?.bio || "No bio yet"}</DetailCard>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Coin Visibility Checklist" subtitle="This section reinforces the value of JB Coins.">
+                <div className="grid gap-3">
+                  {[
+                    `Wallet visible in hero: ${jbPoints.toLocaleString()} JB Coins`,
+                    "Premium action shows coin cost",
+                    "Platinum action shows coin cost",
+                    "Daily reward shows earning amount",
+                    "Recent history shows earn/spend records",
+                    "Animations appear when coin balance changes",
+                  ].map((item) => (
+                    <div key={item} className="rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm font-semibold text-white">
+                      ✅ {item}
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+            </div>
+          ) : null}
+
+          {activeTab === "security" ? (
+            <div className="mt-6 grid gap-6 lg:grid-cols-2">
+              <SectionCard title="Change Password" subtitle="Update your password securely.">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wide text-slate-400">New Password</label>
+                    <input
+                      type="password"
+                      value={newPasswordInput}
+                      onChange={(e) => setNewPasswordInput(e.target.value)}
+                      className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+                      placeholder="Enter new password"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wide text-slate-400">Confirm Password</label>
+                    <input
+                      type="password"
+                      value={confirmPasswordInput}
+                      onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                      className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+                      placeholder="Confirm new password"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleChangePassword()}
+                    disabled={passwordLoading}
+                    className="w-full rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {passwordLoading ? "Updating..." : "Update Password"}
+                  </button>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Account Notes" subtitle="Small reminders to keep the page safe and smooth.">
+                <div className="grid gap-3">
+                  {[
+                    "Profile data autosaves while the edit section is open.",
+                    "Username checks for availability before saving.",
+                    "Avatar upload uses your Supabase avatars bucket.",
+                    "Real-time coin updates listen to coin_history changes.",
+                  ].map((item) => (
+                    <div key={item} className="rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm font-semibold text-slate-200">
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+            </div>
+          ) : null}
         </div>
       </div>
-
-      {coinPopup ? (
-        <div className="pointer-events-none fixed right-4 top-24 z-[9999] animate-bounce sm:right-6">
-          <div className="flex items-center gap-3 rounded-2xl border border-amber-300/40 bg-gradient-to-r from-yellow-300 via-amber-400 to-orange-400 px-4 py-3 shadow-2xl shadow-amber-900/30">
-            <img
-              src="/jb-coin.png"
-              alt="JB Coin"
-              className="h-9 w-9 object-contain drop-shadow"
-            />
-            <div className="leading-tight">
-              <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-slate-900/80">
-                JB Coins Added
-              </p>
-              <p className="text-lg font-black text-slate-950">
-                +{coinPopup.amount} JB Coins
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </>
   )
 }
