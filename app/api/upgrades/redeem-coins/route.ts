@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase-server"
-import { createClient as createSupabaseAdmin } from "@supabase/supabase-js"
+import { createClient as createSupabaseAdmin, SupabaseClient } from "@supabase/supabase-js"
 
 export const runtime = "nodejs"
 
@@ -33,9 +33,11 @@ function getDefaultPlanCosts() {
   }
 }
 
-async function loadPlanCosts(
-  adminDb: ReturnType<typeof createSupabaseAdmin>,
-) {
+/**
+ * 🔥 FIXED TYPE HERE
+ * Use generic SupabaseClient instead of ReturnType<typeof createSupabaseAdmin>
+ */
+async function loadPlanCosts(adminDb: SupabaseClient) {
   const defaults = getDefaultPlanCosts()
 
   const { data, error } = await adminDb
