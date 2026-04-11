@@ -8,8 +8,12 @@ import {
   Forward,
   MessageSquare,
   MoreHorizontal,
+  Download,
+  FileText,
+  Maximize2,
   Paperclip,
   Pencil,
+  Play,
   Reply,
   Search,
   Send,
@@ -171,7 +175,9 @@ export default function MessagesPage() {
   const [forwardingToUserId, setForwardingToUserId] = useState<string | null>(null)
 
   const [openMessageMenuId, setOpenMessageMenuId] = useState<string | null>(null)
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
 
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
@@ -340,6 +346,7 @@ export default function MessagesPage() {
 
       if (actionMenuRef.current && !actionMenuRef.current.contains(target)) {
         setOpenMessageMenuId(null)
+        setMenuPosition(null)
       }
 
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(target)) {
@@ -814,6 +821,7 @@ export default function MessagesPage() {
       setError("")
       setSuccess("")
       setOpenMessageMenuId(null)
+      setMenuPosition(null)
 
       if (editingMessageId) {
         const trimmed = message.trim()
@@ -950,6 +958,7 @@ export default function MessagesPage() {
       }
 
       setOpenMessageMenuId(null)
+      setMenuPosition(null)
 
       if (selectedConversationId) {
         await loadMessages(selectedConversationId, false)
@@ -962,6 +971,21 @@ export default function MessagesPage() {
       console.error("Delete message error:", err)
       alert(err instanceof Error ? err.message : "Failed to delete message.")
     }
+  }
+
+  function deleteForMe(messageId: string) {
+    setMessages((prev) => prev.filter((msg) => msg.id !== messageId))
+
+    if (editingMessageId === messageId) {
+      cancelEditing()
+    }
+
+    if (replyingTo?.id === messageId) {
+      setReplyingTo(null)
+    }
+
+    setOpenMessageMenuId(null)
+    setMenuPosition(null)
   }
 
   async function deleteConversationForMe() {
@@ -1008,6 +1032,7 @@ export default function MessagesPage() {
       cancelEditing()
       setReplyingTo(null)
       setOpenMessageMenuId(null)
+      setMenuPosition(null)
       setSuccess("Conversation removed from your inbox.")
       setMobileChatsOpen(false)
     } catch (err) {
@@ -1078,6 +1103,7 @@ export default function MessagesPage() {
     setMessage("")
     setAttachment(null)
     setOpenMessageMenuId(null)
+    setMenuPosition(null)
     textareaRef.current?.focus()
   }
 
@@ -1088,6 +1114,7 @@ export default function MessagesPage() {
     setAttachment(null)
     setMessage(messageRow.body || "")
     setOpenMessageMenuId(null)
+    setMenuPosition(null)
     textareaRef.current?.focus()
   }
 
@@ -1102,6 +1129,7 @@ export default function MessagesPage() {
     setForwardUserSearch("")
     setForwardUserResults([])
     setOpenMessageMenuId(null)
+    setMenuPosition(null)
   }
 
   function closeForwardModal() {
@@ -1111,6 +1139,7 @@ export default function MessagesPage() {
     setForwardUserResults([])
     setForwardingToConversationId(null)
     setForwardingToUserId(null)
+    setMenuPosition(null)
   }
 
   async function forwardToConversation(targetConversationId: string) {
@@ -1218,6 +1247,30 @@ export default function MessagesPage() {
     }
   }
 
+  function openMessageMenu(
+    event: React.MouseEvent<HTMLButtonElement>,
+    messageId: string,
+    isMine: boolean
+  ) {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const menuWidth = 180
+    const gap = 6
+
+    let left = isMine ? rect.right - menuWidth : rect.left
+
+    if (left + menuWidth > window.innerWidth) {
+      left = window.innerWidth - menuWidth - 10
+    }
+    if (left < 10) {
+      left = 10
+    }
+
+    const top = rect.bottom + gap
+
+    setMenuPosition({ top, left })
+    setOpenMessageMenuId((prev) => (prev === messageId ? null : messageId))
+  }
+
   function startLongPressForMessage(messageId: string) {
     if (messageActionTimerRef.current) {
       clearTimeout(messageActionTimerRef.current)
@@ -1274,6 +1327,119 @@ export default function MessagesPage() {
     }
   }
 
+  function getAttachmentKind(url: string) {
+    const cleanUrl = url.split("?")[0].toLowerCase()
+
+    if (/(\.png|\.jpe?g|\.gif|\.webp|\.bmp|\.svg|\.avif)$/.test(cleanUrl)) {
+      return "image" as const
+    }
+
+    if (/(\.mp4|\.webm|\.mov|\.m4v|\.ogg)$/.test(cleanUrl)) {
+      return "video" as const
+    }
+
+    if (/(\.mp3|\.wav|\.m4a|\.aac|\.oga|\.ogg|\.opus)$/.test(cleanUrl)) {
+      return "audio" as const
+    }
+
+    return "file" as const
+  }
+
+  function renderAttachmentPreview(url: string, isMine: boolean) {
+    const kind = getAttachmentKind(url)
+    const fileName = getAttachmentName(url)
+
+    if (kind === "image") {
+      return (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => setPreviewImageUrl(url)}
+            className={`group relative block overflow-hidden rounded-[22px] border text-left transition hover:brightness-110 ${
+              isMine
+                ? "border-white/15 bg-white/10"
+                : "border-white/10 bg-slate-950/30"
+            }`}
+          >
+            <img
+              src={url}
+              alt={fileName}
+              className="block max-h-[280px] w-full max-w-[240px] object-cover sm:max-w-[300px]"
+              loading="lazy"
+            />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/70 via-black/20 to-transparent px-3 py-2">
+              <span className="truncate pr-3 text-xs font-semibold text-white">{fileName}</span>
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white">
+                <Maximize2 size={14} />
+              </span>
+            </div>
+          </button>
+        </div>
+      )
+    }
+
+    if (kind === "video") {
+      return (
+        <div className="mt-3 overflow-hidden rounded-[22px] border border-white/10 bg-black/30">
+          <video
+            controls
+            preload="metadata"
+            className="block max-h-[320px] w-full max-w-[260px] bg-black sm:max-w-[340px]"
+          >
+            <source src={url} />
+          </video>
+          <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-200">
+            <Play size={13} className="shrink-0" />
+            <span className="truncate">{fileName}</span>
+          </div>
+        </div>
+      )
+    }
+
+    if (kind === "audio") {
+      return (
+        <div className={`mt-3 w-full max-w-[300px] rounded-[22px] border px-3 py-3 ${
+          isMine
+            ? "border-white/15 bg-white/10"
+            : "border-white/10 bg-slate-950/30"
+        }`}>
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
+            <Play size={13} className="shrink-0" />
+            <span className="truncate">Voice / Audio</span>
+          </div>
+          <audio controls className="w-full">
+            <source src={url} />
+          </audio>
+          <div className="mt-2 truncate text-[11px] opacity-80">{fileName}</div>
+        </div>
+      )
+    }
+
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`mt-3 flex w-full max-w-[300px] items-center gap-3 rounded-[22px] border px-3 py-3 text-left text-xs font-semibold transition hover:brightness-110 ${
+          isMine
+            ? "border-white/15 bg-white/10 text-white"
+            : "border-white/10 bg-slate-950/30 text-slate-100"
+        }`}
+      >
+        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+          isMine ? "bg-white/10" : "bg-white/5"
+        }`}>
+          <FileText size={18} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm">{fileName}</span>
+          <span className="mt-0.5 block text-[11px] opacity-70">Open or download file</span>
+        </span>
+        <Download size={16} className="shrink-0" />
+      </a>
+    )
+  }
+
   function getDisplayName(profile: ProfileRow | null) {
     if (!profile) return "Unknown user"
     return profile.full_name || profile.name || profile.username || profile.email || "Unknown user"
@@ -1304,7 +1470,13 @@ export default function MessagesPage() {
     if (!item) return "Message"
 
     if (item.body?.trim()) return item.body
-    if (item.attachment_url) return "Attachment"
+    if (item.attachment_url) {
+      const kind = getAttachmentKind(item.attachment_url)
+      if (kind === "image") return "Photo"
+      if (kind === "video") return "Video"
+      if (kind === "audio") return "Voice message"
+      return "Attachment"
+    }
     return "Message"
   }
 
@@ -1628,11 +1800,7 @@ export default function MessagesPage() {
                               <div className={`relative ${isMine ? "pr-12" : "pl-12"}`}>
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    setOpenMessageMenuId((current) =>
-                                      current === item.id ? null : item.id
-                                    )
-                                  }
+                                  onClick={(event) => openMessageMenu(event, item.id, isMine)}
                                   className={`absolute top-3 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-[#091220]/90 text-slate-200 shadow-lg transition hover:bg-[#10203b] ${
                                     isMine
                                       ? "left-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
@@ -1643,53 +1811,76 @@ export default function MessagesPage() {
                                   <MoreHorizontal size={16} />
                                 </button>
 
-                                {isMenuOpen && (
-                                  <div
-                                    ref={actionMenuRef}
-                                    className={`absolute top-12 z-30 w-44 overflow-hidden rounded-2xl border border-white/10 bg-[#091220]/95 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur-md ${
-                                      isMine ? "left-0" : "right-0"
-                                    }`}
-                                  >
+                                {isMenuOpen && menuPosition && (
+                                  <>
                                     <button
                                       type="button"
-                                      onClick={() => startReply(item)}
-                                      className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
-                                    >
-                                      <Reply size={15} />
-                                      Reply
-                                    </button>
+                                      className="fixed inset-0 z-[85] bg-transparent"
+                                      onClick={() => {
+                                        setOpenMessageMenuId(null)
+                                        setMenuPosition(null)
+                                      }}
+                                      aria-label="Close message menu"
+                                    />
 
-                                    <button
-                                      type="button"
-                                      onClick={() => openForwardModal(item)}
-                                      className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
+                                    <div
+                                      ref={actionMenuRef}
+                                      className="fixed z-[90] w-44 overflow-hidden rounded-2xl border border-white/10 bg-[#091220]/95 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
+                                      style={{
+                                        top: Math.min(menuPosition.top, window.innerHeight - 220),
+                                        left: menuPosition.left,
+                                      }}
                                     >
-                                      <Forward size={15} />
-                                      Forward
-                                    </button>
-
-                                    {isMine && (
                                       <button
                                         type="button"
-                                        onClick={() => startEditing(item)}
+                                        onClick={() => startReply(item)}
                                         className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
                                       >
-                                        <Pencil size={15} />
-                                        {isEditingThis ? "Editing" : "Edit"}
+                                        <Reply size={15} />
+                                        Reply
                                       </button>
-                                    )}
 
-                                    {isMine && (
                                       <button
                                         type="button"
-                                        onClick={() => void deleteMyMessage(item.id, item.sender_id)}
-                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-red-300 transition hover:bg-red-500/10"
+                                        onClick={() => openForwardModal(item)}
+                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
+                                      >
+                                        <Forward size={15} />
+                                        Forward
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => deleteForMe(item.id)}
+                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
                                       >
                                         <Trash2 size={15} />
-                                        Delete
+                                        Delete for me
                                       </button>
-                                    )}
-                                  </div>
+
+                                      {isMine && (
+                                        <button
+                                          type="button"
+                                          onClick={() => startEditing(item)}
+                                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
+                                        >
+                                          <Pencil size={15} />
+                                          {isEditingThis ? "Editing" : "Edit"}
+                                        </button>
+                                      )}
+
+                                      {isMine && (
+                                        <button
+                                          type="button"
+                                          onClick={() => void deleteMyMessage(item.id, item.sender_id)}
+                                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-red-300 transition hover:bg-red-500/10"
+                                        >
+                                          <Trash2 size={15} />
+                                          Delete
+                                        </button>
+                                      )}
+                                    </div>
+                                  </>
                                 )}
 
                                 <div
@@ -1749,25 +1940,7 @@ export default function MessagesPage() {
                                       </div>
                                     )}
 
-                                    {item.attachment_url && (
-                                      <div className={`${item.body ? "mt-3" : ""}`}>
-                                        <a
-                                          href={item.attachment_url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className={`inline-flex max-w-full items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold ${
-                                            isMine
-                                              ? "bg-white/15 text-white"
-                                              : "bg-sky-500/10 text-sky-300"
-                                          }`}
-                                        >
-                                          <Paperclip size={14} className="shrink-0" />
-                                          <span className="truncate">
-                                            {getAttachmentName(item.attachment_url)}
-                                          </span>
-                                        </a>
-                                      </div>
-                                    )}
+                                    {item.attachment_url && renderAttachmentPreview(item.attachment_url, isMine)}
                                   </div>
                                 </div>
                               </div>
@@ -2254,6 +2427,34 @@ export default function MessagesPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {previewImageUrl && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm">
+            <button
+              type="button"
+              onClick={() => setPreviewImageUrl(null)}
+              className="absolute inset-0"
+              aria-label="Close image preview"
+            />
+
+            <div className="relative z-10 max-h-[90vh] max-w-[92vw] overflow-hidden rounded-[28px] border border-white/10 bg-[#020617] shadow-[0_25px_80px_rgba(0,0,0,0.45)]">
+              <button
+                type="button"
+                onClick={() => setPreviewImageUrl(null)}
+                className="absolute right-3 top-3 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white transition hover:bg-black/65"
+                aria-label="Close preview"
+              >
+                <X size={18} />
+              </button>
+
+              <img
+                src={previewImageUrl}
+                alt="Attachment preview"
+                className="block max-h-[90vh] w-auto max-w-[92vw] object-contain"
+              />
             </div>
           </div>
         )}
