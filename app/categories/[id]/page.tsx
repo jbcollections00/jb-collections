@@ -145,6 +145,11 @@ function getDisplayName(file: FileItem) {
   return file.title || file.name || "Untitled File"
 }
 
+function canPreviewInline(file: FileItem) {
+  return !!getPreviewImage(file) || isVideoFile(file.file_url) || isPdfFile(file.file_url, file.mime_type)
+}
+
+
 function normalizeMembership(value?: string | null) {
   const membership = String(value || "").trim().toLowerCase()
   if (membership === "platinum") return "platinum"
@@ -218,6 +223,8 @@ export default function CategoryPage() {
   const [filter, setFilter] = useState<FilterKey>("all")
   const [sortBy, setSortBy] = useState<SortKey>("newest")
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null)
+  const [previewZoom, setPreviewZoom] = useState(1)
+  const [touchStartX, setTouchStartX] = useState<number | null>(null)
   const [favorites, setFavorites] = useState<string[]>([])
   const [favoriteToast, setFavoriteToast] = useState<string | null>(null)
   const [showQuickBar, setShowQuickBar] = useState(false)
@@ -237,12 +244,39 @@ export default function CategoryPage() {
     function handleKeydown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setPreviewFile(null)
+        setPreviewZoom(1)
+        return
+      }
+
+      if (!previewFile) return
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault()
+        openNextPreview()
+        return
+      }
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault()
+        openPrevPreview()
+        return
+      }
+
+      if (event.key === "+" || event.key === "=") {
+        event.preventDefault()
+        setPreviewZoom((prev) => Math.min(3, Number((prev + 0.25).toFixed(2))))
+        return
+      }
+
+      if (event.key === "-") {
+        event.preventDefault()
+        setPreviewZoom((prev) => Math.max(1, Number((prev - 0.25).toFixed(2))))
       }
     }
 
     window.addEventListener("keydown", handleKeydown)
     return () => window.removeEventListener("keydown", handleKeydown)
-  }, [])
+  }, [previewFile])
 
   useEffect(() => {
     function handleScroll() {
@@ -258,6 +292,17 @@ export default function CategoryPage() {
     const timeout = window.setTimeout(() => setFavoriteToast(null), 1800)
     return () => window.clearTimeout(timeout)
   }, [favoriteToast])
+
+  useEffect(() => {
+    if (!previewFile) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [previewFile])
 
   useEffect(() => {
     if (!checkingAuth && !loading && !category) {
@@ -463,6 +508,53 @@ export default function CategoryPage() {
       .slice(0, 5)
   }, [files, featuredFile])
 
+  const previewableFiles = useMemo(() => {
+    return filteredFiles.filter((file) => canPreviewInline(file))
+  }, [filteredFiles])
+
+  const currentPreviewIndex = useMemo(() => {
+    if (!previewFile) return -1
+    return previewableFiles.findIndex((file) => file.id === previewFile.id)
+  }, [previewFile, previewableFiles])
+
+  function openPreview(file: FileItem) {
+    setPreviewZoom(1)
+    setPreviewFile(file)
+  }
+
+  function openNextPreview() {
+    if (!previewableFiles.length || currentPreviewIndex === -1) return
+    const nextIndex = (currentPreviewIndex + 1) % previewableFiles.length
+    setPreviewZoom(1)
+    setPreviewFile(previewableFiles[nextIndex])
+  }
+
+  function openPrevPreview() {
+    if (!previewableFiles.length || currentPreviewIndex === -1) return
+    const prevIndex = (currentPreviewIndex - 1 + previewableFiles.length) % previewableFiles.length
+    setPreviewZoom(1)
+    setPreviewFile(previewableFiles[prevIndex])
+  }
+
+  function handlePreviewTouchStart(clientX: number) {
+    setTouchStartX(clientX)
+  }
+
+  function handlePreviewTouchEnd(clientX: number) {
+    if (touchStartX === null) return
+    const deltaX = clientX - touchStartX
+
+    if (Math.abs(deltaX) >= 60) {
+      if (deltaX < 0) {
+        openNextPreview()
+      } else {
+        openPrevPreview()
+      }
+    }
+
+    setTouchStartX(null)
+  }
+
   function goToPage(page: number) {
     if (page < 1 || page > totalPages) return
     setCurrentPage(page)
@@ -630,7 +722,7 @@ export default function CategoryPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setPreviewFile(featuredFile)}
+                          onClick={() => openPreview(featuredFile)}
                           className="inline-flex items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-bold text-white backdrop-blur-sm transition hover:bg-white/15"
                         >
                           Quick Preview
@@ -787,7 +879,7 @@ export default function CategoryPage() {
                         <div className="mt-3 flex gap-2">
                           <button
                             type="button"
-                            onClick={() => setPreviewFile(file)}
+                            onClick={() => openPreview(file)}
                             className="inline-flex flex-1 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/10"
                           >
                             Preview
@@ -878,7 +970,7 @@ export default function CategoryPage() {
                 const isPremiumLocked = visibility === "premium"
                 const isPlatinumLocked = visibility === "platinum"
                 const isLocked = (isPremiumLocked && !isPremiumUser) || (isPlatinumLocked && !isPlatinumUser)
-                const canPreview = !!previewImage || isVideoFile(file.file_url) || isPdfFile(file.file_url, file.mime_type)
+                const canPreview = canPreviewInline(file)
 
                 return (
                   <div
@@ -969,7 +1061,7 @@ export default function CategoryPage() {
                         {canPreview ? (
                           <button
                             type="button"
-                            onClick={() => setPreviewFile(file)}
+                            onClick={() => openPreview(file)}
                             className="inline-flex flex-1 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-white/10"
                           >
                             Preview
@@ -1053,7 +1145,7 @@ export default function CategoryPage() {
                           <div className="flex gap-2 pt-1">
                             <button
                               type="button"
-                              onClick={() => setPreviewFile(file)}
+                              onClick={() => openPreview(file)}
                               className="inline-flex flex-1 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/10"
                             >
                               Preview
@@ -1163,65 +1255,222 @@ export default function CategoryPage() {
       `}</style>
 
       {previewFile && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm" onClick={() => setPreviewFile(null)}>
-          <div className="relative max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 shadow-[0_25px_90px_rgba(0,0,0,0.55)]" onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4 sm:px-6">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 px-3 py-4 backdrop-blur-md sm:px-4 sm:py-6"
+          onClick={() => {
+            setPreviewFile(null)
+            setPreviewZoom(1)
+          }}
+        >
+          <div
+            className="relative flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 shadow-[0_25px_90px_rgba(0,0,0,0.55)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(2,6,23,0.98))] px-4 py-4 sm:px-6">
               <div className="min-w-0">
-                <h3 className="truncate text-lg font-black text-white">{getDisplayName(previewFile)}</h3>
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <div className={`rounded-full border px-3 py-1.5 text-[11px] font-bold ${getVisibilityBadgeClasses(previewFile)}`}>
+                    {getVisibilityLabel(previewFile)}
+                  </div>
+                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold text-white">
+                    {getDisplayFileType(previewFile)}
+                  </div>
+                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold text-white">
+                    {formatFileSize(previewFile.file_size || previewFile.size)}
+                  </div>
+                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold text-white">
+                    {formatNumber(previewFile.downloads_count || previewFile.download_count || 0)} downloads
+                  </div>
+                </div>
+                <h3 className="truncate text-lg font-black text-white sm:text-2xl">{getDisplayName(previewFile)}</h3>
                 <p className="mt-1 text-sm text-slate-400">
-                  {getDisplayFileType(previewFile)} • {formatNumber(previewFile.downloads_count || previewFile.download_count || 0)} downloads
+                  Swipe to browse on mobile. Use arrow keys on desktop.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setPreviewFile(null)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg font-bold text-white transition hover:bg-white/10"
-              >
-                ×
-              </button>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={openPrevPreview}
+                  disabled={previewableFiles.length <= 1}
+                  className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ← Prev
+                </button>
+                <button
+                  type="button"
+                  onClick={openNextPreview}
+                  disabled={previewableFiles.length <= 1}
+                  className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewZoom((prev) => Math.max(1, Number((prev - 0.25).toFixed(2))))}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg font-bold text-white transition hover:bg-white/10"
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewZoom(1)}
+                  className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-bold text-white transition hover:bg-white/10"
+                >
+                  {Math.round(previewZoom * 100)}%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewZoom((prev) => Math.min(3, Number((prev + 0.25).toFixed(2))))}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg font-bold text-white transition hover:bg-white/10"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreviewFile(null)
+                    setPreviewZoom(1)
+                  }}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg font-bold text-white transition hover:bg-white/10"
+                >
+                  ×
+                </button>
+              </div>
             </div>
 
-            <div className="max-h-[70vh] overflow-auto bg-slate-900">
-              {getPreviewImage(previewFile) ? (
-                <img src={getPreviewImage(previewFile) || ""} alt={getDisplayName(previewFile)} className="mx-auto max-h-[70vh] w-auto max-w-full object-contain" />
-              ) : isVideoFile(previewFile.file_url) ? (
-                <video src={previewFile.file_url} controls className="mx-auto max-h-[70vh] w-full max-w-full bg-black object-contain" />
-              ) : isPdfFile(previewFile.file_url, previewFile.mime_type) ? (
-                <iframe src={previewFile.file_url} title={getDisplayName(previewFile)} className="h-[70vh] w-full bg-white" />
-              ) : (
-                <div className="flex min-h-[420px] flex-col items-center justify-center px-6 text-center">
-                  <div className="mb-4 text-6xl">{getFileIcon(getDisplayFileType(previewFile))}</div>
-                  <h4 className="text-xl font-black text-white">Preview not available</h4>
-                  <p className="mt-2 max-w-md text-sm text-slate-400">This file type does not support inline preview. You can still download it below.</p>
+            <div
+              className="relative flex-1 overflow-hidden bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.12),transparent_25%),linear-gradient(180deg,#020617_0%,#0f172a_100%)]"
+              onTouchStart={(event) => handlePreviewTouchStart(event.changedTouches[0]?.clientX ?? 0)}
+              onTouchEnd={(event) => handlePreviewTouchEnd(event.changedTouches[0]?.clientX ?? 0)}
+            >
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-24 bg-gradient-to-r from-black/35 to-transparent lg:block" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-10 hidden w-24 bg-gradient-to-l from-black/35 to-transparent lg:block" />
+
+              {previewableFiles.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={openPrevPreview}
+                    className="absolute left-3 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/45 text-xl font-black text-white backdrop-blur-md transition hover:scale-105 hover:bg-black/60 lg:inline-flex"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openNextPreview}
+                    className="absolute right-3 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/45 text-xl font-black text-white backdrop-blur-md transition hover:scale-105 hover:bg-black/60 lg:inline-flex"
+                  >
+                    ›
+                  </button>
+                </>
+              )}
+
+              <div className="flex h-full max-h-[68vh] min-h-[360px] items-center justify-center overflow-auto px-3 py-3 sm:px-6 sm:py-6">
+                {getPreviewImage(previewFile) ? (
+                  <img
+                    src={getPreviewImage(previewFile) || ""}
+                    alt={getDisplayName(previewFile)}
+                    className="max-h-[64vh] w-auto max-w-full rounded-2xl object-contain transition-transform duration-300"
+                    style={{ transform: `scale(${previewZoom})`, transformOrigin: "center center" }}
+                  />
+                ) : isVideoFile(previewFile.file_url) ? (
+                  <video
+                    src={previewFile.file_url ?? undefined}
+                    controls
+                    autoPlay
+                    muted
+                    playsInline
+                    className="max-h-[64vh] w-full max-w-5xl rounded-2xl bg-black object-contain"
+                  />
+                ) : isPdfFile(previewFile.file_url, previewFile.mime_type) ? (
+                  <iframe
+                    src={previewFile.file_url ?? undefined}
+                    title={getDisplayName(previewFile)}
+                    className="h-[64vh] w-full rounded-2xl bg-white"
+                  />
+                ) : (
+                  <div className="flex min-h-[420px] flex-col items-center justify-center px-6 text-center">
+                    <div className="mb-4 text-6xl">{getFileIcon(getDisplayFileType(previewFile))}</div>
+                    <h4 className="text-xl font-black text-white">Preview not available</h4>
+                    <p className="mt-2 max-w-md text-sm text-slate-400">This file type does not support inline preview. You can still download it below.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-white/10 bg-slate-950/95 px-4 py-4 sm:px-6">
+              {previewableFiles.length > 0 && (
+                <div className="mb-4 overflow-x-auto pb-1">
+                  <div className="flex gap-3">
+                    {previewableFiles.slice(0, 12).map((file) => {
+                      const thumb = getPreviewImage(file)
+                      const isActive = file.id === previewFile.id
+
+                      return (
+                        <button
+                          key={file.id}
+                          type="button"
+                          onClick={() => openPreview(file)}
+                          className={`group relative h-24 w-20 shrink-0 overflow-hidden rounded-2xl border transition ${
+                            isActive
+                              ? "border-sky-400 ring-2 ring-sky-400/40"
+                              : "border-white/10 hover:border-sky-300/40"
+                          }`}
+                        >
+                          {thumb ? (
+                            <img
+                              src={thumb}
+                              alt={getDisplayName(file)}
+                              className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-slate-900 text-2xl">
+                              {getFileIcon(getDisplayFileType(file))}
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                          <div className="absolute inset-x-1 bottom-1 line-clamp-2 text-left text-[10px] font-bold leading-tight text-white">
+                            {getDisplayName(file)}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
-            </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4 sm:px-6">
-              <div className="flex flex-wrap gap-2">
-                <div className={`rounded-full border px-3 py-1.5 text-xs font-bold ${getVisibilityBadgeClasses(previewFile)}`}>
-                  {getVisibilityLabel(previewFile)}
-                </div>
-                <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white">
-                  {formatFileSize(previewFile.file_size || previewFile.size)}
-                </div>
-              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-slate-400">
+                  {currentPreviewIndex >= 0 ? `Preview ${currentPreviewIndex + 1} of ${previewableFiles.length}` : "Preview"}
+                </p>
 
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPreviewFile(null)}
-                  className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDownload(previewFile)}
-                  className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
-                >
-                  Download File
-                </button>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleFavorite(previewFile.id)}
+                    className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                  >
+                    {favorites.includes(previewFile.id) ? "❤️ Saved" : "🤍 Save"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPreviewFile(null)
+                      setPreviewZoom(1)
+                    }}
+                    className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(previewFile)}
+                    className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
+                  >
+                    Download File
+                  </button>
+                </div>
               </div>
             </div>
           </div>
