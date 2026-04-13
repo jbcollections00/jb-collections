@@ -1276,7 +1276,7 @@ export default function ProfilePageClient() {
     return (
       <>
         <SiteHeader />
-        <div className="min-h-screen bg-slate-950 pt-28">
+        <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 pt-28">
           <div className="mx-auto w-full max-w-md px-3 pb-10 sm:max-w-2xl sm:px-4 lg:max-w-7xl">
             <div className="h-56 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
             <div className="-mt-14 h-72 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
@@ -1424,7 +1424,7 @@ export default function ProfilePageClient() {
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.15),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(139,92,246,0.15),transparent_30%)]" />
 
         <div className="pointer-events-none fixed inset-x-0 top-28 z-50 flex justify-center">
-          <div className="relative w-full max-w-7xl px-4">
+          <div className="relative w-full max-w-full px-3 sm:max-w-2xl sm:px-4 lg:max-w-7xl">
             {coinToasts.map((toast) => (
               <div
                 key={toast.id}
@@ -1446,7 +1446,7 @@ export default function ProfilePageClient() {
           </div>
         </div>
 
-        <div className="mx-auto max-w-7xl px-4 pb-10">
+        <div className="w-full max-w-full px-3 pb-10 sm:mx-auto sm:max-w-2xl sm:px-4 lg:max-w-7xl">
           {successMessage && (
             <div className="mb-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-300 shadow-sm">
               {successMessage}
@@ -1478,7 +1478,7 @@ export default function ProfilePageClient() {
 
             <div className="relative px-4 py-6 sm:px-8 lg:px-10">
               <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-                <div className="flex flex-col items-center gap-5 lg:flex-row lg:items-center">
+                <div className="flex w-full flex-col items-center gap-5 lg:flex-row lg:items-center">
                   <div className="relative">
                     {profile?.avatar_url ? (
                       <img
@@ -1496,8 +1496,8 @@ export default function ProfilePageClient() {
                     </div>
                   </div>
 
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-3">
+                  <div className="min-w-0 w-full text-center lg:text-left">
+                    <div className="flex flex-wrap items-center justify-center gap-3 lg:justify-start">
                       <div className={membershipBadgeClasses}>{displayMembership}</div>
                       <div className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-white/90">
                         {gamerTitle}
@@ -1508,7 +1508,7 @@ export default function ProfilePageClient() {
                     <p className="mt-1 text-sm font-semibold text-cyan-100">{displayEmail}</p>
                     <p className="mt-1 text-xs uppercase tracking-[0.2em] text-cyan-100/70">{displayStatus}</p>
 
-                    <div className="mt-4 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
+                    <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {achievementCards.map((item) => (
                         <div
                           key={item.label}
@@ -1651,7 +1651,7 @@ export default function ProfilePageClient() {
             <StatCard label="Reactions" value={reactionTotal.toLocaleString()} hint="Love from your profile" icon="❤️" />
           </div>
 
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <button type="button" onClick={() => setActiveTab("overview")} className={tabClass(activeTab === "overview")}>
               Overview
             </button>
