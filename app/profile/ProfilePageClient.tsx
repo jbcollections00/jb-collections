@@ -249,7 +249,7 @@ function SectionCard({
 }) {
   return (
     <div className="w-full rounded-[28px] border border-white/10 bg-slate-900/80 p-4 sm:p-5 shadow-[0_15px_45px_rgba(0,0,0,0.35)] ring-1 ring-white/5 backdrop-blur transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.18)]">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h3 className="text-lg font-black text-white">{title}</h3>
           {subtitle ? <p className="mt-1 text-sm text-slate-400">{subtitle}</p> : null}
@@ -288,7 +288,7 @@ function DetailCard({ label, children }: { label: string; children: ReactNode })
   return (
     <div className="rounded-2xl border border-white/10 bg-slate-950 p-4 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.18)]">
       <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
-      <div className="mt-2 break-words font-bold text-white">{children}</div>
+      <div className="mt-2 break-all text-base font-bold leading-7 text-white">{children}</div>
     </div>
   )
 }
@@ -1420,7 +1420,7 @@ export default function ProfilePageClient() {
         }
       `}</style>
 
-      <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 pt-24 sm:pt-28">
+      <div className="min-h-screen bg-slate-950 pt-28">
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.15),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(139,92,246,0.15),transparent_30%)]" />
 
         <div className="pointer-events-none fixed inset-x-0 top-28 z-50 flex justify-center">
@@ -1496,17 +1496,17 @@ export default function ProfilePageClient() {
                     </div>
                   </div>
 
-                  <div className="min-w-0 w-full text-center lg:text-left">
-                    <div className="flex flex-wrap items-center justify-center gap-2 lg:justify-start">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-3">
                       <div className={membershipBadgeClasses}>{displayMembership}</div>
                       <div className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-white/90">
                         {gamerTitle}
                       </div>
                     </div>
 
-                    <h1 className="mt-3 break-words text-center text-3xl font-black text-white sm:text-4xl lg:text-left">{displayName}</h1>
-                    <p className="mt-1 break-all text-center text-sm font-semibold text-cyan-100 lg:text-left">{displayEmail}</p>
-                    <p className="mt-1 text-center text-xs uppercase tracking-[0.2em] text-cyan-100/70 lg:text-left">{displayStatus}</p>
+                    <h1 className="mt-3 truncate text-3xl font-black text-white sm:text-4xl">{displayName}</h1>
+                    <p className="mt-1 text-sm font-semibold text-cyan-100">{displayEmail}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.2em] text-cyan-100/70">{displayStatus}</p>
 
                     <div className="mt-4 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
                       {achievementCards.map((item) => (
@@ -1583,10 +1583,10 @@ export default function ProfilePageClient() {
                         walletLedgerItems.map((item) => (
                           <div
                             key={item.id}
-                            className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-3 py-2"
+                            className="flex flex-col items-start gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                           >
-                            <span className="truncate">{item.label}</span>
-                            <span className={`shrink-0 font-black ${item.amountClass}`}>{item.amountLabel}</span>
+                            <span className="w-full break-words text-sm leading-6 sm:w-auto">{item.label}</span>
+                            <span className={`font-black sm:shrink-0 ${item.amountClass}`}>{item.amountLabel}</span>
                           </div>
                         ))
                       ) : (
@@ -1761,7 +1761,7 @@ export default function ProfilePageClient() {
                   title="Profile Identity"
                   subtitle="This is the social layer that makes the page feel more like a real premium profile."
                 >
-                  <div className="grid w-full gap-4 lg:grid-cols-[1.1fr,0.9fr]">
+                  <div className="grid gap-4 lg:grid-cols-[1.1fr,0.9fr]">
                     <div className="rounded-[24px] border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(15,23,42,0.95))] p-5">
                       <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">Bio Highlight</p>
                       <p className="mt-3 text-lg font-bold leading-relaxed text-white">
@@ -1770,7 +1770,7 @@ export default function ProfilePageClient() {
                           : "Collector profile powered by JB Coins, daily streaks, downloads, and premium progression."}
                       </p>
 
-                      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="mt-5 grid grid-cols-2 gap-3">
                         <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                           <p className="text-xs uppercase tracking-wide text-slate-400">Profile Type</p>
                           <p className="mt-2 text-base font-black text-white">{gamerTitle}</p>
@@ -1812,7 +1812,7 @@ export default function ProfilePageClient() {
                   title="JB Coins Engine"
                   subtitle="Make the economy obvious. Spending, earning, and value are shown clearly here."
                 >
-                  <div className="grid w-full gap-4 md:grid-cols-2">
+                  <div className="grid gap-4 md:grid-cols-2">
                     <div className="rounded-[24px] border border-amber-400/20 bg-[linear-gradient(135deg,rgba(251,191,36,0.18),rgba(15,23,42,0.92))] p-5">
                       <p className="text-xs uppercase tracking-[0.16em] text-amber-200">Daily Reward</p>
                       <h3 className="mt-2 text-3xl font-black text-white">+{todayRewardCoins.toLocaleString()} JB Coins</h3>
@@ -1847,7 +1847,7 @@ export default function ProfilePageClient() {
                         {streakLoading ? <span className="text-xs font-bold text-orange-200">Loading...</span> : null}
                       </div>
 
-                      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                           <p className="text-xs uppercase tracking-wide text-slate-400">Base Daily Reward</p>
                           <p className="mt-2 text-xl font-black text-amber-300">+{baseCoins} JB Coins</p>
@@ -1880,7 +1880,7 @@ export default function ProfilePageClient() {
                   action={
                     <Link
                       href="/downloads"
-                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-center text-sm font-black text-white transition hover:bg-white/10 sm:w-auto"
+                      className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-white transition hover:bg-white/10"
                     >
                       View all
                     </Link>
@@ -1980,11 +1980,11 @@ export default function ProfilePageClient() {
                             key={item.id}
                             className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-950 p-4 sm:flex-row sm:items-center sm:justify-between"
                           >
-                            <div className="min-w-0 w-full text-center lg:text-left">
-                              <p className="truncate text-sm font-black text-white">
+                            <div className="min-w-0">
+                              <p className="break-words text-sm font-black leading-6 text-white">
                                 {formatCoinAction(item.type, item.description)}
                               </p>
-                              <p className="mt-1 text-xs text-slate-400">{formatHistoryDate(item.created_at)}</p>
+                              <p className="mt-1 break-words text-xs text-slate-400">{formatHistoryDate(item.created_at)}</p>
                             </div>
 
                             <div className={`text-lg font-black ${getCoinAmountClasses(amount)}`}>
@@ -2013,8 +2013,8 @@ export default function ProfilePageClient() {
                               {item.icon}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-black text-white">{item.title}</p>
-                              <p className="mt-1 text-sm text-slate-300">{item.subtitle}</p>
+                              <p className="break-words text-sm font-black leading-6 text-white">{item.title}</p>
+                              <p className="mt-1 break-words text-sm leading-6 text-slate-300">{item.subtitle}</p>
                               <p className="mt-2 text-xs text-slate-500">{formatHistoryDate(item.created_at)}</p>
                             </div>
                           </div>
@@ -2040,7 +2040,7 @@ export default function ProfilePageClient() {
                       {leaderboard.map((entry) => (
                         <div
                           key={entry.id}
-                          className={`flex items-center justify-between gap-3 rounded-2xl border p-3 ${
+                          className={`flex flex-col items-start gap-3 rounded-2xl border p-3 sm:flex-row sm:items-center sm:justify-between ${
                             entry.is_current_user
                               ? "border-amber-400/25 bg-amber-400/10"
                               : "border-white/10 bg-slate-950"
@@ -2054,17 +2054,17 @@ export default function ProfilePageClient() {
                                 entry.initials || getInitials(entry.display_name)
                               )}
                             </div>
-                            <div className="min-w-0 w-full text-center lg:text-left">
-                              <p className="truncate text-sm font-black text-white">
+                            <div className="min-w-0">
+                              <p className="break-words text-sm font-black leading-6 text-white">
                                 #{entry.rank} {entry.display_name}
                               </p>
-                              <p className="truncate text-xs text-slate-400">
+                              <p className="break-words text-xs leading-5 text-slate-400">
                                 {entry.membership_label || entry.membership || "User"}
                                 {entry.username ? ` • @${entry.username}` : ""}
                               </p>
                             </div>
                           </div>
-                          <div className="text-right">
+                          <div className="w-full text-left sm:w-auto sm:text-right">
                             <p className="text-base font-black text-amber-300">{Number(entry.coins || 0).toLocaleString()}</p>
                             <p className="text-xs text-slate-400">JB Coins</p>
                           </div>
@@ -2083,7 +2083,7 @@ export default function ProfilePageClient() {
                 </SectionCard>
 
                 <SectionCard title="Profile Details" subtitle="Useful links and identity details.">
-                  <div className="grid gap-3">
+                  <div className="grid w-full gap-3">
                     <DetailCard label="Public Profile">{publicProfileText}</DetailCard>
                     <DetailCard label="Referral Code">{referralCode || "No referral code yet"}</DetailCard>
                     <DetailCard label="Referral Link">{referralLink}</DetailCard>
@@ -2098,7 +2098,7 @@ export default function ProfilePageClient() {
           {activeTab === "info" ? (
             <div className="mt-6 grid gap-6 lg:grid-cols-2">
               <SectionCard title="Public Info" subtitle="This is what helps users trust your profile.">
-                <div className="grid gap-3">
+                <div className="grid w-full gap-3">
                   <DetailCard label="Full Name">{displayName}</DetailCard>
                   <DetailCard label="Email">{displayEmail}</DetailCard>
                   <DetailCard label="Username">{profile?.username ? `@${profile.username}` : "Not set"}</DetailCard>
@@ -2107,7 +2107,7 @@ export default function ProfilePageClient() {
               </SectionCard>
 
               <SectionCard title="Profile Highlights" subtitle="This makes the page feel personal, not just technical.">
-                <div className="grid gap-3">
+                <div className="grid w-full gap-3">
                   {achievementCards.map((item) => (
                     <div
                       key={item.label}
@@ -2159,7 +2159,7 @@ export default function ProfilePageClient() {
               </SectionCard>
 
               <SectionCard title="Account Notes" subtitle="Small reminders to keep the page safe and smooth.">
-                <div className="grid gap-3">
+                <div className="grid w-full gap-3">
                   {[
                     "Profile data autosaves while the edit section is open.",
                     "Username checks for availability before saving.",
