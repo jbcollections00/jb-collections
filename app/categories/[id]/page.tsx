@@ -1,1439 +1,1481 @@
 "use client"
 
 import Link from "next/link"
-import { Suspense, useEffect, useMemo, useRef, useState } from "react"
-import { useSearchParams } from "next/navigation"
-import {
-  ArrowLeft,
-  BadgeCheck,
-  CheckCircle2,
-  ChevronRight,
-  Clock3,
-  Coins,
-  CreditCard,
-  FileCheck2,
-  FileImage,
-  Gem,
-  History,
-  Lock,
-  QrCode,
-  ReceiptText,
-  ShieldCheck,
-  Sparkles,
-  UploadCloud,
-  WalletCards,
-  X,
-} from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import AdSlot from "@/app/components/AdSlot"
 import SiteHeader from "@/app/components/SiteHeader"
+import { IN_CONTENT_AD } from "@/app/lib/adCodes"
 
-function formatPeso(value: number) {
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    maximumFractionDigits: 0,
-  }).format(value)
-}
-
-function formatCoins(value: number) {
-  return `${new Intl.NumberFormat("en-PH").format(value)} JB Coins`
-}
-
-function formatDateTime(value: Date) {
-  return new Intl.DateTimeFormat("en-PH", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(value)
-}
-
-type PaymentMethod = "gcash" | "maya"
-type TransactionStatus = "pending" | "approved" | "credited" | "rejected"
-
-type TransactionItem = {
+type Category = {
   id: string
-  label: string
-  amount: number
-  coins: number
-  bonus: number
-  base: number
-  method: PaymentMethod
-  payerName: string
-  referenceNumber: string
-  notes: string
-  status: TransactionStatus
-  createdAt: string
-  receiptName: string
+  name: string
+  slug?: string | null
+  description: string | null
+  thumbnail_url?: string | null
 }
 
-type WalletSummary = {
-  balance: number
-  pendingCoins: number
-  lifetimePurchased: number
+type FileItem = {
+  id: string
+  name?: string | null
+  title?: string | null
+  slug?: string | null
+  description: string | null
+  file_url?: string | null
+  category_id: string
+  thumbnail_url?: string | null
+  cover_url?: string | null
+  image_url?: string | null
+  file_size?: number | null
+  size?: number | null
+  downloads_count?: number | null
+  download_count?: number | null
+  file_type?: string | null
+  mime_type?: string | null
+  visibility?: "free" | "premium" | "platinum" | "private" | null
+  status?: "draft" | "review" | "published" | "flagged" | "removed" | null
+  created_at?: string | null
 }
 
-function toSafeNumber(value: unknown, fallback = 0) {
-  if (typeof value === "number" && Number.isFinite(value)) return value
-  if (typeof value === "string") {
-    const parsed = Number(value)
-    if (Number.isFinite(parsed)) return parsed
-  }
-  return fallback
+type ProfileRow = {
+  role?: string | null
+  membership?: string | null
+  is_premium?: boolean | null
 }
 
-function normalizeWalletSummary(input: unknown): WalletSummary {
-  if (!input || typeof input !== "object") {
-    return {
-      balance: 0,
-      pendingCoins: 0,
-      lifetimePurchased: 0,
-    }
-  }
+type FilterKey = "all" | "free" | "premium" | "platinum"
+type SortKey = "newest" | "downloads" | "name"
 
-  const item = input as Record<string, unknown>
+const PAGE_SIZE = 20
 
-  return {
-    balance: toSafeNumber(
-      item.balance ?? item.walletBalance ?? item.availableBalance ?? item.coins,
-      0
-    ),
-    pendingCoins: toSafeNumber(
-      item.pendingCoins ?? item.pending ?? item.pending_coins,
-      0
-    ),
-    lifetimePurchased: toSafeNumber(
-      item.lifetimePurchased ??
-        item.lifetime_purchased ??
-        item.totalPurchased ??
-        item.totalPurchasedCoins ??
-        item.total_purchased_coins,
-      0
-    ),
-  }
+function slugify(value?: string | null) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
 }
 
-function normalizeTransaction(input: unknown): TransactionItem | null {
-  if (!input || typeof input !== "object") return null
-
-  const item = input as Partial<TransactionItem>
-
-  if (
-    typeof item.id !== "string" ||
-    typeof item.label !== "string" ||
-    typeof item.amount !== "number" ||
-    typeof item.coins !== "number" ||
-    typeof item.method !== "string" ||
-    typeof item.referenceNumber !== "string" ||
-    typeof item.status !== "string" ||
-    typeof item.createdAt !== "string"
-  ) {
-    return null
-  }
-
-  const validMethod: PaymentMethod =
-    item.method === "gcash" ? "gcash" : "maya"
-
-  const validStatus: TransactionStatus =
-    item.status === "approved" ||
-    item.status === "credited" ||
-    item.status === "rejected"
-      ? item.status
-      : "pending"
-
-  return {
-    id: item.id,
-    label: item.label,
-    amount: item.amount,
-    coins: item.coins,
-    bonus: typeof item.bonus === "number" ? item.bonus : 0,
-    base:
-      typeof item.base === "number"
-        ? item.base
-        : Math.max(item.coins - (typeof item.bonus === "number" ? item.bonus : 0), 0),
-    method: validMethod,
-    payerName: typeof item.payerName === "string" ? item.payerName : "",
-    referenceNumber: item.referenceNumber,
-    notes: typeof item.notes === "string" ? item.notes : "",
-    status: validStatus,
-    createdAt: item.createdAt,
-    receiptName:
-      typeof item.receiptName === "string" ? item.receiptName : "receipt-image",
-  }
-}
-
-function getStatusConfig(status: TransactionStatus) {
-  switch (status) {
-    case "pending":
-      return {
-        label: "Pending Review",
-        dot: "bg-amber-400",
-        chip: "border-amber-400/20 bg-amber-400/10 text-amber-200",
-        icon: Clock3,
-      }
-    case "approved":
-      return {
-        label: "Approved",
-        dot: "bg-sky-400",
-        chip: "border-sky-400/20 bg-sky-400/10 text-sky-200",
-        icon: BadgeCheck,
-      }
-    case "credited":
-      return {
-        label: "Coins Credited",
-        dot: "bg-emerald-400",
-        chip: "border-emerald-400/20 bg-emerald-400/10 text-emerald-200",
-        icon: CheckCircle2,
-      }
-    case "rejected":
-      return {
-        label: "Needs Review",
-        dot: "bg-rose-400",
-        chip: "border-rose-400/20 bg-rose-400/10 text-rose-200",
-        icon: X,
-      }
-  }
-}
-
-function PaymentPageContent() {
-  useMemo(() => createClient(), [])
-  const searchParams = useSearchParams()
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-
-  const amount = Number(searchParams.get("amount") || 0)
-  const coins = Number(searchParams.get("coins") || 0)
-  const bonus = Number(searchParams.get("bonus") || 0)
-  const base = Number(searchParams.get("base") || Math.max(coins - bonus, 0))
-  const label = searchParams.get("label") || "JB Coin Package"
-  const initialMethod = (searchParams.get("method") || "maya").toLowerCase()
-  const featured = searchParams.get("featured") === "1"
-
-  const [method, setMethod] = useState<PaymentMethod>(
-    initialMethod === "gcash" ? "gcash" : "maya"
+function isUuid(value?: string | null) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || "")
   )
-  const [payerName, setPayerName] = useState("")
-  const [referenceNumber, setReferenceNumber] = useState("")
-  const [notes, setNotes] = useState("")
-  const [receiptFile, setReceiptFile] = useState<File | null>(null)
-  const [previewUrl, setPreviewUrl] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState("")
-  const [showSuccess, setShowSuccess] = useState(false)
-  const [showCoinBurst, setShowCoinBurst] = useState(false)
+}
 
-  const [walletSummary, setWalletSummary] = useState<WalletSummary>({
-    balance: 0,
-    pendingCoins: 0,
-    lifetimePurchased: 0,
-  })
-  const [isWalletSummaryLoading, setIsWalletSummaryLoading] = useState(true)
-  const [walletSummaryError, setWalletSummaryError] = useState("")
+function isImageFile(url?: string | null) {
+  if (!url) return false
+  return /\.(jpg|jpeg|png|webp|gif|bmp|svg)(\?|$)/i.test(url)
+}
 
-  const [latestTransaction, setLatestTransaction] = useState<TransactionItem | null>(
-    null
-  )
-  const [transactions, setTransactions] = useState<TransactionItem[]>([])
-  const [isTransactionsLoading, setIsTransactionsLoading] = useState(true)
-  const [transactionsError, setTransactionsError] = useState("")
+function isVideoFile(url?: string | null) {
+  if (!url) return false
+  return /\.(mp4|webm|ogg|mov|m4v)(\?|$)/i.test(url)
+}
 
-  const walletDetails = {
-    gcash: {
-      name: "JB Collections Official GCash",
-      number: "0917 123 4567",
-      qr: "/gcash-qr.jpg",
-      accent: "border-sky-400/30 bg-sky-500/10 text-sky-200",
-      ring: "shadow-[0_0_0_1px_rgba(56,189,248,0.22),0_18px_50px_rgba(14,165,233,0.18)]",
-    },
-    maya: {
-      name: "JB Collections Official Maya",
-      number: "0917 765 4321",
-      qr: "/maya-qr.jpg",
-      accent: "border-emerald-400/30 bg-emerald-500/10 text-emerald-200",
-      ring: "shadow-[0_0_0_1px_rgba(52,211,153,0.22),0_18px_50px_rgba(16,185,129,0.18)]",
-    },
-  } as const
+function isPdfFile(url?: string | null, mimeType?: string | null) {
+  if (mimeType?.includes("pdf")) return true
+  if (!url) return false
+  return /\.pdf(\?|$)/i.test(url)
+}
 
-  const activeWallet = walletDetails[method]
+function getPreviewImage(file: FileItem) {
+  if (file.cover_url) return file.cover_url
+  if (file.thumbnail_url) return file.thumbnail_url
+  if (file.image_url) return file.image_url
+  if (isImageFile(file.file_url)) return file.file_url || null
+  return null
+}
 
-  const statusCounts = useMemo(() => {
-    return transactions.reduce(
-      (acc, item) => {
-        acc[item.status] += 1
-        return acc
-      },
-      {
-        pending: 0,
-        approved: 0,
-        credited: 0,
-        rejected: 0,
-      } as Record<TransactionStatus, number>
-    )
-  }, [transactions])
+function getFileExtension(url?: string | null) {
+  if (!url) return "FILE"
+  const clean = url.split("?")[0]
+  const ext = clean.split(".").pop()?.toUpperCase()
+  return ext || "FILE"
+}
 
-  const activeTimelineStatus: TransactionStatus = latestTransaction?.status || "pending"
+function getDisplayFileType(file: FileItem) {
+  if (file.file_type) return file.file_type.toUpperCase()
+  if (file.mime_type?.includes("pdf")) return "PDF"
+  if (file.mime_type?.includes("image")) return "IMAGE"
+  if (file.mime_type?.includes("video")) return "VIDEO"
+  if (file.mime_type?.includes("audio")) return "AUDIO"
+  if (file.mime_type?.includes("zip")) return "ZIP"
+  if (file.mime_type?.includes("rar")) return "RAR"
+  if (file.mime_type?.includes("7z")) return "7Z"
+  return getFileExtension(file.file_url)
+}
 
-  async function loadWalletSummary() {
-    try {
-      setIsWalletSummaryLoading(true)
-      setWalletSummaryError("")
+function getFileIcon(type: string) {
+  const normalized = type.toUpperCase()
 
-      const res = await fetch("/api/wallet/summary", {
-        method: "GET",
-        cache: "no-store",
-      })
+  if (["PDF"].includes(normalized)) return "📕"
+  if (["DOC", "DOCX"].includes(normalized)) return "📘"
+  if (["XLS", "XLSX", "CSV"].includes(normalized)) return "📗"
+  if (["PPT", "PPTX"].includes(normalized)) return "📙"
+  if (["ZIP", "RAR", "7Z"].includes(normalized)) return "🗜️"
+  if (["JPG", "JPEG", "PNG", "WEBP", "GIF", "SVG", "IMAGE"].includes(normalized)) return "🖼️"
+  if (["MP4", "MOV", "AVI", "MKV", "VIDEO"].includes(normalized)) return "🎬"
+  if (["MP3", "WAV", "AAC", "AUDIO"].includes(normalized)) return "🎵"
+  if (["EXE", "MSI", "APK"].includes(normalized)) return "⚙️"
+  return "📄"
+}
 
-      const data = await res.json().catch(() => null)
+function formatNumber(value?: number | null) {
+  return new Intl.NumberFormat().format(value || 0)
+}
 
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to load wallet summary.")
-      }
+function formatFileSize(bytes?: number | null) {
+  const value = bytes || 0
+  if (!value) return "Unknown"
+  const units = ["B", "KB", "MB", "GB", "TB"]
+  let size = value
+  let unitIndex = 0
 
-      const summarySource =
-        data?.summary && typeof data.summary === "object" ? data.summary : data
-
-      setWalletSummary(normalizeWalletSummary(summarySource))
-    } catch (error) {
-      setWalletSummaryError(
-        error instanceof Error ? error.message : "Failed to load wallet summary."
-      )
-    } finally {
-      setIsWalletSummaryLoading(false)
-    }
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex += 1
   }
 
-  async function loadTransactions() {
-    try {
-      setIsTransactionsLoading(true)
-      setTransactionsError("")
+  return `${size >= 10 || unitIndex === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unitIndex]}`
+}
 
-      const res = await fetch("/api/wallet/transactions", {
-        method: "GET",
-        cache: "no-store",
-      })
+function getDisplayName(file: FileItem) {
+  return file.title || file.name || "Untitled File"
+}
 
-      const data = await res.json().catch(() => null)
+function canPreviewInline(file: FileItem) {
+  return !!getPreviewImage(file) || isVideoFile(file.file_url) || isPdfFile(file.file_url, file.mime_type)
+}
 
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to load transaction history.")
-      }
 
-      const normalizedTransactions = Array.isArray(data?.transactions)
-        ? data.transactions
-            .map(normalizeTransaction)
-            .filter((item: TransactionItem | null): item is TransactionItem => item !== null)
-        : []
+function normalizeMembership(value?: string | null) {
+  const membership = String(value || "").trim().toLowerCase()
+  if (membership === "platinum") return "platinum"
+  if (membership === "premium") return "premium"
+  return "standard"
+}
 
-      setTransactions(normalizedTransactions)
-      setLatestTransaction(normalizedTransactions[0] || null)
-    } catch (error) {
-      setTransactionsError(
-        error instanceof Error ? error.message : "Failed to load transaction history."
-      )
-    } finally {
-      setIsTransactionsLoading(false)
-    }
+function getVisibilityLabel(file: FileItem) {
+  const visibility = (file.visibility || "free").toLowerCase()
+  if (visibility === "platinum") return "Platinum"
+  if (visibility === "premium") return "Premium"
+  if (visibility === "private") return "Private"
+  return "Free"
+}
+
+function getVisibilityBadgeClasses(file: FileItem) {
+  const visibility = (file.visibility || "free").toLowerCase()
+
+  if (visibility === "platinum") {
+    return "border-fuchsia-400/30 bg-fuchsia-500/90 text-white shadow-[0_0_24px_rgba(217,70,239,0.28)]"
   }
+  if (visibility === "premium") {
+    return "border-amber-400/30 bg-amber-500/90 text-white shadow-[0_0_24px_rgba(245,158,11,0.24)]"
+  }
+  if (visibility === "private") {
+    return "border-red-400/30 bg-red-500/90 text-white shadow-[0_0_24px_rgba(239,68,68,0.24)]"
+  }
+  return "border-emerald-400/30 bg-emerald-500/90 text-white shadow-[0_0_24px_rgba(16,185,129,0.22)]"
+}
+
+function getCardBorderClasses(file: FileItem) {
+  const visibility = (file.visibility || "free").toLowerCase()
+
+  if (visibility === "platinum") return "border-fuchsia-400/20 hover:border-fuchsia-400/40"
+  if (visibility === "premium") return "border-amber-400/20 hover:border-amber-400/40"
+  if (visibility === "private") return "border-red-400/20 hover:border-red-400/40"
+  return "border-white/10 hover:border-sky-400/30"
+}
+
+function isNewFile(file: FileItem) {
+  if (!file.created_at) return false
+  const createdAt = new Date(file.created_at).getTime()
+  if (Number.isNaN(createdAt)) return false
+  return createdAt > Date.now() - 10 * 24 * 60 * 60 * 1000
+}
+
+function getCategoryHeroImage(category: Category | null, featuredFile: FileItem | null) {
+  if (category?.thumbnail_url) return category.thumbnail_url
+  if (featuredFile) return getPreviewImage(featuredFile)
+  return null
+}
+
+function getCategoryHref(category: Category) {
+  return `/categories/${category.slug || slugify(category.name) || category.id}`
+}
+
+export default function CategoryPage() {
+  const params = useParams()
+  const router = useRouter()
+  const routeValue = String(params?.id || "")
+  const supabase = useMemo(() => createClient(), [])
+
+  const [category, setCategory] = useState<Category | null>(null)
+  const [allCategories, setAllCategories] = useState<Category[]>([])
+  const [files, setFiles] = useState<FileItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [checkingAuth, setCheckingAuth] = useState(true)
+  const [search, setSearch] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [profile, setProfile] = useState<ProfileRow | null>(null)
+  const [filter, setFilter] = useState<FilterKey>("all")
+  const [sortBy, setSortBy] = useState<SortKey>("newest")
+  const [previewFile, setPreviewFile] = useState<FileItem | null>(null)
+  const [previewZoom, setPreviewZoom] = useState(1)
+  const [touchStartX, setTouchStartX] = useState<number | null>(null)
+  const [favorites, setFavorites] = useState<string[]>([])
+  const [favoriteToast, setFavoriteToast] = useState<string | null>(null)
+  const [showQuickBar, setShowQuickBar] = useState(false)
 
   useEffect(() => {
-    void Promise.all([loadWalletSummary(), loadTransactions()])
+    if (routeValue) {
+      void checkUserAndLoad()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeValue])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search, filter, sortBy, category?.id])
+
+  useEffect(() => {
+    function handleKeydown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setPreviewFile(null)
+        setPreviewZoom(1)
+        return
+      }
+
+      if (!previewFile) return
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault()
+        openNextPreview()
+        return
+      }
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault()
+        openPrevPreview()
+        return
+      }
+
+      if (event.key === "+" || event.key === "=") {
+        event.preventDefault()
+        setPreviewZoom((prev) => Math.min(3, Number((prev + 0.25).toFixed(2))))
+        return
+      }
+
+      if (event.key === "-") {
+        event.preventDefault()
+        setPreviewZoom((prev) => Math.max(1, Number((prev - 0.25).toFixed(2))))
+      }
+    }
+
+    window.addEventListener("keydown", handleKeydown)
+    return () => window.removeEventListener("keydown", handleKeydown)
+  }, [previewFile])
+
+  useEffect(() => {
+    function handleScroll() {
+      setShowQuickBar(window.scrollY > 520)
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
   useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
-    }
-  }, [previewUrl])
+    if (!favoriteToast) return
+    const timeout = window.setTimeout(() => setFavoriteToast(null), 1800)
+    return () => window.clearTimeout(timeout)
+  }, [favoriteToast])
 
   useEffect(() => {
-    if (!showCoinBurst) return
+    if (!previewFile) return
 
-    const timer = window.setTimeout(() => {
-      setShowCoinBurst(false)
-    }, 2200)
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
 
-    return () => window.clearTimeout(timer)
-  }, [showCoinBurst])
-
-  function handleReceiptChange(file: File | null) {
-    if (!file) return
-
-    setReceiptFile(file)
-    setSubmitError("")
-
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl)
+    return () => {
+      document.body.style.overflow = previousOverflow
     }
+  }, [previewFile])
 
-    const url = URL.createObjectURL(file)
-    setPreviewUrl(url)
-  }
-
-  function clearReceipt() {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl)
+  useEffect(() => {
+    if (!checkingAuth && !loading && !category) {
+      router.replace("/categories")
     }
-    setReceiptFile(null)
-    setPreviewUrl("")
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
-    }
-  }
+  }, [checkingAuth, loading, category, router])
 
-  function createTransactionId() {
-    const now = new Date()
-    const y = now.getFullYear()
-    const m = `${now.getMonth() + 1}`.padStart(2, "0")
-    const d = `${now.getDate()}`.padStart(2, "0")
-    const random = Math.floor(1000 + Math.random() * 9000)
-    return `TXN-${y}${m}${d}-${random}`
-  }
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setSubmitError("")
-
-    if (!payerName.trim()) {
-      setSubmitError("Please enter the payer name.")
-      return
-    }
-
-    if (!referenceNumber.trim()) {
-      setSubmitError("Please enter the payment reference number.")
-      return
-    }
-
-    if (!receiptFile) {
-      setSubmitError("Please upload your payment receipt.")
-      return
-    }
-
+  async function checkUserAndLoad() {
     try {
-      setIsSubmitting(true)
+      setCheckingAuth(true)
+      setLoading(true)
 
-      const formData = new FormData()
-      formData.append("amount", String(amount))
-      formData.append("coins", String(coins))
-      formData.append("bonus", String(bonus))
-      formData.append("base", String(base))
-      formData.append("label", label)
-      formData.append("method", method)
-      formData.append("payer_name", payerName)
-      formData.append("reference_number", referenceNumber)
-      formData.append("notes", notes)
-      formData.append("receipt", receiptFile)
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser()
 
-      const res = await fetch("/api/upgrades/request", {
-        method: "POST",
-        body: formData,
-      })
-
-      const data = await res.json().catch(() => null)
-
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to submit payment proof.")
+      if (error || !user) {
+        router.replace("/login")
+        return
       }
 
-      const returnedTransaction = normalizeTransaction(data?.transaction)
-
-      const newTransaction: TransactionItem =
-        returnedTransaction || {
-          id: data?.transaction_id || createTransactionId(),
-          label,
-          amount,
-          coins,
-          bonus,
-          base,
-          method,
-          payerName: payerName.trim(),
-          referenceNumber: referenceNumber.trim(),
-          notes: notes.trim(),
-          status: "pending",
-          createdAt: new Date().toISOString(),
-          receiptName: receiptFile.name,
-        }
-
-      setTransactions((prev) => [newTransaction, ...prev])
-      setLatestTransaction(newTransaction)
-      setWalletSummary((prev) => ({
-        ...prev,
-        pendingCoins: prev.pendingCoins + coins,
-        lifetimePurchased: prev.lifetimePurchased + coins,
-      }))
-      setShowSuccess(true)
-      setShowCoinBurst(true)
-
-      setPayerName("")
-      setReferenceNumber("")
-      setNotes("")
-      clearReceipt()
+      await fetchCategoryPage(user.id)
     } catch (error) {
-      setSubmitError(
-        error instanceof Error ? error.message : "Something went wrong."
-      )
+      console.error("Category auth check failed:", error)
+      router.replace("/login")
     } finally {
-      setIsSubmitting(false)
+      setCheckingAuth(false)
+      setLoading(false)
     }
   }
 
-  function handleCloseSuccess() {
-    setShowSuccess(false)
+  async function fetchCategoryPage(userId: string) {
+    const [
+      { data: categoriesData, error: categoriesError },
+      { data: profileData, error: profileError },
+    ] = await Promise.all([
+      supabase.from("categories").select("id, name, slug, description, thumbnail_url").order("name", { ascending: true }),
+      supabase.from("profiles").select("role, membership, is_premium").eq("id", userId).maybeSingle(),
+    ])
+
+    if (categoriesError) {
+      console.error("Categories fetch error:", categoriesError)
+      setAllCategories([])
+      setCategory(null)
+      setFiles([])
+      return
+    }
+
+    const categories = (categoriesData || []) as Category[]
+    setAllCategories(categories)
+
+    const normalizedRouteValue = slugify(routeValue)
+    const matchedCategory = categories.find((item) => {
+      const matchesId = isUuid(routeValue) && item.id === routeValue
+      const matchesSlug = slugify(item.slug) === normalizedRouteValue
+      const matchesName = slugify(item.name) === normalizedRouteValue
+      return matchesId || matchesSlug || matchesName
+    })
+
+    if (!matchedCategory) {
+      setCategory(null)
+      setFiles([])
+    } else {
+      setCategory(matchedCategory)
+
+      const { data: filesData, error: filesError } = await supabase
+        .from("files")
+        .select("*")
+        .eq("category_id", matchedCategory.id)
+        .eq("status", "published")
+        .order("created_at", { ascending: false })
+
+      if (filesError) {
+        console.error("Files fetch error:", filesError)
+        setFiles([])
+      } else {
+        setFiles((filesData || []) as FileItem[])
+      }
+    }
+
+    if (profileError) {
+      console.error("Profile fetch error:", profileError)
+      setProfile(null)
+    } else {
+      setProfile((profileData as ProfileRow | null) || null)
+    }
   }
 
-  const timelineSteps = [
-    {
-      key: "submitted",
-      label: "Payment Submitted",
-      description: "Receipt and reference number logged successfully.",
-      active: true,
-      completed: true,
-    },
-    {
-      key: "review",
-      label: "Receipt Under Review",
-      description: "Team checks the proof and verifies wallet details.",
-      active:
-        activeTimelineStatus === "pending" ||
-        activeTimelineStatus === "approved" ||
-        activeTimelineStatus === "credited",
-      completed:
-        activeTimelineStatus === "approved" || activeTimelineStatus === "credited",
-    },
-    {
-      key: "approved",
-      label: "Approved",
-      description: "Payment validated and ready for coin release.",
-      active:
-        activeTimelineStatus === "approved" || activeTimelineStatus === "credited",
-      completed:
-        activeTimelineStatus === "approved" || activeTimelineStatus === "credited",
-    },
-    {
-      key: "credited",
-      label: "Coins Credited",
-      description: "JB Coins are added to your wallet balance.",
-      active: activeTimelineStatus === "credited",
-      completed: activeTimelineStatus === "credited",
-    },
-  ]
-
-  const walletBalance = walletSummary.balance
-  const pendingCoins = walletSummary.pendingCoins
-  const lifetimePurchased = walletSummary.lifetimePurchased
-
-  return (
-    <>
-      <SiteHeader />
-
-      <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.16),transparent_20%),radial-gradient(circle_at_right,rgba(16,185,129,0.10),transparent_20%),linear-gradient(180deg,#020617_0%,#071124_48%,#0f172a_100%)] px-3 pb-12 pt-24 text-white sm:px-4 lg:px-6">
-        <div className="mx-auto w-full max-w-7xl">
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <Link
-              href="/upgrade"
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10"
-            >
-              <ArrowLeft size={16} />
-              Back to JB Store
-            </Link>
-
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-emerald-200">
-              <WalletCards size={14} />
-              Real Wallet Checkout
-            </div>
-          </div>
-
-          <section className="rounded-[30px] border border-white/10 bg-slate-900/70 p-4 shadow-[0_25px_70px_rgba(0,0,0,0.35)] backdrop-blur sm:p-6 lg:p-8">
-            <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr] xl:items-center">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.22em] text-amber-200">
-                  <Sparkles size={14} />
-                  Premium Checkout
-                </div>
-
-                <h1 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl lg:text-5xl">
-                  Complete Your JB Coin Payment
-                </h1>
-
-                <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
-                  Pay with GCash or Maya, upload your receipt, and track your request
-                  from submission to approval to coin crediting with a real wallet
-                  activity flow.
-                </p>
-
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <div className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-200">
-                    <ShieldCheck size={16} className="text-sky-200" />
-                    Verified wallet details
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-200">
-                    <History size={16} className="text-fuchsia-200" />
-                    Transaction history
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-200">
-                    <Coins size={16} className="text-amber-200" />
-                    Coin credit tracking
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                <div className="rounded-[24px] border border-white/10 bg-slate-950/60 p-4">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                    Package
-                  </div>
-                  <div className="mt-2 text-xl font-black text-white">{label}</div>
-                  <div className="mt-2 text-sm text-slate-400">
-                    {formatCoins(coins)} total wallet credit
-                  </div>
-                </div>
-
-                <div className="rounded-[24px] border border-white/10 bg-slate-950/60 p-4">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                    Total Payment
-                  </div>
-                  <div className="mt-2 text-xl font-black text-amber-300">
-                    {formatPeso(amount)}
-                  </div>
-                  <div className="mt-2 text-sm text-slate-400">
-                    Exact amount required for verification
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {walletSummaryError ? (
-            <div className="mt-5 rounded-[24px] border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-              {walletSummaryError}
-            </div>
-          ) : null}
-
-          <section className="mt-5 grid gap-4 xl:grid-cols-4">
-            <div className="rounded-[26px] border border-white/10 bg-slate-900/70 p-4 shadow-xl backdrop-blur">
-              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                <WalletCards size={14} />
-                Wallet Balance
-              </div>
-              <div className="mt-3 text-3xl font-black text-white">
-                {isWalletSummaryLoading ? "Loading..." : formatCoins(walletBalance)}
-              </div>
-              <div className="mt-2 text-sm text-slate-400">
-                Available balance ready to use
-              </div>
-            </div>
-
-            <div className="rounded-[26px] border border-amber-400/20 bg-amber-400/10 p-4 shadow-xl backdrop-blur">
-              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-200">
-                <Clock3 size={14} />
-                Pending Coins
-              </div>
-              <div className="mt-3 text-3xl font-black text-white">
-                {isWalletSummaryLoading ? "Loading..." : formatCoins(pendingCoins)}
-              </div>
-              <div className="mt-2 text-sm text-amber-100/80">
-                Waiting for approval before crediting
-              </div>
-            </div>
-
-            <div className="rounded-[26px] border border-emerald-400/20 bg-emerald-400/10 p-4 shadow-xl backdrop-blur">
-              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-200">
-                <Gem size={14} />
-                Lifetime Purchased
-              </div>
-              <div className="mt-3 text-3xl font-black text-white">
-                {isWalletSummaryLoading ? "Loading..." : formatCoins(lifetimePurchased)}
-              </div>
-              <div className="mt-2 text-sm text-emerald-100/80">
-                Total coins purchased from the JB Store
-              </div>
-            </div>
-
-            <div className="rounded-[26px] border border-fuchsia-400/20 bg-fuchsia-400/10 p-4 shadow-xl backdrop-blur">
-              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-fuchsia-200">
-                <ReceiptText size={14} />
-                Activity Status
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-black text-white">
-                  {statusCounts.pending} Pending
-                </span>
-                <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-black text-white">
-                  {statusCounts.approved} Approved
-                </span>
-                <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-black text-white">
-                  {statusCounts.credited} Credited
-                </span>
-              </div>
-              <div className="mt-2 text-sm text-fuchsia-100/80">
-                Real-time wallet activity view
-              </div>
-            </div>
-          </section>
-
-          <section className="mt-5 grid gap-5 xl:grid-cols-[1.12fr_0.88fr]">
-            <div className="space-y-5">
-              <div className="rounded-[28px] border border-white/10 bg-slate-900/70 p-4 shadow-xl backdrop-blur sm:p-5 lg:p-6">
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setMethod("gcash")}
-                    className={`rounded-2xl px-5 py-3 text-sm font-black transition ${
-                      method === "gcash"
-                        ? "bg-sky-500 text-white shadow-lg"
-                        : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
-                    }`}
-                  >
-                    GCash
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setMethod("maya")}
-                    className={`rounded-2xl px-5 py-3 text-sm font-black transition ${
-                      method === "maya"
-                        ? "bg-emerald-500 text-white shadow-lg"
-                        : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
-                    }`}
-                  >
-                    Maya
-                  </button>
-                </div>
-
-                <div className="mt-5 rounded-[26px] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(8,15,30,0.96))] p-4 sm:p-5">
-                  <div className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-slate-300">
-                    <QrCode size={16} />
-                    Selected Payment
-                  </div>
-
-                  <div
-                    className={`mt-4 rounded-[24px] border p-4 ${activeWallet.accent} ${activeWallet.ring}`}
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white">
-                        {method === "gcash" ? "GCash" : "Maya"}
-                      </div>
-                      <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white">
-                        Official Wallet
-                      </div>
-                      <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white">
-                        Verified Receiving Account
-                      </div>
-                    </div>
-
-                    <div className="mt-4 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-                      <div className="overflow-hidden rounded-[22px] border border-white/10 bg-black/20">
-                        <img
-                          src={activeWallet.qr}
-                          alt={`${method} QR code`}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-
-                      <div className="flex flex-col justify-between rounded-[22px] border border-white/10 bg-black/20 p-4">
-                        <div>
-                          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
-                            Account Name
-                          </div>
-                          <div className="mt-2 text-lg font-black text-white">
-                            {activeWallet.name}
-                          </div>
-
-                          <div className="mt-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
-                            Wallet Number
-                          </div>
-                          <div className="mt-2 text-lg font-black text-white">
-                            {activeWallet.number}
-                          </div>
-                        </div>
-
-                        <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
-                          Send the exact amount:
-                          <span className="ml-2 font-black text-amber-300">
-                            {formatPeso(amount)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                      <div className="flex items-center gap-2 text-sm font-black text-white">
-                        <ReceiptText size={16} />
-                        Step 1
-                      </div>
-                      <p className="mt-2 text-sm text-slate-300">
-                        Pay the exact amount using the official wallet above.
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                      <div className="flex items-center gap-2 text-sm font-black text-white">
-                        <FileImage size={16} />
-                        Step 2
-                      </div>
-                      <p className="mt-2 text-sm text-slate-300">
-                        Upload a readable receipt screenshot with reference number.
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                      <div className="flex items-center gap-2 text-sm font-black text-white">
-                        <Coins size={16} />
-                        Step 3
-                      </div>
-                      <p className="mt-2 text-sm text-slate-300">
-                        Track status until your coins are credited to your wallet.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div
-                id="transaction-history"
-                className="rounded-[28px] border border-white/10 bg-slate-900/70 p-4 shadow-xl backdrop-blur sm:p-5 lg:p-6"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-slate-300">
-                      <History size={16} />
-                      Transaction History
-                    </div>
-                    <p className="mt-2 text-sm text-slate-400">
-                      Every payment request is logged with status, receipt record, and
-                      wallet credit progress.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => void Promise.all([loadWalletSummary(), loadTransactions()])}
-                    className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-slate-300 transition hover:bg-white/10"
-                  >
-                    Refresh
-                  </button>
-                </div>
-
-                {transactionsError ? (
-                  <div className="mt-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                    {transactionsError}
-                  </div>
-                ) : null}
-
-                <div className="mt-5 space-y-3">
-                  {isTransactionsLoading ? (
-                    <div className="rounded-[24px] border border-white/10 bg-slate-950/60 p-5 text-sm text-slate-300">
-                      Loading transaction history...
-                    </div>
-                  ) : transactions.length === 0 ? (
-                    <div className="rounded-[24px] border border-white/10 bg-slate-950/60 p-5 text-sm text-slate-300">
-                      No wallet activity yet. Your first payment request will appear
-                      here.
-                    </div>
-                  ) : (
-                    transactions.map((item) => {
-                      const status = getStatusConfig(item.status)
-                      const StatusIcon = status.icon
-
-                      return (
-                        <div
-                          key={item.id}
-                          className="rounded-[24px] border border-white/10 bg-slate-950/60 p-4 transition hover:bg-slate-950/80"
-                        >
-                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <div className="text-sm font-black text-white">
-                                  {item.label}
-                                </div>
-                                <div
-                                  className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${status.chip}`}
-                                >
-                                  <StatusIcon size={12} />
-                                  {status.label}
-                                </div>
-                              </div>
-
-                              <div className="mt-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-                                {item.id}
-                              </div>
-
-                              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                                <div>
-                                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                                    Amount
-                                  </div>
-                                  <div className="mt-1 text-sm font-black text-amber-300">
-                                    {formatPeso(item.amount)}
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                                    Coins
-                                  </div>
-                                  <div className="mt-1 text-sm font-black text-white">
-                                    {formatCoins(item.coins)}
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                                    Method
-                                  </div>
-                                  <div className="mt-1 text-sm font-black capitalize text-white">
-                                    {item.method}
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                                    Submitted
-                                  </div>
-                                  <div className="mt-1 text-sm font-black text-white">
-                                    {formatDateTime(new Date(item.createdAt))}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
-                                  Reference:
-                                  <span className="ml-2 font-black text-white">
-                                    {item.referenceNumber}
-                                  </span>
-                                </div>
-
-                                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
-                                  Receipt:
-                                  <span className="ml-2 font-black text-white">
-                                    {item.receiptName}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="w-full max-w-full rounded-[22px] border border-white/10 bg-white/5 p-4 lg:w-[260px]">
-                              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                                <Clock3 size={13} />
-                                Status Progress
-                              </div>
-
-                              <div className="mt-4 space-y-3">
-                                {[
-                                  { name: "Submitted", done: true },
-                                  {
-                                    name: "Review",
-                                    done:
-                                      item.status === "approved" ||
-                                      item.status === "credited",
-                                  },
-                                  {
-                                    name: "Approved",
-                                    done:
-                                      item.status === "approved" ||
-                                      item.status === "credited",
-                                  },
-                                  {
-                                    name: "Credited",
-                                    done: item.status === "credited",
-                                  },
-                                ].map((step) => (
-                                  <div
-                                    key={step.name}
-                                    className="flex items-center gap-3"
-                                  >
-                                    <div
-                                      className={`h-2.5 w-2.5 rounded-full ${
-                                        step.done ? status.dot : "bg-white/15"
-                                      }`}
-                                    />
-                                    <div
-                                      className={`text-sm font-semibold ${
-                                        step.done ? "text-white" : "text-slate-500"
-                                      }`}
-                                    >
-                                      {step.name}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-
-                              <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-xs leading-6 text-slate-300">
-                                Your payment is logged as an official wallet activity
-                                record and remains traceable until final coin crediting.
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-5">
-              <div className="rounded-[28px] border border-white/10 bg-slate-900/70 p-4 shadow-xl backdrop-blur sm:p-5 lg:p-6">
-                <div className="rounded-[24px] border border-fuchsia-400/20 bg-fuchsia-500/10 p-4">
-                  <div className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-fuchsia-200">
-                    <Gem size={16} />
-                    Order Summary
-                  </div>
-
-                  <div className="mt-4 space-y-3">
-                    <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                      <span>Package</span>
-                      <span className="font-black text-white">{label}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                      <span>Base Coins</span>
-                      <span className="font-black text-white">{formatCoins(base)}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                      <span>Bonus Coins</span>
-                      <span className="font-black text-emerald-300">
-                        +{bonus.toLocaleString()} Coins
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                      <span>Total Receive</span>
-                      <span className="font-black text-white">{formatCoins(coins)}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 border-t border-white/10 pt-3 text-sm text-slate-200">
-                      <span>Total Payment</span>
-                      <span className="text-lg font-black text-amber-300">
-                        {formatPeso(amount)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {featured ? (
-                  <div className="mt-4 rounded-[24px] border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-100">
-                    This package includes stronger bonus value and ranks among the
-                    best wallet top-up deals in the JB Store.
-                  </div>
-                ) : null}
-
-                <div className="mt-4 rounded-[24px] border border-white/10 bg-slate-950/60 p-4">
-                  <div className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-slate-300">
-                    <Clock3 size={16} />
-                    Wallet Status Tracker
-                  </div>
-
-                  <div className="mt-5 space-y-4">
-                    {timelineSteps.map((step, index) => (
-                      <div key={step.key} className="relative flex gap-3">
-                        {index !== timelineSteps.length - 1 ? (
-                          <div className="absolute left-[10px] top-6 h-[calc(100%+8px)] w-px bg-white/10" />
-                        ) : null}
-
-                        <div
-                          className={`relative z-10 mt-1 h-5 w-5 rounded-full border ${
-                            step.completed
-                              ? "border-emerald-400 bg-emerald-400"
-                              : step.active
-                              ? "border-sky-400 bg-sky-400"
-                              : "border-white/15 bg-slate-900"
-                          }`}
-                        />
-
-                        <div className="min-w-0 flex-1 pb-3">
-                          <div
-                            className={`text-sm font-black ${
-                              step.active || step.completed
-                                ? "text-white"
-                                : "text-slate-500"
-                            }`}
-                          >
-                            {step.label}
-                          </div>
-                          <div
-                            className={`mt-1 text-sm leading-6 ${
-                              step.active || step.completed
-                                ? "text-slate-300"
-                                : "text-slate-500"
-                            }`}
-                          >
-                            {step.description}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-                  <div>
-                    <label className="mb-2 block text-sm font-bold text-white">
-                      Payer Name
-                    </label>
-                    <input
-                      value={payerName}
-                      onChange={(e) => setPayerName(e.target.value)}
-                      placeholder="Enter sender name"
-                      className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/40"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-bold text-white">
-                      Reference Number
-                    </label>
-                    <input
-                      value={referenceNumber}
-                      onChange={(e) => setReferenceNumber(e.target.value)}
-                      placeholder="Enter payment reference number"
-                      className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/40"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-bold text-white">
-                      Notes (Optional)
-                    </label>
-                    <textarea
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Optional message for the review team"
-                      rows={4}
-                      className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/40"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-bold text-white">
-                      Upload Receipt
-                    </label>
-
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex w-full flex-col items-center justify-center gap-3 rounded-[24px] border border-dashed border-white/15 bg-slate-950/60 px-4 py-6 text-center transition hover:border-sky-400/30 hover:bg-slate-950/80"
-                    >
-                      <div className="rounded-2xl bg-white/10 p-3 text-sky-200">
-                        <UploadCloud size={24} />
-                      </div>
-                      <div>
-                        <div className="text-sm font-black text-white">
-                          Tap to upload payment receipt
-                        </div>
-                        <div className="mt-1 text-xs text-slate-400">
-                          Phones, tablets, laptops, and desktop supported
-                        </div>
-                      </div>
-                    </button>
-
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) =>
-                        handleReceiptChange(e.target.files?.[0] || null)
-                      }
-                    />
-
-                    {previewUrl ? (
-                      <div className="mt-4 overflow-hidden rounded-[24px] border border-white/10 bg-slate-950/60">
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
-                          <div>
-                            <div className="text-sm font-bold text-white">
-                              Receipt Preview
-                            </div>
-                            <div className="mt-1 text-xs text-slate-400">
-                              {receiptFile?.name || "receipt-image"}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={clearReceipt}
-                            className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-200 transition hover:bg-white/10"
-                          >
-                            <X size={14} />
-                            Remove
-                          </button>
-                        </div>
-
-                        <img
-                          src={previewUrl}
-                          alt="Receipt preview"
-                          className="max-h-[340px] w-full object-contain bg-black/20"
-                        />
-
-                        <div className="grid gap-3 border-t border-white/10 px-4 py-4 sm:grid-cols-3">
-                          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-3 text-xs text-emerald-200">
-                            <div className="font-black uppercase tracking-[0.18em]">
-                              Attachment
-                            </div>
-                            <div className="mt-1 text-sm font-bold text-white">
-                              Added
-                            </div>
-                          </div>
-
-                          <div className="rounded-2xl border border-sky-400/20 bg-sky-400/10 px-3 py-3 text-xs text-sky-200">
-                            <div className="font-black uppercase tracking-[0.18em]">
-                              Visibility
-                            </div>
-                            <div className="mt-1 text-sm font-bold text-white">
-                              Readable Proof
-                            </div>
-                          </div>
-
-                          <div className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-400/10 px-3 py-3 text-xs text-fuchsia-200">
-                            <div className="font-black uppercase tracking-[0.18em]">
-                              Reference Match
-                            </div>
-                            <div className="mt-1 text-sm font-bold text-white">
-                              Ready to Submit
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-
-                  {submitError ? (
-                    <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                      {submitError}
-                    </div>
-                  ) : null}
-
-                  <div className="grid gap-3">
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 px-5 py-3.5 text-sm font-black text-white shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <CreditCard size={16} />
-                      {isSubmitting
-                        ? "Submitting Payment Proof..."
-                        : "Submit Payment Proof"}
-                    </button>
-
-                    <div className="flex items-start gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs leading-6 text-slate-300">
-                      <Lock size={14} className="mt-1 shrink-0 text-sky-200" />
-                      Your payment is logged as a wallet transaction record, queued
-                      for secure review, and remains visible in your activity history
-                      until final coin crediting.
-                    </div>
-                  </div>
-                </form>
-              </div>
-
-              <div className="rounded-[28px] border border-white/10 bg-slate-900/70 p-4 shadow-xl backdrop-blur sm:p-5 lg:p-6">
-                <div className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-slate-300">
-                  <ShieldCheck size={16} />
-                  Trust Signals
-                </div>
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  {[
-                    "Official wallet details shown clearly",
-                    "Receipt proof stays attached to the request",
-                    "Submission gets a transaction ID",
-                    "Status moves from pending to credited",
-                    "Coins are tracked before release",
-                    "Wallet activity stays visible after checkout",
-                  ].map((text) => (
-                    <div
-                      key={text}
-                      className="flex items-start gap-3 rounded-[22px] border border-white/10 bg-slate-950/60 p-4"
-                    >
-                      <div className="rounded-xl bg-white/10 p-2 text-sky-200">
-                        <CheckCircle2 size={16} />
-                      </div>
-                      <div className="text-sm font-semibold text-white">{text}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
+  const membership = normalizeMembership(profile?.membership)
+  const isAdmin = profile?.role === "admin"
+  const isPremiumUser =
+    isAdmin ||
+    profile?.is_premium === true ||
+    membership === "premium" ||
+    membership === "platinum"
+  const isPlatinumUser = isAdmin || membership === "platinum"
+
+  const featuredFile = useMemo(() => {
+    if (files.length === 0) return null
+    return [...files].sort((a, b) => {
+      const aDownloads = a.downloads_count || a.download_count || 0
+      const bDownloads = b.downloads_count || b.download_count || 0
+      if (bDownloads !== aDownloads) return bDownloads - aDownloads
+      const aTime = new Date(a.created_at || "").getTime() || 0
+      const bTime = new Date(b.created_at || "").getTime() || 0
+      return bTime - aTime
+    })[0]
+  }, [files])
+
+  const filteredFiles = useMemo(() => {
+    const keyword = search.trim().toLowerCase()
+    let result = [...files]
+
+    if (keyword) {
+      result = result.filter((file) => {
+        const name = getDisplayName(file).toLowerCase()
+        const description = file.description?.toLowerCase() || ""
+        const type = getDisplayFileType(file).toLowerCase()
+        const visibility = String(file.visibility || "free").toLowerCase()
+
+        return (
+          name.includes(keyword) ||
+          description.includes(keyword) ||
+          type.includes(keyword) ||
+          visibility.includes(keyword)
+        )
+      })
+    }
+
+    if (filter !== "all") {
+      result = result.filter((file) => (file.visibility || "free").toLowerCase() === filter)
+    }
+
+    result.sort((a, b) => {
+      if (sortBy === "name") return getDisplayName(a).localeCompare(getDisplayName(b))
+      if (sortBy === "downloads") {
+        const aDownloads = a.downloads_count || a.download_count || 0
+        const bDownloads = b.downloads_count || b.download_count || 0
+        return bDownloads - aDownloads
+      }
+      const aTime = new Date(a.created_at || "").getTime() || 0
+      const bTime = new Date(b.created_at || "").getTime() || 0
+      return bTime - aTime
+    })
+
+    return result
+  }, [files, search, filter, sortBy])
+
+  const totalPages = Math.max(1, Math.ceil(filteredFiles.length / PAGE_SIZE))
+
+  const paginatedFiles = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    const end = start + PAGE_SIZE
+    return filteredFiles.slice(start, end)
+  }, [filteredFiles, currentPage])
+
+  const totalDownloads = useMemo(() => {
+    return files.reduce((sum, file) => sum + (file.downloads_count || file.download_count || 0), 0)
+  }, [files])
+
+  const freeCount = useMemo(() => {
+    return files.filter((file) => (file.visibility || "free").toLowerCase() === "free").length
+  }, [files])
+
+  const premiumCount = useMemo(() => {
+    return files.filter((file) => (file.visibility || "free").toLowerCase() === "premium").length
+  }, [files])
+
+  const platinumCount = useMemo(() => {
+    return files.filter((file) => (file.visibility || "free").toLowerCase() === "platinum").length
+  }, [files])
+
+  const newestCount = useMemo(() => {
+    return files.filter((file) => isNewFile(file)).length
+  }, [files])
+
+  const imageCount = useMemo(() => {
+    return files.filter((file) => getDisplayFileType(file) === "IMAGE" || isImageFile(file.file_url)).length
+  }, [files])
+
+  const videoCount = useMemo(() => {
+    return files.filter((file) => getDisplayFileType(file) === "VIDEO" || isVideoFile(file.file_url)).length
+  }, [files])
+
+  const topDownloads = useMemo(() => {
+    return [...files]
+      .sort((a, b) => (b.downloads_count || b.download_count || 0) - (a.downloads_count || a.download_count || 0))
+      .slice(0, 4)
+  }, [files])
+
+  const relatedFiles = useMemo(() => {
+    return [...files]
+      .sort((a, b) => {
+        const aDownloads = a.downloads_count || a.download_count || 0
+        const bDownloads = b.downloads_count || b.download_count || 0
+        if (bDownloads !== aDownloads) return bDownloads - aDownloads
+        const aTime = new Date(a.created_at || "").getTime() || 0
+        const bTime = new Date(b.created_at || "").getTime() || 0
+        return bTime - aTime
+      })
+      .filter((file) => file.id !== featuredFile?.id)
+      .slice(0, 5)
+  }, [files, featuredFile])
+
+  const previewableFiles = useMemo(() => {
+    return filteredFiles.filter((file) => canPreviewInline(file))
+  }, [filteredFiles])
+
+  const currentPreviewIndex = useMemo(() => {
+    if (!previewFile) return -1
+    return previewableFiles.findIndex((file) => file.id === previewFile.id)
+  }, [previewFile, previewableFiles])
+
+  function openPreview(file: FileItem) {
+    setPreviewZoom(1)
+    setPreviewFile(file)
+  }
+
+  function openNextPreview() {
+    if (!previewableFiles.length || currentPreviewIndex === -1) return
+    const nextIndex = (currentPreviewIndex + 1) % previewableFiles.length
+    setPreviewZoom(1)
+    setPreviewFile(previewableFiles[nextIndex])
+  }
+
+  function openPrevPreview() {
+    if (!previewableFiles.length || currentPreviewIndex === -1) return
+    const prevIndex = (currentPreviewIndex - 1 + previewableFiles.length) % previewableFiles.length
+    setPreviewZoom(1)
+    setPreviewFile(previewableFiles[prevIndex])
+  }
+
+  function handlePreviewTouchStart(clientX: number) {
+    setTouchStartX(clientX)
+  }
+
+  function handlePreviewTouchEnd(clientX: number) {
+    if (touchStartX === null) return
+    const deltaX = clientX - touchStartX
+
+    if (Math.abs(deltaX) >= 60) {
+      if (deltaX < 0) {
+        openNextPreview()
+      } else {
+        openPrevPreview()
+      }
+    }
+
+    setTouchStartX(null)
+  }
+
+  function goToPage(page: number) {
+    if (page < 1 || page > totalPages) return
+    setCurrentPage(page)
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  function handleDownload(file: FileItem) {
+    window.location.href = `/download/${file.id}`
+  }
+
+  function handleBackToTop() {
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  function clearFilters() {
+    setSearch("")
+    setFilter("all")
+    setSortBy("newest")
+  }
+
+  function toggleFavorite(fileId: string) {
+    const fileName = getDisplayName(files.find((file) => file.id === fileId) || { title: "File" } as FileItem)
+    setFavorites((prev) => {
+      const exists = prev.includes(fileId)
+      setFavoriteToast(exists ? `Removed ${fileName} from favorites` : `Saved ${fileName} to favorites`)
+      return exists ? prev.filter((id) => id !== fileId) : [...prev, fileId]
+    })
+  }
+
+  if (checkingAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+        <div className="rounded-3xl border border-white/10 bg-slate-900 px-8 py-6 text-center shadow-sm">
+          <p className="text-lg font-semibold text-white">Checking your account...</p>
+          <p className="mt-2 text-sm text-slate-400">Please wait.</p>
         </div>
       </div>
+    )
+  }
 
-      {showCoinBurst ? (
-        <div className="pointer-events-none fixed inset-0 z-[95] overflow-hidden">
-          <div className="absolute right-6 top-24 rounded-full border border-amber-400/20 bg-amber-400/10 px-4 py-2 text-sm font-black text-amber-200 shadow-[0_20px_60px_rgba(251,191,36,0.22)] animate-bounce">
-            +{coins.toLocaleString()} JB Coins
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <SiteHeader />
+        <div className="mx-auto w-full max-w-[1900px] px-4 pb-8 pt-24 sm:px-6 sm:pt-28 lg:px-8">
+          <div className="mb-6 h-64 animate-pulse rounded-[34px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="h-24 animate-pulse rounded-[24px] border border-white/10 bg-slate-900/80" />
+            ))}
           </div>
-
-          {Array.from({ length: 16 }).map((_, index) => (
-            <div
-              key={index}
-              className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-300/30 bg-amber-300/10 backdrop-blur-sm animate-ping"
-              style={{
-                marginLeft: `${(index - 8) * 22}px`,
-                marginTop: `${((index % 5) - 2) * 26}px`,
-                animationDuration: `${1.6 + (index % 4) * 0.18}s`,
-                animationDelay: `${index * 0.03}s`,
-              }}
-            >
-              <div className="flex h-full w-full items-center justify-center text-amber-200">
-                <Coins size={16} />
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+            {Array.from({ length: 10 }).map((_, index) => (
+              <div key={index} className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-900/80 shadow-sm ring-1 ring-white/5">
+                <div className="aspect-[3/4] animate-pulse bg-slate-800" />
+                <div className="space-y-3 p-3">
+                  <div className="mx-auto h-4 w-3/4 animate-pulse rounded bg-slate-700" />
+                  <div className="h-4 w-full animate-pulse rounded bg-slate-700" />
+                  <div className="h-10 w-full animate-pulse rounded-xl bg-slate-700" />
+                </div>
               </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!category) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+        <div className="rounded-3xl border border-white/10 bg-slate-900 px-8 py-6 text-center shadow-sm">
+          <p className="text-lg font-semibold text-white">Redirecting to categories...</p>
+          <p className="mt-2 text-sm text-slate-400">Please wait.</p>
+        </div>
+      </div>
+    )
+  }
+
+  const startItem = filteredFiles.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
+  const endItem = Math.min(currentPage * PAGE_SIZE, filteredFiles.length)
+  const visiblePages = Array.from({ length: totalPages }, (_, index) => index + 1).filter(
+    (page) => Math.abs(page - currentPage) <= 2
+  )
+  const heroImage = getCategoryHeroImage(category, featuredFile)
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white">
+      <SiteHeader />
+
+      <div className="mx-auto w-full max-w-[1900px] px-4 pb-10 pt-24 sm:px-6 sm:pt-28 lg:px-8">
+        <div className="mb-8 overflow-hidden rounded-[36px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.22),transparent_28%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.18),transparent_25%),linear-gradient(135deg,#020617_0%,#0f172a_50%,#111827_100%)] shadow-[0_25px_80px_rgba(0,0,0,0.45)]">
+          <div className="relative">
+            {heroImage ? (
+              <>
+                <img src={heroImage} alt={category.name} className="absolute inset-0 h-full w-full object-cover opacity-20" />
+                <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/85 to-slate-900/40" />
+              </>
+            ) : null}
+
+            <div className="relative z-10 px-5 py-6 sm:px-6 lg:px-8 lg:py-8">
+              <div className="mb-5 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-300">
+                <Link href="/categories" className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 transition hover:bg-white/10">
+                  All Categories
+                </Link>
+                <span className="text-slate-500">/</span>
+                <span className="rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1.5 text-sky-300">
+                  {category.name}
+                </span>
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+                <div>
+                  <div className="inline-flex items-center rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-sky-200 backdrop-blur-sm">
+                    10/10 Category Experience
+                  </div>
+
+                  <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
+                    {category.name}
+                  </h1>
+
+                  <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+                    {category.description || "Explore a polished collection page with fast browsing, strong visuals, better filtering, and high-conversion file cards."}
+                  </p>
+
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm">
+                      {formatNumber(files.length)} files
+                    </div>
+                    <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm">
+                      {formatNumber(totalDownloads)} downloads
+                    </div>
+                    <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm">
+                      {formatNumber(newestCount)} new arrivals
+                    </div>
+                  </div>
+
+                  {featuredFile && (
+                    <div className="mt-6 rounded-[26px] border border-white/10 bg-white/10 p-4 backdrop-blur-md">
+                      <div className="mb-2 inline-flex rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-sky-200">
+                        Featured Pick
+                      </div>
+                      <h2 className="text-lg font-black sm:text-xl">{getDisplayName(featuredFile)}</h2>
+                      <p className="mt-2 line-clamp-2 text-sm text-slate-300">
+                        {featuredFile.description || "Top performing file in this category."}
+                      </p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <div className={`rounded-full border px-3 py-1.5 text-xs font-bold ${getVisibilityBadgeClasses(featuredFile)}`}>
+                          {getVisibilityLabel(featuredFile)}
+                        </div>
+                        <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white">
+                          {getDisplayFileType(featuredFile)}
+                        </div>
+                        <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white">
+                          {formatNumber(featuredFile.downloads_count || featuredFile.download_count || 0)} downloads
+                        </div>
+                      </div>
+                      <div className="mt-5 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleDownload(featuredFile)}
+                          className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-900 transition hover:bg-slate-200"
+                        >
+                          Download Featured
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openPreview(featuredFile)}
+                          className="inline-flex items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-bold text-white backdrop-blur-sm transition hover:bg-white/15"
+                        >
+                          Quick Preview
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <div className="rounded-[26px] border border-white/10 bg-white/10 p-3 backdrop-blur-md">
+                    <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-slate-300">
+                      Search inside category
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={`Search in ${category.name}...`}
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      className="w-full rounded-[18px] border border-white/10 bg-white px-4 py-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div className="sticky top-24 z-30 rounded-[26px] border border-white/10 bg-white/10 p-4 backdrop-blur-md shadow-[0_14px_35px_rgba(0,0,0,0.28)]">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-300">Browse Categories</span>
+                      <Link href="/categories" className="text-xs font-semibold text-sky-300 hover:text-sky-200">
+                        View all
+                      </Link>
+                    </div>
+                    <div className="flex max-h-[160px] flex-wrap gap-2 overflow-auto pr-1">
+                      {allCategories.map((item) => {
+                        const active = item.id === category.id
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => router.push(getCategoryHref(item))}
+                            className={`rounded-full border px-4 py-2 text-xs font-bold transition ${
+                              active
+                                ? "border-white bg-white text-slate-900"
+                                : "border-white/10 bg-white/5 text-white hover:bg-white/10"
+                            }`}
+                          >
+                            {item.name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[26px] border border-white/10 bg-white/10 p-4 backdrop-blur-md">
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {[
+                        { key: "all", label: "ALL" },
+                        { key: "free", label: "FREE" },
+                        { key: "premium", label: "PREMIUM" },
+                        { key: "platinum", label: "PLATINUM" },
+                      ].map((item) => (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => setFilter(item.key as FilterKey)}
+                          className={`rounded-full border px-4 py-2 text-xs font-bold tracking-[0.14em] transition ${
+                            filter === item.key
+                              ? "border-white bg-white text-slate-900"
+                              : "border-white/10 bg-white/5 text-white hover:bg-white/10"
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Sort</span>
+                      <select
+                        value={sortBy}
+                        onChange={(event) => setSortBy(event.target.value as SortKey)}
+                        className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white outline-none"
+                      >
+                        <option value="newest" className="text-slate-900">Newest</option>
+                        <option value="downloads" className="text-slate-900">Most Downloaded</option>
+                        <option value="name" className="text-slate-900">Name A-Z</option>
+                      </select>
+
+                      {(search || filter !== "all" || sortBy !== "newest") && (
+                        <button
+                          type="button"
+                          onClick={clearFilters}
+                          className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+          {[
+            { label: "Total Files", value: formatNumber(files.length) },
+            { label: "Downloads", value: formatNumber(totalDownloads) },
+            { label: "Free", value: formatNumber(freeCount) },
+            { label: "Premium", value: formatNumber(premiumCount) },
+            { label: "Platinum", value: formatNumber(platinumCount) },
+            { label: "New This Week", value: formatNumber(newestCount) },
+          ].map((item) => (
+            <div key={item.label} className="rounded-[24px] border border-white/10 bg-slate-900/80 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{item.label}</p>
+              <p className="mt-2 text-2xl font-black text-white">{item.value}</p>
             </div>
           ))}
         </div>
-      ) : null}
 
-      {showSuccess && latestTransaction ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 px-3 py-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-[30px] border border-white/10 bg-slate-900 p-5 text-white shadow-[0_30px_100px_rgba(0,0,0,0.55)] sm:p-6">
-            <div className="grid gap-5 lg:grid-cols-[0.92fr_1.08fr]">
-              <div className="rounded-[26px] border border-emerald-400/20 bg-emerald-500/10 p-5">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300">
-                  <CheckCircle2 size={32} />
+        <div className="mb-8 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(0,0,0,0.24)]">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-black tracking-tight text-white">🔥 Popular Now</h3>
+                <p className="mt-1 text-sm text-slate-400">Quick access to the hottest files in this category</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-5 md:grid-cols-2 lg:grid-cols-4">
+              {topDownloads.length > 0 ? (
+                topDownloads.map((file, index) => {
+                  const previewImage = getPreviewImage(file)
+                  return (
+                    <div key={file.id} className={`group w-full overflow-hidden rounded-[24px] border bg-slate-950/60 shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-all duration-300 hover:-translate-y-1.5 hover:scale-[1.01] hover:shadow-[0_20px_45px_rgba(0,0,0,0.34)] ${index === 0 ? "border-amber-400/50 ring-1 ring-amber-300/30 shadow-[0_0_0_1px_rgba(251,191,36,0.18),0_20px_45px_rgba(0,0,0,0.34)]" : "border-white/10 hover:border-sky-400/40"}`}>
+                      <div className="relative aspect-[3/4] overflow-hidden bg-slate-800">
+                        {previewImage ? (
+                          <>
+                            <img src={previewImage} alt={getDisplayName(file)} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent" />
+                          </>
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-4xl">{getFileIcon(getDisplayFileType(file))}</div>
+                        )}
+                        <div className={`absolute left-3 top-3 rounded-full border px-3 py-1.5 text-sm font-black text-white backdrop-blur-sm shadow-[0_10px_30px_rgba(0,0,0,0.28)] ${index === 0 ? "border-amber-300/40 bg-amber-500/90" : "border-white/10 bg-black/55"}`}>#{index + 1}</div>
+                      </div>
+                        {index === 0 && (
+                          <div className="absolute right-3 bottom-3 rounded-full border border-amber-300/35 bg-amber-500/90 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-[0_10px_25px_rgba(245,158,11,0.35)]">
+                            Top Pick
+                          </div>
+                        )}
+                      <div className="p-4">
+                        <h4 className="line-clamp-1 text-sm font-black text-white">{getDisplayName(file)}</h4>
+                        <p className="mt-1 text-xs text-slate-400">{formatNumber(file.downloads_count || file.download_count || 0)} downloads</p>
+                        <p className="mt-1 text-xs text-slate-400">Size: {formatFileSize(file.file_size || file.size)}</p>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openPreview(file)}
+                            className="inline-flex flex-1 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/10"
+                          >
+                            Preview
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDownload(file)}
+                            className="inline-flex flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-3 py-2 text-xs font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
+                          >
+                            Download
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              ) : (
+                <div className="col-span-full rounded-[22px] border border-dashed border-white/10 bg-white/[0.03] p-6 text-sm text-slate-400">
+                  No popular files yet in this category.
                 </div>
+              )}
+            </div>
+          </div>
 
-                <div className="mt-4 text-center">
-                  <div className="text-2xl font-black">Payment Logged</div>
-                  <p className="mt-2 text-sm leading-7 text-emerald-100/85">
-                    Your receipt, reference number, and wallet request were submitted
-                    successfully.
+          <div className="space-y-4">
+            <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(0,0,0,0.24)]">
+              <h3 className="text-lg font-black text-white">Category Insights</h3>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Images</p>
+                  <p className="mt-2 text-2xl font-black">{formatNumber(imageCount)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Videos</p>
+                  <p className="mt-2 text-2xl font-black">{formatNumber(videoCount)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 col-span-2">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Access Level</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-200">
+                    {isPlatinumUser ? "You can access free, premium, and platinum files." : isPremiumUser ? "You can access free and premium files." : "You currently have access to free files only."}
                   </p>
                 </div>
-
-                <div className="mt-5 rounded-[24px] border border-white/10 bg-black/20 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm text-slate-300">Transaction ID</span>
-                    <span className="text-sm font-black text-white">
-                      {latestTransaction.id}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <span className="text-sm text-slate-300">Status</span>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-amber-200">
-                      <Clock3 size={12} />
-                      Pending Review
-                    </span>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <span className="text-sm text-slate-300">Submitted</span>
-                    <span className="text-sm font-black text-white">
-                      {formatDateTime(new Date(latestTransaction.createdAt))}
-                    </span>
-                  </div>
-                </div>
               </div>
+            </div>
 
-              <div className="rounded-[26px] border border-white/10 bg-slate-950/60 p-5">
-                <div className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-slate-300">
-                  <ReceiptText size={16} />
-                  Confirmation Summary
-                </div>
+          </div>
+        </div>
 
-                <div className="mt-4 space-y-3">
-                  <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                    <span>Package</span>
-                    <span className="font-black text-white">{latestTransaction.label}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                    <span>Payment</span>
-                    <span className="font-black text-amber-300">
-                      {formatPeso(latestTransaction.amount)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                    <span>Coins to Receive</span>
-                    <span className="font-black text-white">
-                      {formatCoins(latestTransaction.coins)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                    <span>Method</span>
-                    <span className="font-black capitalize text-white">
-                      {latestTransaction.method}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                    <span>Reference</span>
-                    <span className="font-black text-white">
-                      {latestTransaction.referenceNumber}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                    <span>Receipt</span>
-                    <span className="font-black text-white">
-                      {latestTransaction.receiptName}
-                    </span>
-                  </div>
-                </div>
+        <div className="mb-6 flex justify-center">
+          <AdSlot code={IN_CONTENT_AD} className="text-center" />
+        </div>
 
-                <div className="mt-5 rounded-[24px] border border-sky-400/20 bg-sky-400/10 p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-xl bg-white/10 p-2 text-sky-200">
-                      <FileCheck2 size={16} />
-                    </div>
-                    <div>
-                      <div className="text-sm font-black text-white">
-                        What happens next
-                      </div>
-                      <p className="mt-1 text-sm leading-7 text-sky-100/85">
-                        Your request is now visible in Transaction History. Once
-                        approved, the status moves forward and your coins are credited
-                        into your wallet.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+        {filteredFiles.length === 0 ? (
+          <>
+            <div className="rounded-[28px] border border-dashed border-white/15 bg-slate-900/70 px-6 py-20 text-center shadow-sm">
+              <div className="mx-auto max-w-md">
+                <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-white/5 text-3xl">🔎</div>
+                <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">No files found</h2>
+                <p className="mt-3 text-slate-400">No file matched your search or selected filter in {category.name}.</p>
+                <div className="mt-6">
                   <button
                     type="button"
-                    onClick={handleCloseSuccess}
-                    className="inline-flex flex-1 items-center justify-center rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-5 py-3 text-sm font-black text-white shadow-lg"
+                    onClick={clearFilters}
+                    className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-900 transition hover:bg-slate-200"
                   >
-                    Done
+                    Clear Search & Filters
                   </button>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-black tracking-tight text-white">Browse Files</h2>
+                <p className="mt-1 text-sm text-slate-400">Showing {startItem} to {endItem} of {formatNumber(filteredFiles.length)} files</p>
+              </div>
+              <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300">Page {currentPage} of {totalPages}</div>
+            </div>
 
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+              {paginatedFiles.map((file) => {
+                const previewImage = getPreviewImage(file)
+                const type = getDisplayFileType(file)
+                const icon = getFileIcon(type)
+                const visibility = (file.visibility || "free").toLowerCase()
+                const isPremiumLocked = visibility === "premium"
+                const isPlatinumLocked = visibility === "platinum"
+                const isLocked = (isPremiumLocked && !isPremiumUser) || (isPlatinumLocked && !isPlatinumUser)
+                const canPreview = canPreviewInline(file)
+
+                return (
+                  <div
+                    key={file.id}
+                    className={`group overflow-hidden rounded-[26px] border bg-slate-900/90 shadow-[0_12px_35px_rgba(0,0,0,0.28)] ring-1 ring-white/5 transition-all duration-300 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_24px_60px_rgba(0,0,0,0.42)] ${getCardBorderClasses(file)}`}
+                    style={{ animation: `fadeUp 0.45s ease ${Math.min((currentPage - 1) * 0, 0) + (paginatedFiles.findIndex((entry) => entry.id === file.id) * 0.035)}s both` }}
+                  >
+                    <div className="relative overflow-hidden bg-slate-800">
+                      <div className="aspect-[3/4] overflow-hidden">
+                        {previewImage ? (
+                          <>
+                            <img
+                              src={previewImage}
+                              alt={getDisplayName(file)}
+                              loading="lazy"
+                              decoding="async"
+                              className={`h-full w-full object-cover transition duration-500 group-hover:scale-110 ${isLocked ? "brightness-90" : ""}`}
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent" />
+                            <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent_0%,rgba(255,255,255,0.08)_45%,transparent_70%)] opacity-0 transition duration-500 group-hover:opacity-100" />
+                          </>
+                        ) : (
+                          <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+                            <div className="mb-3 text-5xl">{icon}</div>
+                            <p className="px-4 text-center text-sm font-semibold text-slate-400">No preview available</p>
+                          </div>
+                        )}
+
+                        <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+                          <div className={`rounded-full border px-3 py-1.5 text-[11px] font-bold backdrop-blur-md ${getVisibilityBadgeClasses(file)}`}>
+                            {getVisibilityLabel(file)}
+                          </div>
+                          <div className="rounded-full border border-white/10 bg-black/45 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur-md">{type}</div>
+                        </div>
+
+                        <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleFavorite(file.id)}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/45 text-lg text-white backdrop-blur-md transition hover:scale-110 hover:bg-black/60"
+                            aria-label={favorites.includes(file.id) ? "Remove from favorites" : "Add to favorites"}
+                          >
+                            {favorites.includes(file.id) ? "❤️" : "🤍"}
+                          </button>
+                          {(file.downloads_count || file.download_count || 0) >= 500 && (
+                            <div className="rounded-full border border-red-400/30 bg-red-500/95 px-2.5 py-1 text-[10px] font-bold text-white shadow-[0_0_20px_rgba(239,68,68,0.30)]">🔥 TRENDING</div>
+                          )}
+                          {isNewFile(file) && (
+                            <div className="rounded-full border border-sky-400/30 bg-sky-500/95 px-2.5 py-1 text-[10px] font-bold text-white shadow-[0_0_20px_rgba(14,165,233,0.25)]">NEW</div>
+                          )}
+                        </div>
+
+                        {isPremiumLocked && !isPremiumUser && (
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-amber-900/85 via-amber-800/30 to-transparent px-3 pb-3 pt-10">
+                            <div className="text-center text-[11px] font-bold uppercase tracking-[0.18em] text-amber-100">Premium Access</div>
+                          </div>
+                        )}
+
+                        {isPlatinumLocked && !isPlatinumUser && (
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-fuchsia-900/85 via-violet-800/30 to-transparent px-3 pb-3 pt-10">
+                            <div className="text-center text-[11px] font-bold uppercase tracking-[0.18em] text-fuchsia-100">Platinum Exclusive</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 px-3 pb-3 pt-3">
+                      <h3 className="line-clamp-2 min-h-[40px] text-sm font-extrabold leading-tight text-white" title={getDisplayName(file)}>
+                        {getDisplayName(file)}
+                      </h3>
+
+                      <p className="line-clamp-2 min-h-[38px] text-xs leading-5 text-slate-400">
+                        {file.description || "No description available."}
+                      </p>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Downloads</p>
+                          <p className="mt-1 text-sm font-black text-white">{formatNumber(file.downloads_count || file.download_count || 0)}</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Size</p>
+                          <p className="mt-1 text-sm font-black text-white">{formatFileSize(file.file_size || file.size)}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        {canPreview ? (
+                          <button
+                            type="button"
+                            onClick={() => openPreview(file)}
+                            className="inline-flex flex-1 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-white/10"
+                          >
+                            Preview
+                          </button>
+                        ) : (
+                          <div className="inline-flex flex-1 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-bold text-slate-500">
+                            No Preview
+                          </div>
+                        )}
+
+                        {isPlatinumLocked && !isPlatinumUser ? (
+                          <Link href="/upgrade" className="inline-flex flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-3 py-2.5 text-sm font-bold text-white transition hover:opacity-90">
+                            Unlock
+                          </Link>
+                        ) : isPremiumLocked && !isPremiumUser ? (
+                          <Link href="/upgrade" className="inline-flex flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-2.5 text-sm font-bold text-white transition hover:opacity-90">
+                            Unlock
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleDownload(file)}
+                            className="inline-flex flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-3 py-2.5 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
+                          >
+                            Download
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+
+            {relatedFiles.length > 0 && (
+              <div className="mt-12">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-xl font-black tracking-tight text-white">✨ Users Also Downloaded</h3>
+                    <p className="mt-1 text-sm text-slate-400">More files people open after viewing this category</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+                  {relatedFiles.map((file) => {
+                    const previewImage = getPreviewImage(file)
+                    return (
+                      <div
+                        key={file.id}
+                        className="group overflow-hidden rounded-[24px] border border-white/10 bg-slate-900/80 shadow-[0_12px_30px_rgba(0,0,0,0.26)] transition-all duration-300 hover:-translate-y-1.5 hover:scale-[1.01] hover:border-sky-400/35" style={{ animation: `fadeUp 0.45s ease ${relatedFiles.findIndex((entry) => entry.id === file.id) * 0.04}s both` }}
+                      >
+                        <div className="relative aspect-[3/4] overflow-hidden bg-slate-800">
+                          {previewImage ? (
+                            <>
+                              <img
+                                src={previewImage}
+                                alt={getDisplayName(file)}
+                                className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+                            </>
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-4xl">
+                              {getFileIcon(getDisplayFileType(file))}
+                            </div>
+                          )}
+
+                          <div className={`absolute left-3 top-3 rounded-full border px-3 py-1.5 text-[11px] font-bold backdrop-blur-md ${getVisibilityBadgeClasses(file)}`}>
+                            {getVisibilityLabel(file)}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 p-4">
+                          <h4 className="line-clamp-2 text-sm font-black text-white">{getDisplayName(file)}</h4>
+                          <p className="text-xs text-slate-400">
+                            {formatNumber(file.downloads_count || file.download_count || 0)} downloads
+                          </p>
+                          <p className="text-xs text-slate-400">Size: {formatFileSize(file.file_size || file.size)}</p>
+
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => openPreview(file)}
+                              className="inline-flex flex-1 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/10"
+                            >
+                              Preview
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDownload(file)}
+                              className="inline-flex flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-3 py-2 text-xs font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
+                            >
+                              Download
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-8 flex flex-col items-center gap-4 pb-24 sm:mt-10">
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Prev
+                </button>
+                {visiblePages.map((page) => (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => goToPage(page)}
+                    className={`min-w-[48px] rounded-2xl border px-4 py-3 text-sm font-semibold shadow-sm transition ${
+                      currentPage === page
+                        ? "border-white bg-white text-slate-900"
+                        : "border-white/10 bg-slate-900 text-slate-200 hover:bg-slate-800"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleBackToTop}
+                className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-200"
+              >
+                ↑ Back to Top
+              </button>
+
+              <div className="flex justify-center pt-3">
+                <AdSlot code={IN_CONTENT_AD} className="text-center" />
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {favoriteToast && (
+        <div className="fixed bottom-6 left-1/2 z-[120] -translate-x-1/2 rounded-2xl border border-white/10 bg-slate-900/95 px-4 py-3 text-sm font-semibold text-white shadow-[0_20px_50px_rgba(0,0,0,0.38)] backdrop-blur-md">
+          {favoriteToast}
+        </div>
+      )}
+
+      {showQuickBar && (
+        <div className="fixed bottom-6 right-6 z-[110] flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleBackToTop}
+            className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-3 text-sm font-bold text-white shadow-[0_14px_35px_rgba(0,0,0,0.32)] backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-slate-800"
+          >
+            ↑ Top
+          </button>
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="inline-flex items-center justify-center rounded-2xl border border-sky-400/20 bg-sky-500/90 px-4 py-3 text-sm font-bold text-white shadow-[0_14px_35px_rgba(14,165,233,0.32)] transition hover:-translate-y-0.5 hover:bg-sky-500"
+          >
+            Reset Filters
+          </button>
+        </div>
+      )}
+
+      <style jsx global>{`
+        @keyframes fadeUp {
+          from {
+            opacity: 0;
+            transform: translateY(18px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+
+      {previewFile && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 px-3 py-4 backdrop-blur-md sm:px-4 sm:py-6"
+          onClick={() => {
+            setPreviewFile(null)
+            setPreviewZoom(1)
+          }}
+        >
+          <div
+            className="relative flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 shadow-[0_25px_90px_rgba(0,0,0,0.55)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(2,6,23,0.98))] px-4 py-4 sm:px-6">
+              <div className="min-w-0">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <div className={`rounded-full border px-3 py-1.5 text-[11px] font-bold ${getVisibilityBadgeClasses(previewFile)}`}>
+                    {getVisibilityLabel(previewFile)}
+                  </div>
+                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold text-white">
+                    {getDisplayFileType(previewFile)}
+                  </div>
+                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold text-white">
+                    {formatFileSize(previewFile.file_size || previewFile.size)}
+                  </div>
+                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold text-white">
+                    {formatNumber(previewFile.downloads_count || previewFile.download_count || 0)} downloads
+                  </div>
+                </div>
+                <h3 className="truncate text-lg font-black text-white sm:text-2xl">{getDisplayName(previewFile)}</h3>
+                <p className="mt-1 text-sm text-slate-400">
+                  Swipe to browse on mobile. Use arrow keys on desktop.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={openPrevPreview}
+                  disabled={previewableFiles.length <= 1}
+                  className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ← Prev
+                </button>
+                <button
+                  type="button"
+                  onClick={openNextPreview}
+                  disabled={previewableFiles.length <= 1}
+                  className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewZoom((prev) => Math.max(1, Number((prev - 0.25).toFixed(2))))}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg font-bold text-white transition hover:bg-white/10"
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewZoom(1)}
+                  className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-bold text-white transition hover:bg-white/10"
+                >
+                  {Math.round(previewZoom * 100)}%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewZoom((prev) => Math.min(3, Number((prev + 0.25).toFixed(2))))}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg font-bold text-white transition hover:bg-white/10"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreviewFile(null)
+                    setPreviewZoom(1)
+                  }}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg font-bold text-white transition hover:bg-white/10"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div
+              className="relative flex-1 overflow-hidden bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.12),transparent_25%),linear-gradient(180deg,#020617_0%,#0f172a_100%)]"
+              onTouchStart={(event) => handlePreviewTouchStart(event.changedTouches[0]?.clientX ?? 0)}
+              onTouchEnd={(event) => handlePreviewTouchEnd(event.changedTouches[0]?.clientX ?? 0)}
+            >
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-24 bg-gradient-to-r from-black/35 to-transparent lg:block" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-10 hidden w-24 bg-gradient-to-l from-black/35 to-transparent lg:block" />
+
+              {previewableFiles.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={openPrevPreview}
+                    className="absolute left-3 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/45 text-xl font-black text-white backdrop-blur-md transition hover:scale-105 hover:bg-black/60 lg:inline-flex"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openNextPreview}
+                    className="absolute right-3 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/45 text-xl font-black text-white backdrop-blur-md transition hover:scale-105 hover:bg-black/60 lg:inline-flex"
+                  >
+                    ›
+                  </button>
+                </>
+              )}
+
+              <div className="flex h-full max-h-[68vh] min-h-[360px] items-center justify-center overflow-auto px-3 py-3 sm:px-6 sm:py-6">
+                {getPreviewImage(previewFile) ? (
+                  <img
+                    src={getPreviewImage(previewFile) || ""}
+                    alt={getDisplayName(previewFile)}
+                    className="max-h-[64vh] w-auto max-w-full rounded-2xl object-contain transition-transform duration-300"
+                    style={{ transform: `scale(${previewZoom})`, transformOrigin: "center center" }}
+                  />
+                ) : isVideoFile(previewFile.file_url) ? (
+                  <video
+                    src={previewFile.file_url ?? undefined}
+                    controls
+                    autoPlay
+                    muted
+                    playsInline
+                    className="max-h-[64vh] w-full max-w-5xl rounded-2xl bg-black object-contain"
+                  />
+                ) : isPdfFile(previewFile.file_url, previewFile.mime_type) ? (
+                  <iframe
+                    src={previewFile.file_url ?? undefined}
+                    title={getDisplayName(previewFile)}
+                    className="h-[64vh] w-full rounded-2xl bg-white"
+                  />
+                ) : (
+                  <div className="flex min-h-[420px] flex-col items-center justify-center px-6 text-center">
+                    <div className="mb-4 text-6xl">{getFileIcon(getDisplayFileType(previewFile))}</div>
+                    <h4 className="text-xl font-black text-white">Preview not available</h4>
+                    <p className="mt-2 max-w-md text-sm text-slate-400">This file type does not support inline preview. You can still download it below.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-white/10 bg-slate-950/95 px-4 py-4 sm:px-6">
+              {previewableFiles.length > 0 && (
+                <div className="mb-4 overflow-x-auto pb-1">
+                  <div className="flex gap-3">
+                    {previewableFiles.slice(0, 12).map((file) => {
+                      const thumb = getPreviewImage(file)
+                      const isActive = file.id === previewFile.id
+
+                      return (
+                        <button
+                          key={file.id}
+                          type="button"
+                          onClick={() => openPreview(file)}
+                          className={`group relative h-24 w-20 shrink-0 overflow-hidden rounded-2xl border transition ${
+                            isActive
+                              ? "border-sky-400 ring-2 ring-sky-400/40"
+                              : "border-white/10 hover:border-sky-300/40"
+                          }`}
+                        >
+                          {thumb ? (
+                            <img
+                              src={thumb}
+                              alt={getDisplayName(file)}
+                              className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-slate-900 text-2xl">
+                              {getFileIcon(getDisplayFileType(file))}
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                          <div className="absolute inset-x-1 bottom-1 line-clamp-2 text-left text-[10px] font-bold leading-tight text-white">
+                            {getDisplayName(file)}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-slate-400">
+                  {currentPreviewIndex >= 0 ? `Preview ${currentPreviewIndex + 1} of ${previewableFiles.length}` : "Preview"}
+                </p>
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleFavorite(previewFile.id)}
+                    className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                  >
+                    {favorites.includes(previewFile.id) ? "❤️ Saved" : "🤍 Save"}
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
-                      setShowSuccess(false)
-                      document
-                        .getElementById("transaction-history")
-                        ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                      setPreviewFile(null)
+                      setPreviewZoom(1)
                     }}
-                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-slate-200 transition hover:bg-white/10"
+                    className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
                   >
-                    View Activity
-                    <ChevronRight size={16} />
+                    Close
                   </button>
-
-                  <Link
-                    href="/upgrade"
-                    className="inline-flex flex-1 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-slate-200 transition hover:bg-white/10"
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(previewFile)}
+                    className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
                   >
-                    Back to Store
-                  </Link>
+                    Download File
+                  </button>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      ) : null}
-    </>
-  )
-}
-
-export default function PaymentPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-white">
-          <div className="rounded-2xl border border-white/10 bg-slate-900 px-6 py-4 font-bold">
-            Loading payment page...
-          </div>
-        </div>
-      }
-    >
-      <PaymentPageContent />
-    </Suspense>
+      )}
+    </div>
   )
 }

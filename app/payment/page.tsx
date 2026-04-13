@@ -318,11 +318,15 @@ function PaymentPageContent() {
         throw new Error(data?.error || "Failed to load transaction history.")
       }
 
-      const normalizedTransactions = Array.isArray(data?.transactions)
-        ? data.transactions
-            .map(normalizeTransaction)
-            .filter((item): item is TransactionItem => item !== null)
+      const rawTransactions: unknown[] = Array.isArray(data?.transactions)
+        ? (data.transactions as unknown[])
         : []
+
+      const normalizedTransactions: TransactionItem[] = rawTransactions
+        .map(normalizeTransaction)
+        .filter(
+          (item: TransactionItem | null): item is TransactionItem => item !== null
+        )
 
       setTransactions(normalizedTransactions)
       setLatestTransaction(normalizedTransactions[0] || null)
