@@ -25,8 +25,8 @@ function normalizeSameSite(
   return undefined
 }
 
-function buildAuthClient(response: NextResponse) {
-  const cookieStore = cookies()
+async function buildAuthClient(response: NextResponse) {
+  const cookieStore = await cookies()
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -255,7 +255,7 @@ export async function POST(req: Request) {
     }
 
     const response = redirect(origin)
-    const supabase = buildAuthClient(response)
+    const supabase = await buildAuthClient(response)
     const admin = buildAdminClient()
 
     const { data, error } = await supabase.auth.signUp({
