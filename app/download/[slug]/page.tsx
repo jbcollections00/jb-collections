@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const baseQuery = supabase
     .from("files")
-    .select("title, description, thumbnail_url, cover_url")
+    .select("title, description, thumbnail_url, cover_url, preview_url")
     .eq("status", "published")
 
   const { data: file } = isUuid(slug)
@@ -40,8 +40,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const title = file?.title ? `${file.title} | JB Collections` : "Download | JB Collections"
   const description =
-    file?.description || "Download premium content for free on JB Collections."
-  const image = toAbsoluteUrl(file?.cover_url || file?.thumbnail_url, baseUrl)
+    file?.description ||
+    "Download premium content with preview, trust signals, and instant access on JB Collections."
+  const image = toAbsoluteUrl(file?.cover_url || file?.preview_url || file?.thumbnail_url, baseUrl)
   const url = `${baseUrl}/download/${slug}`
 
   return {

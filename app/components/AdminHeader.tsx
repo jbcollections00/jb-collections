@@ -8,13 +8,8 @@ import { createClient } from "@/lib/supabase/client"
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: "🏠" },
   { label: "Categories", href: "/admin/categories", icon: "📂" },
-
   { label: "Payments", href: "/admin/upgrades", icon: "💰" },
-
-  // 🔥 NEW (COIN PURCHASE SYSTEM)
   { label: "Coin Purchases", href: "/admin/coin-purchases", icon: "🪙" },
-
-  { label: "Messages", href: "/admin/messages", icon: "💬" },
   { label: "Upload Files", href: "/admin/files", icon: "📁" },
   { label: "Users", href: "/admin/users", icon: "👥" },
 ]
@@ -51,103 +46,119 @@ export default function AdminHeader() {
 
   return (
     <>
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-slate-800 bg-slate-950/90 backdrop-blur-xl">
-        <div className="mx-auto flex h-20 w-full max-w-[1800px] items-center gap-3 px-4 sm:h-24 sm:px-6 lg:px-8">
-          <Link href="/admin" className="group flex min-w-0 items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-slate-900 shadow ring-1 ring-slate-700 sm:h-12 sm:w-12">
-              <img
-                src="/logo.png"
-                alt="JB Collections"
-                className="h-full w-full object-contain"
-              />
+      <header className="fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-4 sm:pt-4">
+        <div className="mx-auto w-full max-w-[1800px] rounded-[24px] border border-slate-800/80 bg-slate-950/95 shadow-[0_16px_40px_rgba(2,6,23,0.55)] backdrop-blur-xl">
+          <div className="flex min-h-[72px] items-center gap-3 px-4 py-2.5 sm:px-5 lg:px-6">
+            <Link href="/admin" className="flex min-w-0 shrink-0 items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl bg-slate-900 ring-1 ring-slate-700">
+                <img
+                  src="/logo.png"
+                  alt="JB Collections"
+                  className="h-8 w-8 object-contain"
+                />
+              </div>
+
+              <div className="min-w-0">
+                <div className="truncate text-[15px] font-black tracking-[0.08em] text-white sm:text-[17px]">
+                  JB Collections
+                </div>
+                <div className="hidden text-[9px] font-bold uppercase tracking-[0.28em] text-blue-400 sm:block">
+                  Admin Panel
+                </div>
+              </div>
+            </Link>
+
+            <div className="ml-2 hidden min-w-0 flex-1 lg:block">
+              <div className="overflow-x-auto scrollbar-none">
+                <nav className="flex min-w-max items-center gap-2 pr-2">
+                  {navItems.map((item) => {
+                    const active = isActive(item.href)
+
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-bold whitespace-nowrap transition ${
+                          active
+                            ? "border-blue-400/35 bg-blue-500/15 text-blue-300 shadow-[0_10px_24px_rgba(59,130,246,0.16)]"
+                            : "border-slate-700 bg-slate-900/80 text-slate-300 hover:border-slate-600 hover:bg-slate-800 hover:text-white"
+                        }`}
+                      >
+                        <span className="text-[14px]">{item.icon}</span>
+                        <span>{item.label}</span>
+                      </Link>
+                    )
+                  })}
+                </nav>
+              </div>
             </div>
 
-            <div className="min-w-0">
-              <div className="truncate text-lg font-black tracking-tight text-white sm:text-xl">
-                JB Collections
-              </div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-blue-400">
-                Admin Panel
-              </div>
-            </div>
-          </Link>
-
-          <div className="ml-auto hidden items-center gap-2 lg:flex">
-            {navItems.map((item) => {
-              const active = isActive(item.href)
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-bold transition ${
-                    active
-                      ? "bg-blue-600/20 text-blue-300 border border-blue-500/30"
-                      : "bg-slate-900 text-slate-300 border border-slate-700 hover:bg-slate-800 hover:text-white"
-                  }`}
-                >
-                  <span className="text-[15px]">{item.icon}</span>
-                  <span>{item.label}</span>
-                </Link>
-              )
-            })}
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              disabled={loggingOut}
-              className="ml-1 inline-flex items-center justify-center rounded-full bg-red-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-70"
-            >
-              {loggingOut ? "Logging out..." : "Logout"}
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen((prev) => !prev)}
-            className="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white ring-1 ring-slate-700 transition hover:bg-slate-800 lg:hidden"
-          >
-            <span className="text-lg">{mobileMenuOpen ? "✕" : "☰"}</span>
-          </button>
-        </div>
-
-        {mobileMenuOpen && (
-          <div className="border-t border-slate-800 bg-slate-950 px-4 pb-4 pt-3 sm:px-6 lg:hidden">
-            <div className="grid gap-2">
-              {navItems.map((item) => {
-                const active = isActive(item.href)
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold transition ${
-                      active
-                        ? "bg-blue-600/20 text-blue-300 border border-blue-500/30"
-                        : "bg-slate-900 text-slate-300 border border-slate-700 hover:bg-slate-800"
-                    }`}
-                  >
-                    <span>{item.icon}</span>
-                    <span>{item.label}</span>
-                  </Link>
-                )
-              })}
-
+            <div className="hidden shrink-0 items-center gap-2 lg:flex">
               <button
                 type="button"
                 onClick={handleLogout}
                 disabled={loggingOut}
-                className="inline-flex items-center justify-center rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-red-700"
+                className="inline-flex h-10 items-center justify-center rounded-full border border-red-400/20 bg-red-600 px-4 text-xs font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {loggingOut ? "Logging out..." : "Logout"}
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-[14px] border border-slate-700 bg-slate-900 text-xl text-white transition hover:bg-slate-800 lg:hidden"
+              aria-label="Toggle admin menu"
+            >
+              {mobileMenuOpen ? "✕" : "☰"}
+            </button>
           </div>
-        )}
+
+          {mobileMenuOpen && (
+            <div className="border-t border-slate-800 bg-slate-950/95 px-4 pb-4 pt-3 lg:hidden">
+              <div className="grid gap-2.5">
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/90 px-4 py-3">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">
+                    JB Collections
+                  </div>
+                  <div className="mt-1 text-sm font-black text-white">Admin Control Center</div>
+                </div>
+
+                {navItems.map((item) => {
+                  const active = isActive(item.href)
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold transition ${
+                        active
+                          ? "border-blue-400/30 bg-blue-500/15 text-blue-300"
+                          : "border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white"
+                      }`}
+                    >
+                      <span>{item.icon}</span>
+                      <span>{item.label}</span>
+                    </Link>
+                  )
+                })}
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={loggingOut}
+                  className="inline-flex items-center justify-center rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-70"
+                >
+                  {loggingOut ? "Logging out..." : "Logout"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </header>
 
-      <div className="h-20 sm:h-24" />
+      <div className="h-[88px] sm:h-[96px]" />
     </>
   )
 }

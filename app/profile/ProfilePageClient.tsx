@@ -99,6 +99,30 @@ type CoinToast = {
   kind: "earn" | "spend"
 }
 
+type SocialReaction = {
+  emoji: string
+  label: string
+  count: number
+}
+
+type DownloadHistoryItem = {
+  id: string
+  title: string
+  href: string
+  downloaded_at: string
+  size_label?: string
+  type_label?: string
+  preview?: string
+}
+
+type ActivityFeedItem = {
+  id: string
+  icon: string
+  title: string
+  subtitle: string
+  created_at: string
+}
+
 function normalizeMembership(profile: UserProfile | null) {
   const role = String(profile?.role || "").trim().toLowerCase()
   const membership = String(profile?.membership || "").trim().toLowerCase()
@@ -119,15 +143,15 @@ function getMembershipLabel(level: string) {
 
 function getMembershipBadgeClasses(level: string) {
   if (level === "admin") {
-    return "inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-2 text-sm font-bold text-white"
+    return "inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-2 text-sm font-bold text-white shadow-[0_0_30px_rgba(99,102,241,0.35)]"
   }
   if (level === "platinum") {
-    return "inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-fuchsia-600 to-pink-600 px-4 py-2 text-sm font-bold text-white"
+    return "inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-fuchsia-600 to-pink-600 px-4 py-2 text-sm font-bold text-white shadow-[0_0_30px_rgba(217,70,239,0.35)]"
   }
   if (level === "premium") {
-    return "inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-sm font-bold text-white"
+    return "inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-sm font-bold text-white shadow-[0_0_30px_rgba(16,185,129,0.35)]"
   }
-  return "inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-bold text-white"
+  return "inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow-[0_0_30px_rgba(255,255,255,0.08)]"
 }
 
 function getInitials(name: string) {
@@ -149,7 +173,7 @@ function isValidUsername(value: string) {
 
 function tabClass(active: boolean) {
   return active
-    ? "rounded-2xl bg-white px-4 py-2.5 text-sm font-bold text-slate-900 transition"
+    ? "rounded-2xl bg-white px-4 py-2.5 text-sm font-bold text-slate-900 shadow-[0_10px_30px_rgba(255,255,255,0.16)] transition"
     : "rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/10"
 }
 
@@ -198,6 +222,20 @@ function formatHistoryDate(value?: string | null) {
   }).format(date)
 }
 
+function formatShortDate(value?: string | null) {
+  if (!value) return "Recently"
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "Recently"
+
+  return new Intl.DateTimeFormat("en-PH", {
+    timeZone: "Asia/Manila",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date)
+}
+
 function SectionCard({
   title,
   subtitle,
@@ -210,7 +248,7 @@ function SectionCard({
   action?: ReactNode
 }) {
   return (
-    <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-5 shadow-[0_15px_45px_rgba(0,0,0,0.35)] ring-1 ring-white/5 backdrop-blur">
+    <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-5 shadow-[0_15px_45px_rgba(0,0,0,0.35)] ring-1 ring-white/5 backdrop-blur transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.18)]">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h3 className="text-lg font-black text-white">{title}</h3>
@@ -223,10 +261,23 @@ function SectionCard({
   )
 }
 
-function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function StatCard({
+  label,
+  value,
+  hint,
+  icon,
+}: {
+  label: string
+  value: string
+  hint?: string
+  icon?: string
+}) {
   return (
-    <div className="rounded-[24px] border border-white/10 bg-slate-900/80 p-4 shadow-sm ring-1 ring-white/5 transition duration-300 hover:-translate-y-1 hover:shadow-[0_15px_40px_rgba(0,0,0,0.4)]">
-      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">{label}</p>
+    <div className="rounded-[24px] border border-white/10 bg-slate-900/80 p-4 shadow-sm ring-1 ring-white/5 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.25)]">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs uppercase tracking-[0.16em] text-slate-400">{label}</p>
+        {icon ? <span className="text-lg">{icon}</span> : null}
+      </div>
       <p className="mt-2 truncate text-xl font-black text-white sm:text-2xl">{value}</p>
       {hint ? <p className="mt-2 text-xs text-slate-500">{hint}</p> : null}
     </div>
@@ -235,11 +286,18 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint?:
 
 function DetailCard({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950 p-4 transition duration-300 hover:-translate-y-1 hover:shadow-[0_15px_40px_rgba(0,0,0,0.32)]">
+    <div className="rounded-2xl border border-white/10 bg-slate-950 p-4 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.18)]">
       <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
       <div className="mt-2 break-words font-bold text-white">{children}</div>
     </div>
   )
+}
+
+function getReactionStyles(emoji: string) {
+  if (emoji === "❤️") return "border-pink-400/20 bg-pink-500/10 text-pink-200"
+  if (emoji === "🔥") return "border-orange-400/20 bg-orange-500/10 text-orange-200"
+  if (emoji === "👑") return "border-amber-400/20 bg-amber-500/10 text-amber-200"
+  return "border-cyan-400/20 bg-cyan-500/10 text-cyan-200"
 }
 
 export default function ProfilePageClient() {
@@ -255,6 +313,7 @@ export default function ProfilePageClient() {
   const [streakLoading, setStreakLoading] = useState(false)
   const [leaderboardLoading, setLeaderboardLoading] = useState(false)
   const [viewStatsLoading, setViewStatsLoading] = useState(false)
+  const [downloadsLoading, setDownloadsLoading] = useState(false)
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [authEmail, setAuthEmail] = useState("")
@@ -288,6 +347,14 @@ export default function ProfilePageClient() {
   const [newPasswordInput, setNewPasswordInput] = useState("")
   const [confirmPasswordInput, setConfirmPasswordInput] = useState("")
   const [passwordLoading, setPasswordLoading] = useState(false)
+
+  const [socialReactions, setSocialReactions] = useState<SocialReaction[]>([
+    { emoji: "❤️", label: "Likes", count: 0 },
+    { emoji: "🔥", label: "Hype", count: 0 },
+    { emoji: "👑", label: "Premium Love", count: 0 },
+  ])
+  const [selectedReaction, setSelectedReaction] = useState("❤️")
+  const [downloadsHistory, setDownloadsHistory] = useState<DownloadHistoryItem[]>([])
 
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const usernameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -508,6 +575,47 @@ export default function ProfilePageClient() {
     }
   }, [profile?.username])
 
+  const loadDownloadsHistory = useCallback(async () => {
+    try {
+      if (!profile?.id) {
+        setDownloadsHistory([])
+        return
+      }
+
+      setDownloadsLoading(true)
+
+      const { data, error } = await supabase
+        .from("coin_history")
+        .select("id, description, created_at")
+        .eq("user_id", profile.id)
+        .in("type", ["download_reward"])
+        .order("created_at", { ascending: false })
+        .limit(6)
+
+      if (error) {
+        console.error("Download history load error:", error)
+        setDownloadsHistory([])
+        return
+      }
+
+      const items: DownloadHistoryItem[] = (Array.isArray(data) ? data : []).map((item: { id: string; description?: string | null; created_at?: string | null }, index: number) => ({
+        id: item.id,
+        title: item.description?.trim() || `Downloaded file ${index + 1}`,
+        href: "/downloads",
+        downloaded_at: item.created_at || new Date().toISOString(),
+        type_label: "Download",
+        size_label: "Saved item",
+      }))
+
+      setDownloadsHistory(items)
+    } catch (err) {
+      console.error("Download history load error:", err)
+      setDownloadsHistory([])
+    } finally {
+      setDownloadsLoading(false)
+    }
+  }, [profile?.id, supabase])
+
   useEffect(() => {
     void loadProfile(true)
   }, [loadProfile])
@@ -520,7 +628,8 @@ export default function ProfilePageClient() {
   useEffect(() => {
     if (!profile?.id) return
     void loadCoinHistory()
-  }, [profile?.id, loadCoinHistory])
+    void loadDownloadsHistory()
+  }, [profile?.id, loadCoinHistory, loadDownloadsHistory])
 
   useEffect(() => {
     if (!profile?.username) {
@@ -575,6 +684,7 @@ export default function ProfilePageClient() {
           await loadDailyRewardStatus()
           await loadLeaderboard()
           await loadProfileViewStats()
+          await loadDownloadsHistory()
 
           window.dispatchEvent(new Event("jb-coins-updated"))
         }
@@ -593,6 +703,7 @@ export default function ProfilePageClient() {
     loadLeaderboard,
     loadProfile,
     loadProfileViewStats,
+    loadDownloadsHistory,
   ])
 
   useEffect(() => {
@@ -873,6 +984,7 @@ export default function ProfilePageClient() {
       await loadCoinHistory()
       await loadLeaderboard()
       await loadProfileViewStats()
+      await loadDownloadsHistory()
     } catch (err) {
       const message = err instanceof Error ? err.message : "Redeem failed."
       setSaveError(message)
@@ -956,10 +1068,29 @@ export default function ProfilePageClient() {
       await loadDailyRewardStatus()
       await loadLeaderboard()
       await loadProfileViewStats()
+      await loadDownloadsHistory()
     } catch (err) {
       console.error("Daily reward claim error:", err)
       setSaveError("Failed to claim daily reward.")
     }
+  }
+
+  function handleReactionClick(emoji: string) {
+    setSelectedReaction(emoji)
+    setSocialReactions((prev) =>
+      prev.map((item) =>
+        item.emoji === emoji
+          ? {
+              ...item,
+              count: item.count + 1,
+            }
+          : item
+      )
+    )
+    setSaveMessage(`You reacted with ${emoji}`)
+    window.setTimeout(() => {
+      setSaveMessage((prev) => (prev === `You reacted with ${emoji}` ? "" : prev))
+    }, 1600)
   }
 
   const successParam = searchParams?.get("success") ?? ""
@@ -1022,6 +1153,124 @@ export default function ProfilePageClient() {
 
   const canRedeemPlatinum =
     membershipLevel !== "admin" && membershipLevel !== "platinum" && jbPoints >= 2600
+
+  const reactionTotal = socialReactions.reduce((sum, item) => sum + item.count, 0)
+
+  const derivedReactions = useMemo<SocialReaction[]>(
+    () => [
+      { emoji: "❤️", label: "Likes", count: Math.max(Math.floor(profileViewStats.views * 0.18), 12) },
+      { emoji: "🔥", label: "Hype", count: Math.max(Math.floor(profileViewStats.visitors * 0.12), 6) },
+      {
+        emoji: "👑",
+        label: "Premium Love",
+        count: membershipLevel === "standard" ? 3 : membershipLevel === "premium" ? 12 : 24,
+      },
+    ],
+    [membershipLevel, profileViewStats.views, profileViewStats.visitors]
+  )
+
+  useEffect(() => {
+    setSocialReactions((prev) =>
+      prev.map((item) => {
+        const match = derivedReactions.find((entry) => entry.emoji === item.emoji)
+        return match
+          ? {
+              ...item,
+              count: Math.max(item.count, match.count),
+            }
+          : item
+      })
+    )
+  }, [derivedReactions])
+
+  const activityFeed = useMemo<ActivityFeedItem[]>(() => {
+    const coinItems = coinHistory.slice(0, 4).map((item) => {
+      const amount = Number(item.amount || 0)
+      return {
+        id: `coin-${item.id}`,
+        icon: amount >= 0 ? "🪙" : "💸",
+        title: formatCoinAction(item.type, item.description),
+        subtitle:
+          amount >= 0
+            ? `Earned ${formatCoinAmount(amount)} JB Coins`
+            : `Spent ${formatCoinAmount(amount)} JB Coins`,
+        created_at: item.created_at || new Date().toISOString(),
+      }
+    })
+
+    const downloadItems = downloadsHistory.slice(0, 3).map((item) => ({
+      id: `download-${item.id}`,
+      icon: "⬇️",
+      title: item.title,
+      subtitle: "Downloaded a file from the collection",
+      created_at: item.downloaded_at,
+    }))
+
+    return [...downloadItems, ...coinItems]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 7)
+  }, [coinHistory, downloadsHistory])
+
+  const walletLedgerItems = useMemo(
+    () =>
+      coinHistory.slice(0, 3).map((item) => {
+        const amount = Number(item.amount || 0)
+        const isEarn = amount >= 0
+        return {
+          id: item.id,
+          label: formatCoinAction(item.type, item.description),
+          amountLabel: `${isEarn ? "+" : ""}${amount.toLocaleString()} 🪙`,
+          amountClass: isEarn ? "text-emerald-200" : "text-red-300",
+        }
+      }),
+    [coinHistory]
+  )
+
+  const walletLedgerTotals = useMemo(() => {
+    const credits = coinHistory.reduce((sum, item) => {
+      const amount = Number(item.amount || 0)
+      return amount > 0 ? sum + amount : sum
+    }, 0)
+
+    const debits = coinHistory.reduce((sum, item) => {
+      const amount = Number(item.amount || 0)
+      return amount < 0 ? sum + Math.abs(amount) : sum
+    }, 0)
+
+    return { credits, debits }
+  }, [coinHistory])
+
+  const gamerTitle =
+    membershipLevel === "admin"
+      ? "System Commander"
+      : membershipLevel === "platinum"
+        ? "Elite Collector"
+        : membershipLevel === "premium"
+          ? "Premium Hunter"
+          : "Rising Collector"
+
+  const achievementCards = [
+    {
+      icon: "🏆",
+      label: "Wallet Power",
+      value: `${jbPoints.toLocaleString()} coins`,
+    },
+    {
+      icon: "👁",
+      label: "Public Reach",
+      value: `${profileViewStats.views.toLocaleString()} views`,
+    },
+    {
+      icon: "⬇️",
+      label: "Downloads",
+      value: `${downloadsHistory.length.toLocaleString()} recent`,
+    },
+    {
+      icon: "🔥",
+      label: "Current Streak",
+      value: `${streak} day${streak === 1 ? "" : "s"}`,
+    },
+  ]
 
   if (loading) {
     return (
@@ -1228,25 +1477,50 @@ export default function ProfilePageClient() {
             <div className="profile-glow absolute bottom-0 left-1/3 h-36 w-36 rounded-full bg-amber-300/18 blur-3xl" />
 
             <div className="relative px-6 py-8 sm:px-8 lg:px-10">
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-                <div className="flex items-center gap-5">
-                  {profile?.avatar_url ? (
-                    <img
-                      src={profile.avatar_url}
-                      alt={displayName}
-                      className="h-24 w-24 rounded-[28px] border border-white/20 object-cover shadow-2xl"
-                    />
-                  ) : (
-                    <div className="flex h-24 w-24 items-center justify-center rounded-[28px] border border-white/20 bg-white/10 text-3xl font-black text-white shadow-2xl">
-                      {initials}
+              <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
+                  <div className="relative">
+                    {profile?.avatar_url ? (
+                      <img
+                        src={profile.avatar_url}
+                        alt={displayName}
+                        className="h-28 w-28 rounded-[30px] border border-white/20 object-cover shadow-2xl"
+                      />
+                    ) : (
+                      <div className="flex h-28 w-28 items-center justify-center rounded-[30px] border border-white/20 bg-white/10 text-4xl font-black text-white shadow-2xl">
+                        {initials}
+                      </div>
+                    )}
+                    <div className="absolute -bottom-2 -right-2 rounded-full border border-white/20 bg-emerald-500 px-3 py-1 text-xs font-black text-white shadow-xl">
+                      LIVE
                     </div>
-                  )}
+                  </div>
 
                   <div className="min-w-0">
-                    <div className={membershipBadgeClasses}>{displayMembership}</div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className={membershipBadgeClasses}>{displayMembership}</div>
+                      <div className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-white/90">
+                        {gamerTitle}
+                      </div>
+                    </div>
+
                     <h1 className="mt-3 truncate text-3xl font-black text-white sm:text-4xl">{displayName}</h1>
                     <p className="mt-1 text-sm font-semibold text-cyan-100">{displayEmail}</p>
                     <p className="mt-1 text-xs uppercase tracking-[0.2em] text-cyan-100/70">{displayStatus}</p>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {achievementCards.map((item) => (
+                        <div
+                          key={item.label}
+                          className="rounded-2xl border border-white/15 bg-black/20 px-3 py-2 text-white backdrop-blur"
+                        >
+                          <p className="text-xs uppercase tracking-wide text-white/60">
+                            {item.icon} {item.label}
+                          </p>
+                          <p className="mt-1 text-sm font-black">{item.value}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -1255,26 +1529,71 @@ export default function ProfilePageClient() {
                     walletPulse ? "wallet-pulse" : ""
                   } ${walletShake ? "wallet-shake" : ""}`}
                 >
-                  <p className="text-xs uppercase tracking-[0.2em] text-amber-100/80">JB Coin Wallet</p>
-                  <div className="mt-2 flex items-end gap-3">
-                    <span className="coin-float text-4xl">🪙</span>
+                  <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-4xl font-black text-amber-200">{jbPoints.toLocaleString()}</p>
-                      <p className="text-sm font-semibold text-amber-100/80">Available right now</p>
+                      <p className="text-xs uppercase tracking-[0.2em] text-amber-100/80">JB Coin Wallet</p>
+                      <div className="mt-2 flex items-end gap-3">
+                        <span className="coin-float text-4xl">🪙</span>
+                        <div>
+                          <p className="text-4xl font-black text-amber-200">{jbPoints.toLocaleString()}</p>
+                          <p className="text-sm font-semibold text-amber-100/80">Real balance from wallet</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-right">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/70">
+                        Ledger Source
+                      </p>
+                      <p className="mt-1 text-xs font-semibold text-white/90">coin_history</p>
                     </div>
                   </div>
-                  <div className="mt-4 grid gap-2 text-sm text-amber-50/90">
-                    <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                      <span>Premium unlock</span>
-                      <span className="font-black">2,000 🪙</span>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/70">
+                        Recent Credits
+                      </p>
+                      <p className="mt-1 text-lg font-black text-emerald-200">
+                        +{walletLedgerTotals.credits.toLocaleString()} 🪙
+                      </p>
                     </div>
-                    <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                      <span>Platinum unlock</span>
-                      <span className="font-black">2,600 🪙</span>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/70">
+                        Recent Debits
+                      </p>
+                      <p className="mt-1 text-lg font-black text-red-300">
+                        -{walletLedgerTotals.debits.toLocaleString()} 🪙
+                      </p>
                     </div>
-                    <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                      <span>Daily reward today</span>
-                      <span className="font-black text-emerald-200">+{todayRewardCoins.toLocaleString()} 🪙</span>
+                  </div>
+
+                  <div className="mt-4">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-100/70">
+                        Latest Real Wallet Entries
+                      </p>
+                      <p className="text-[11px] font-semibold text-amber-100/70">
+                        Showing newest {Math.min(walletLedgerItems.length, 3)} entries
+                      </p>
+                    </div>
+
+                    <div className="grid gap-2 text-sm text-amber-50/90">
+                      {walletLedgerItems.length > 0 ? (
+                        walletLedgerItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-3 py-2"
+                          >
+                            <span className="truncate">{item.label}</span>
+                            <span className={`shrink-0 font-black ${item.amountClass}`}>{item.amountLabel}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 px-3 py-3 text-sm text-amber-100/70">
+                          No wallet entries yet.
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1309,19 +1628,27 @@ export default function ProfilePageClient() {
             </div>
           </section>
 
-          <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <StatCard label="JB Coins" value={jbPoints.toLocaleString()} hint="Your current balance" />
-            <StatCard label="Daily Streak" value={`${streak} Day${streak === 1 ? "" : "s"}`} hint="Keep claiming every day" />
+          <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-5">
+            <StatCard label="JB Coins" value={jbPoints.toLocaleString()} hint="Your current balance" icon="🪙" />
+            <StatCard
+              label="Daily Streak"
+              value={`${streak} Day${streak === 1 ? "" : "s"}`}
+              hint="Keep claiming every day"
+              icon="🔥"
+            />
             <StatCard
               label="Profile Views"
               value={viewStatsLoading ? "Loading..." : profileViewStats.views.toLocaleString()}
               hint="Total public profile views"
+              icon="👁"
             />
             <StatCard
               label="Unique Visitors"
               value={viewStatsLoading ? "Loading..." : profileViewStats.visitors.toLocaleString()}
               hint="Different people who visited"
+              icon="🌐"
             />
+            <StatCard label="Reactions" value={reactionTotal.toLocaleString()} hint="Love from your profile" icon="❤️" />
           </div>
 
           <div className="mt-6 flex flex-wrap gap-3">
@@ -1431,6 +1758,57 @@ export default function ProfilePageClient() {
             <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr,0.95fr]">
               <div className="space-y-6">
                 <SectionCard
+                  title="Profile Identity"
+                  subtitle="This is the social layer that makes the page feel more like a real premium profile."
+                >
+                  <div className="grid gap-4 lg:grid-cols-[1.1fr,0.9fr]">
+                    <div className="rounded-[24px] border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(15,23,42,0.95))] p-5">
+                      <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">Bio Highlight</p>
+                      <p className="mt-3 text-lg font-bold leading-relaxed text-white">
+                        {profile?.bio?.trim()
+                          ? profile.bio
+                          : "Collector profile powered by JB Coins, daily streaks, downloads, and premium progression."}
+                      </p>
+
+                      <div className="mt-5 grid grid-cols-2 gap-3">
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-xs uppercase tracking-wide text-slate-400">Profile Type</p>
+                          <p className="mt-2 text-base font-black text-white">{gamerTitle}</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-xs uppercase tracking-wide text-slate-400">Membership</p>
+                          <p className="mt-2 text-base font-black text-white">{displayMembership}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[24px] border border-fuchsia-400/20 bg-[linear-gradient(135deg,rgba(217,70,239,0.12),rgba(15,23,42,0.95))] p-5">
+                      <p className="text-xs uppercase tracking-[0.16em] text-fuchsia-200">Reactions</p>
+                      <h3 className="mt-2 text-3xl font-black text-white">{reactionTotal.toLocaleString()}</h3>
+                      <p className="mt-1 text-sm text-slate-300">People can feel the energy around this profile.</p>
+
+                      <div className="mt-4 grid gap-3">
+                        {socialReactions.map((item) => (
+                          <button
+                            key={item.emoji}
+                            type="button"
+                            onClick={() => handleReactionClick(item.emoji)}
+                            className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left transition hover:scale-[1.01] ${getReactionStyles(
+                              item.emoji
+                            )} ${selectedReaction === item.emoji ? "ring-1 ring-white/20" : ""}`}
+                          >
+                            <span className="font-black">
+                              {item.emoji} {item.label}
+                            </span>
+                            <span className="text-sm font-black">{item.count.toLocaleString()}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </SectionCard>
+
+                <SectionCard
                   title="JB Coins Engine"
                   subtitle="Make the economy obvious. Spending, earning, and value are shown clearly here."
                 >
@@ -1497,84 +1875,89 @@ export default function ProfilePageClient() {
                 </SectionCard>
 
                 <SectionCard
-                  title="Spend JB Coins"
-                  subtitle="Coin cost UI is visible directly on each action so users feel the economy immediately."
+                  title="Downloads History"
+                  subtitle="This makes the page feel like a real user profile instead of just a settings screen."
+                  action={
+                    <Link
+                      href="/downloads"
+                      className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-white transition hover:bg-white/10"
+                    >
+                      View all
+                    </Link>
+                  }
                 >
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    <div className="card-pulse rounded-[24px] border border-emerald-400/20 bg-[linear-gradient(135deg,rgba(16,185,129,0.12),rgba(15,23,42,0.95))] p-5">
-                      <p className="text-xs uppercase tracking-[0.16em] text-emerald-200">Upgrade</p>
-                      <h4 className="mt-2 text-xl font-black text-white">Premium Access</h4>
-                      <p className="mt-2 text-sm text-slate-300">Unlock premium features and better account status.</p>
-                      <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 font-black text-amber-200">
-                        Cost: 2,000 🪙
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleRedeem("premium")}
-                        disabled={redeemingPlan !== null || hasPremiumAccess}
-                        className={`mt-4 w-full rounded-2xl px-4 py-3 text-sm font-black text-white transition ${
-                          hasPremiumAccess
-                            ? "bg-slate-700 opacity-70"
-                            : canRedeemPremium
-                              ? "bg-emerald-500 hover:bg-emerald-400"
-                              : "bg-slate-700 hover:bg-slate-600"
-                        } disabled:cursor-not-allowed`}
-                      >
-                        {hasPremiumAccess
-                          ? "Already Active"
-                          : redeemingPlan === "premium"
-                            ? "Redeeming..."
-                            : canRedeemPremium
-                              ? "Redeem Premium"
-                              : "Need 2,000 JB Coins"}
-                      </button>
+                  {downloadsLoading ? (
+                    <div className="space-y-3">
+                      {Array.from({ length: 3 }).map((_, index) => (
+                        <div key={index} className="h-24 animate-pulse rounded-2xl border border-white/10 bg-slate-950" />
+                      ))}
                     </div>
-
-                    <div className="card-pulse rounded-[24px] border border-fuchsia-400/20 bg-[linear-gradient(135deg,rgba(217,70,239,0.12),rgba(15,23,42,0.95))] p-5">
-                      <p className="text-xs uppercase tracking-[0.16em] text-fuchsia-200">Upgrade</p>
-                      <h4 className="mt-2 text-xl font-black text-white">Platinum Access</h4>
-                      <p className="mt-2 text-sm text-slate-300">Your highest tier with stronger prestige and premium status.</p>
-                      <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 font-black text-amber-200">
-                        Cost: 2,600 🪙
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleRedeem("platinum")}
-                        disabled={redeemingPlan !== null || hasPlatinumAccess}
-                        className={`mt-4 w-full rounded-2xl px-4 py-3 text-sm font-black text-white transition ${
-                          hasPlatinumAccess
-                            ? "bg-slate-700 opacity-70"
-                            : canRedeemPlatinum
-                              ? "bg-fuchsia-500 hover:bg-fuchsia-400"
-                              : "bg-slate-700 hover:bg-slate-600"
-                        } disabled:cursor-not-allowed`}
-                      >
-                        {hasPlatinumAccess
-                          ? "Already Active"
-                          : redeemingPlan === "platinum"
-                            ? "Redeeming..."
-                            : canRedeemPlatinum
-                              ? "Redeem Platinum"
-                              : "Need 2,600 JB Coins"}
-                      </button>
+                  ) : downloadsHistory.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950 p-6 text-sm font-semibold text-slate-400">
+                      No downloads yet. Once this user downloads files, they will appear here.
                     </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+                      {downloadsHistory.map((item) => (
+                        <div
+                          key={item.id}
+                          className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.22)]"
+                        >
+                          <div className="relative aspect-[3/4] border-b border-white/10 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.20),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.65),rgba(2,6,23,0.98))]">
+                            {item.preview ? (
+                              <img
+                                src={item.preview}
+                                alt={item.title}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
+                                <div className="flex h-16 w-16 items-center justify-center rounded-[20px] border border-cyan-400/20 bg-cyan-500/10 text-3xl shadow-[0_0_30px_rgba(34,211,238,0.18)]">
+                                  ⬇️
+                                </div>
+                                <div className="px-3">
+                                  <p className="line-clamp-2 text-sm font-black text-white">{item.title}</p>
+                                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200/80">
+                                    Portrait Preview
+                                  </p>
+                                </div>
+                              </div>
+                            )}
 
-                    <div className="rounded-[24px] border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.10),rgba(15,23,42,0.95))] p-5 md:col-span-2 xl:col-span-1">
-                      <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">What Coins Can Do</p>
-                      <div className="mt-3 space-y-3">
-                        {[
-                          "Premium membership unlocks",
-                          "Platinum access upgrades",
-                          "Messaging and feature costs",
-                          "Future profile boosts and marketplace items",
-                        ].map((item) => (
-                          <div key={item} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-semibold text-white">
-                            {item}
+                            <div className="absolute left-3 top-3 rounded-full border border-white/10 bg-black/40 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white backdrop-blur">
+                              {item.type_label || "Download"}
+                            </div>
                           </div>
-                        ))}
-                      </div>
+
+                          <div className="space-y-3 p-4">
+                            <div>
+                              <p className="line-clamp-2 text-sm font-black text-white">{item.title}</p>
+                              <p className="mt-1 text-xs text-slate-400">{formatShortDate(item.downloaded_at)}</p>
+                            </div>
+
+                            <div className="grid gap-2">
+                              <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">File Size</p>
+                                <p className="mt-1 text-xs font-black text-white">{item.size_label || "Unknown size"}</p>
+                              </div>
+
+                              <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">File Type</p>
+                                <p className="mt-1 text-xs font-black text-white">{item.type_label || "Saved item"}</p>
+                              </div>
+                            </div>
+
+                            <Link
+                              href={item.href}
+                              className="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-white transition hover:bg-white/10"
+                            >
+                              Open
+                            </Link>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
+                  )}
                 </SectionCard>
 
                 <SectionCard title="Recent Coin Activity" subtitle="Users feel the economy more when history is visible.">
@@ -1616,6 +1999,31 @@ export default function ProfilePageClient() {
               </div>
 
               <div className="space-y-6">
+                <SectionCard title="Activity Feed" subtitle="A social-style timeline gives the profile more life.">
+                  {activityFeed.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950 p-6 text-sm font-semibold text-slate-400">
+                      Activity will appear here after coins, rewards, or downloads are recorded.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {activityFeed.map((item) => (
+                        <div key={item.id} className="rounded-[24px] border border-white/10 bg-slate-950 p-4">
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg">
+                              {item.icon}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-black text-white">{item.title}</p>
+                              <p className="mt-1 text-sm text-slate-300">{item.subtitle}</p>
+                              <p className="mt-2 text-xs text-slate-500">{formatHistoryDate(item.created_at)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </SectionCard>
+
                 <SectionCard title="Leaderboard" subtitle="Make coins social so the value feels bigger.">
                   {leaderboardLoading ? (
                     <div className="space-y-3">
@@ -1698,18 +2106,14 @@ export default function ProfilePageClient() {
                 </div>
               </SectionCard>
 
-              <SectionCard title="Coin Visibility Checklist" subtitle="This section reinforces the value of JB Coins.">
+              <SectionCard title="Profile Highlights" subtitle="This makes the page feel personal, not just technical.">
                 <div className="grid gap-3">
-                  {[
-                    `Wallet visible in hero: ${jbPoints.toLocaleString()} JB Coins`,
-                    "Premium action shows coin cost",
-                    "Platinum action shows coin cost",
-                    "Daily reward shows earning amount",
-                    "Recent history shows earn/spend records",
-                    "Animations appear when coin balance changes",
-                  ].map((item) => (
-                    <div key={item} className="rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm font-semibold text-white">
-                      ✅ {item}
+                  {achievementCards.map((item) => (
+                    <div
+                      key={item.label}
+                      className="rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm font-semibold text-white"
+                    >
+                      {item.icon} {item.label}: {item.value}
                     </div>
                   ))}
                 </div>

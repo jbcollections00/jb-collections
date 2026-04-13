@@ -15,6 +15,7 @@ import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 
 const REFERRAL_STORAGE_KEY = "jb_referral_code"
+const SIGNUP_REWARD = 35
 
 export default function SignupPage() {
   return (
@@ -47,6 +48,8 @@ function SignupPageContent() {
   const [welcomeName, setWelcomeName] = useState("User")
   const [modalVisible, setModalVisible] = useState(false)
   const [countdown, setCountdown] = useState(3)
+  const [walletCoins, setWalletCoins] = useState<number | null>(null)
+  const [bonusConfirmed, setBonusConfirmed] = useState<boolean | null>(null)
 
   useEffect(() => {
     fullNameRef.current?.focus()
@@ -59,6 +62,7 @@ function SignupPageContent() {
 
     if (cleanRef) {
       localStorage.setItem(REFERRAL_STORAGE_KEY, cleanRef)
+      document.cookie = `${REFERRAL_STORAGE_KEY}=${encodeURIComponent(cleanRef)}; path=/; max-age=2592000; samesite=lax`
       setReferralCode(cleanRef)
       return
     }
@@ -68,6 +72,42 @@ function SignupPageContent() {
   }, [refParam])
 
   useEffect(() => {
+    let cancelled = false
+
+    async function loadWalletPreview() {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+
+        if (!user?.id || cancelled) return
+
+        const [{ data: profile }, { data: history }] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("coins")
+            .eq("id", user.id)
+            .maybeSingle(),
+          supabase
+            .from("coin_history")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("type", "signup_bonus")
+            .limit(1),
+        ])
+
+        if (cancelled) return
+
+        setWalletCoins(profile?.coins ?? null)
+        setBonusConfirmed(Boolean(history && history.length > 0))
+      } catch {
+        if (!cancelled) {
+          setWalletCoins(null)
+          setBonusConfirmed(null)
+        }
+      }
+    }
+
     if (successParam === "true" || successParam === "account-created") {
       const savedName =
         typeof window !== "undefined"
@@ -77,7 +117,9 @@ function SignupPageContent() {
       const finalName = savedName?.trim() || "User"
 
       setWelcomeName(finalName)
+      setCountdown(3)
       setShowWelcomeModal(true)
+      loadWalletPreview()
 
       const enterTimer = setTimeout(() => {
         setModalVisible(true)
@@ -96,17 +138,23 @@ function SignupPageContent() {
         if (typeof window !== "undefined") {
           sessionStorage.removeItem("signupFullName")
           localStorage.removeItem(REFERRAL_STORAGE_KEY)
+          document.cookie = `${REFERRAL_STORAGE_KEY}=; path=/; max-age=0; samesite=lax`
           window.location.href = "/dashboard"
         }
       }, 3000)
 
       return () => {
+        cancelled = true
         clearTimeout(enterTimer)
         clearTimeout(redirectTimer)
         clearInterval(countdownTimer)
       }
     }
-  }, [successParam])
+
+    return () => {
+      cancelled = true
+    }
+  }, [successParam, supabase])
 
   const errorMessage = useMemo(() => {
     if (!errorParam) return ""
@@ -136,7 +184,7 @@ function SignupPageContent() {
     }
 
     if (errorParam === "reward-failed") {
-      return "Your account was created, but the referral reward could not be processed."
+      return "Your account was created, but the reward popup may not match your final wallet balance yet."
     }
 
     if (errorParam === "profile-save-failed") {
@@ -165,6 +213,8 @@ function SignupPageContent() {
     return password === confirmPassword
   }, [password, confirmPassword])
 
+  const referralActive = referralCode.trim().length > 0
+
   const formValid =
     !!fullName.trim() &&
     !!email.trim() &&
@@ -188,6 +238,7 @@ function SignupPageContent() {
       const cleanRef = referralCode.trim().toUpperCase()
       if (cleanRef) {
         localStorage.setItem(REFERRAL_STORAGE_KEY, cleanRef)
+        document.cookie = `${REFERRAL_STORAGE_KEY}=${encodeURIComponent(cleanRef)}; path=/; max-age=2592000; samesite=lax`
       }
     }
 
@@ -201,7 +252,15 @@ function SignupPageContent() {
 
       const origin = window.location.origin
       const cleanRef = referralCode.trim().toUpperCase()
-      const redirectTo = cleanRef ? `${origin}/?ref=${encodeURIComponent(cleanRef)}` : `${origin}`
+
+      if (cleanRef) {
+        localStorage.setItem(REFERRAL_STORAGE_KEY, cleanRef)
+        document.cookie = `${REFERRAL_STORAGE_KEY}=${encodeURIComponent(cleanRef)}; path=/; max-age=2592000; samesite=lax`
+      }
+
+      const redirectTo = cleanRef
+        ? `${origin}/api/auth/callback?ref=${encodeURIComponent(cleanRef)}`
+        : `${origin}/api/auth/callback`
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
@@ -218,6 +277,16 @@ function SignupPageContent() {
       setGoogleLoading(false)
     }
   }
+
+  const walletLabel =
+    walletCoins === null ? "Preparing wallet..." : `${walletCoins} JB Coins`
+
+  const bonusLabel =
+    bonusConfirmed === null
+      ? "Checking reward status..."
+      : bonusConfirmed
+        ? "Signup bonus confirmed"
+        : `Welcome reward pending review`
 
   return (
     <SignupLayout>
@@ -238,7 +307,22 @@ function SignupPageContent() {
                 : "translateY(18px) scale(0.96)",
             }}
           >
+            <div style={rewardGlowStyle} />
             <div style={successIconStyle}>✓</div>
+
+            <div style={rewardBadgeStyle}>
+              <span style={rewardBadgeIconStyle}>🪙</span>
+              <span>{bonusConfirmed ? `+${SIGNUP_REWARD} JB Coins Added` : "Wallet setup in progress"}</span>
+            </div>
+
+            <div style={coinBurstWrapStyle} aria-hidden="true">
+              <span style={{ ...coinBurstItemStyle, left: "8%", animationDelay: "0s" }}>🪙</span>
+              <span style={{ ...coinBurstItemStyle, left: "24%", animationDelay: "0.35s" }}>✨</span>
+              <span style={{ ...coinBurstItemStyle, left: "40%", animationDelay: "0.15s" }}>🪙</span>
+              <span style={{ ...coinBurstItemStyle, left: "58%", animationDelay: "0.45s" }}>✨</span>
+              <span style={{ ...coinBurstItemStyle, left: "74%", animationDelay: "0.2s" }}>🪙</span>
+              <span style={{ ...coinBurstItemStyle, left: "88%", animationDelay: "0.5s" }}>✨</span>
+            </div>
 
             <h2 style={modalTitleStyle}>Welcome, {welcomeName}! 🎉</h2>
 
@@ -246,9 +330,32 @@ function SignupPageContent() {
               Your account has been successfully created.
             </p>
 
+            <div style={rewardPanelStyle}>
+              <div style={rewardPanelLabelStyle}>Wallet Balance</div>
+              <div style={rewardPanelValueStyle}>{walletLabel}</div>
+              <div style={rewardPanelSubStyle}>{bonusLabel}</div>
+            </div>
+
+            <div style={modalButtonRowStyle}>
+              <button
+                type="button"
+                style={dashboardButtonStyle}
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    sessionStorage.removeItem("signupFullName")
+                    localStorage.removeItem(REFERRAL_STORAGE_KEY)
+                    document.cookie = `${REFERRAL_STORAGE_KEY}=; path=/; max-age=0; samesite=lax`
+                    window.location.href = "/dashboard"
+                  }
+                }}
+              >
+                Go to Dashboard
+              </button>
+            </div>
+
             <p style={modalSubTextStyle}>
-              We’re happy to have you here. You will be redirected to your
-              dashboard in {countdown} second{countdown === 1 ? "" : "s"}.
+              Redirecting you to your dashboard in {countdown} second
+              {countdown === 1 ? "" : "s"}.
             </p>
 
             <div style={modalAdminTextStyle}>— Admin</div>
@@ -256,18 +363,46 @@ function SignupPageContent() {
         </div>
       ) : null}
 
+      <div style={heroWrapStyle}>
+        <div style={heroBadgeStyle}>New account bonus unlocked</div>
+        <h2 style={heroTitleStyle}>Start strong on JB Collections</h2>
+        <p style={heroTextStyle}>
+          Create your account, claim your free {SIGNUP_REWARD} JB Coins, and unlock a smoother premium-style experience from day one.
+        </p>
+
+        <div style={heroStatsGridStyle}>
+          <div style={heroStatCardStyle}>
+            <div style={heroStatValueStyle}>+{SIGNUP_REWARD}</div>
+            <div style={heroStatLabelStyle}>JB Coins</div>
+          </div>
+          <div style={heroStatCardStyle}>
+            <div style={heroStatValueStyle}>Fast</div>
+            <div style={heroStatLabelStyle}>Signup flow</div>
+          </div>
+          <div style={heroStatCardStyle}>
+            <div style={heroStatValueStyle}>Secure</div>
+            <div style={heroStatLabelStyle}>Wallet setup</div>
+          </div>
+        </div>
+      </div>
+
       <form
         method="post"
         action="/api/auth/signup"
         onSubmit={handleSubmit}
         style={{ marginTop: "20px" }}
       >
-        <input
-          type="hidden"
-          name="referralCode"
-          value={referralCode}
-          readOnly
-        />
+        <input type="hidden" name="referralCode" value={referralCode} readOnly />
+
+        {referralActive ? (
+          <div style={referralBannerStyle}>
+            <span style={{ fontSize: 18 }}>🎁</span>
+            <div>
+              <div style={referralBannerTitleStyle}>Referral code detected</div>
+              <div style={referralBannerTextStyle}>{referralCode}</div>
+            </div>
+          </div>
+        ) : null}
 
         {errorMessage ? <div style={errorBox}>{errorMessage}</div> : null}
         {googleError ? <div style={errorBox}>{googleError}</div> : null}
@@ -320,14 +455,23 @@ function SignupPageContent() {
           error={!passwordsMatch ? "Passwords do not match." : ""}
         />
 
+        <div style={helperRowStyle}>
+          <span style={helperChipStyle}>✓ 6+ characters</span>
+          <span style={helperChipStyle}>✓ secure account</span>
+          <span style={helperChipStyle}>✓ bonus ready</span>
+        </div>
+
         <button
           type="submit"
           disabled={!formValid || submitting || googleLoading}
           style={{
             ...submitButton,
-            background: formValid ? "#1557ff" : "#9db8ff",
-            opacity: submitting ? 0.75 : 1,
-            cursor: formValid && !submitting ? "pointer" : "not-allowed",
+            background: formValid ? "linear-gradient(135deg, #1557ff 0%, #3b82f6 100%)" : "#9db8ff",
+            opacity: submitting ? 0.78 : 1,
+            cursor:
+              formValid && !submitting && !googleLoading
+                ? "pointer"
+                : "not-allowed",
             marginTop: "6px",
           }}
         >
@@ -337,13 +481,16 @@ function SignupPageContent() {
               Creating account...
             </span>
           ) : (
-            "Sign Up"
+            <span style={buttonInner}>
+              <span>Create account</span>
+              <span>→</span>
+            </span>
           )}
         </button>
 
         <div style={dividerWrap}>
           <div style={dividerLine} />
-          <span style={{ color: "#64748b", fontSize: "14px" }}>or</span>
+          <span style={{ color: "#64748b", fontSize: "14px" }}>or continue with</span>
           <div style={dividerLine} />
         </div>
 
@@ -354,7 +501,7 @@ function SignupPageContent() {
           style={{
             ...googleButton,
             opacity: googleLoading ? 0.75 : 1,
-            cursor: googleLoading ? "not-allowed" : "pointer",
+            cursor: googleLoading || submitting ? "not-allowed" : "pointer",
           }}
         >
           {googleLoading ? (
@@ -364,16 +511,17 @@ function SignupPageContent() {
             </span>
           ) : (
             <>
-              <Image
-                src="/google.svg"
-                alt="Google"
-                width={20}
-                height={20}
-              />
+              <Image src="/google.svg" alt="Google" width={20} height={20} />
               Continue with Google
             </>
           )}
         </button>
+
+        <div style={trustRowStyle}>
+          <span style={trustChipStyle}>🔐 Secure signup</span>
+          <span style={trustChipStyle}>⚡ Fast access</span>
+          <span style={trustChipStyle}>🪙 Reward ready</span>
+        </div>
 
         <div style={footerLinkWrap}>
           Already have an account?{" "}
@@ -401,20 +549,66 @@ function SignupPageFallback() {
 function SignupLayout({ children }: { children: React.ReactNode }) {
   return (
     <main style={pageStyle}>
+      <style jsx global>{`
+        @keyframes spin {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        @keyframes coin-float {
+          0% {
+            opacity: 0;
+            transform: translateY(18px) scale(0.8);
+          }
+          15% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 1;
+            transform: translateY(-16px) scale(1.06);
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(-42px) scale(0.88);
+          }
+        }
+
+        @keyframes reward-pulse {
+          0% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.35);
+          }
+          70% {
+            transform: scale(1.02);
+            box-shadow: 0 0 0 16px rgba(250, 204, 21, 0);
+          }
+          100% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(250, 204, 21, 0);
+          }
+        }
+      `}</style>
+
       <div style={cardStyle}>
         <div style={{ textAlign: "center", marginBottom: "12px" }}>
-          <Image
-            src="/jb-logo.png"
-            alt="JB Collections"
-            width={70}
-            height={70}
-            priority
-            style={{
-              width: "70px",
-              height: "auto",
-              margin: "0 auto 14px",
-            }}
-          />
+          <div style={logoWrapStyle}>
+            <Image
+              src="/jb-logo.png"
+              alt="JB Collections"
+              width={76}
+              height={76}
+              priority
+              style={{
+                width: "76px",
+                height: "76px",
+                borderRadius: "20px",
+              }}
+            />
+          </div>
 
           <h1 style={titleStyle}>Create Account</h1>
 
@@ -466,10 +660,13 @@ function FloatingInput({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           required={required}
-          autoComplete={name === "email" ? "email" : name === "fullName" ? "name" : undefined}
+          autoComplete={
+            name === "email" ? "email" : name === "fullName" ? "name" : undefined
+          }
           style={{
             ...floatingInputStyle,
             border: error ? "1.5px solid #dc2626" : "1px solid #dbe4ff",
+            boxShadow: error ? "0 0 0 4px rgba(220,38,38,0.08)" : "0 8px 20px rgba(21,87,255,0.05)",
           }}
         />
 
@@ -522,6 +719,7 @@ function PasswordInput({
           style={{
             ...passwordWrap,
             border: error ? "1.5px solid #dc2626" : "1px solid #dbe4ff",
+            boxShadow: error ? "0 0 0 4px rgba(220,38,38,0.08)" : "0 8px 20px rgba(21,87,255,0.05)",
           }}
         >
           <input
@@ -532,15 +730,11 @@ function PasswordInput({
             onChange={(e) => onChange(e.target.value)}
             placeholder=" "
             required={required}
-            autoComplete={name === "password" ? "new-password" : "new-password"}
+            autoComplete="new-password"
             style={passwordInputStyle}
           />
 
-          <button
-            type="button"
-            onClick={onToggleShow}
-            style={showButton}
-          >
+          <button type="button" onClick={onToggleShow} style={showButton}>
             {show ? "🙈" : "👁️"}
           </button>
         </div>
@@ -566,7 +760,8 @@ function PasswordInput({
 
 const pageStyle: CSSProperties = {
   minHeight: "100vh",
-  background: "linear-gradient(180deg, #eef2fb 0%, #e8eefc 100%)",
+  background:
+    "radial-gradient(circle at top, rgba(59,130,246,0.16) 0%, rgba(59,130,246,0) 28%), linear-gradient(180deg, #eef4ff 0%, #eef2fb 42%, #e8eefc 100%)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -575,20 +770,33 @@ const pageStyle: CSSProperties = {
 
 const cardStyle: CSSProperties = {
   width: "100%",
-  maxWidth: "500px",
-  background: "rgba(255,255,255,0.72)",
-  backdropFilter: "blur(14px)",
+  maxWidth: "560px",
+  background: "rgba(255,255,255,0.78)",
+  backdropFilter: "blur(16px)",
+  borderRadius: "30px",
+  boxShadow: "0 30px 80px rgba(15,23,42,0.10)",
+  padding: "34px 24px 28px",
+  border: "1px solid rgba(255,255,255,0.78)",
+}
+
+const logoWrapStyle: CSSProperties = {
+  width: "94px",
+  height: "94px",
   borderRadius: "28px",
-  boxShadow: "0 24px 55px rgba(0,0,0,0.08)",
-  padding: "32px 24px",
-  border: "1px solid rgba(255,255,255,0.65)",
+  background: "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.65))",
+  border: "1px solid rgba(21,87,255,0.08)",
+  display: "grid",
+  placeItems: "center",
+  margin: "0 auto 16px",
+  boxShadow: "0 18px 40px rgba(21,87,255,0.12)",
 }
 
 const titleStyle: CSSProperties = {
   margin: 0,
-  fontSize: "26px",
-  fontWeight: 800,
+  fontSize: "28px",
+  fontWeight: 900,
   color: "#0d1635",
+  letterSpacing: "-0.02em",
 }
 
 const subtitleStyle: CSSProperties = {
@@ -596,12 +804,102 @@ const subtitleStyle: CSSProperties = {
   marginBottom: 0,
   fontSize: "15px",
   color: "#475569",
-  lineHeight: "1.6",
+  lineHeight: "1.7",
+}
+
+const heroWrapStyle: CSSProperties = {
+  marginTop: "10px",
+  marginBottom: "18px",
+  padding: "18px",
+  borderRadius: "24px",
+  background: "linear-gradient(135deg, #0f172a 0%, #1557ff 58%, #60a5fa 100%)",
+  color: "#ffffff",
+  boxShadow: "0 22px 46px rgba(21,87,255,0.22)",
+}
+
+const heroBadgeStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "8px 12px",
+  borderRadius: "999px",
+  background: "rgba(255,255,255,0.16)",
+  border: "1px solid rgba(255,255,255,0.18)",
+  fontSize: "12px",
+  fontWeight: 800,
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+}
+
+const heroTitleStyle: CSSProperties = {
+  margin: "14px 0 0",
+  fontSize: "28px",
+  fontWeight: 900,
+  lineHeight: 1.1,
+  letterSpacing: "-0.03em",
+}
+
+const heroTextStyle: CSSProperties = {
+  marginTop: "12px",
+  marginBottom: 0,
+  color: "rgba(255,255,255,0.88)",
+  fontSize: "15px",
+  lineHeight: 1.7,
+}
+
+const heroStatsGridStyle: CSSProperties = {
+  marginTop: "18px",
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: "10px",
+}
+
+const heroStatCardStyle: CSSProperties = {
+  borderRadius: "18px",
+  padding: "14px 12px",
+  background: "rgba(255,255,255,0.12)",
+  border: "1px solid rgba(255,255,255,0.14)",
+}
+
+const heroStatValueStyle: CSSProperties = {
+  fontSize: "20px",
+  fontWeight: 900,
+  lineHeight: 1.1,
+}
+
+const heroStatLabelStyle: CSSProperties = {
+  marginTop: "6px",
+  fontSize: "13px",
+  color: "rgba(255,255,255,0.82)",
+}
+
+const referralBannerStyle: CSSProperties = {
+  marginBottom: "16px",
+  borderRadius: "16px",
+  padding: "12px 14px",
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+  background: "linear-gradient(180deg, #fff9db 0%, #fff2b8 100%)",
+  border: "1px solid rgba(245, 158, 11, 0.24)",
+  color: "#7c5100",
+}
+
+const referralBannerTitleStyle: CSSProperties = {
+  fontSize: "13px",
+  fontWeight: 800,
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+}
+
+const referralBannerTextStyle: CSSProperties = {
+  marginTop: "2px",
+  fontSize: "14px",
+  fontWeight: 700,
 }
 
 const floatingInputStyle: CSSProperties = {
   width: "100%",
-  height: "58px",
+  height: "60px",
   borderRadius: "16px",
   outline: "none",
   padding: "22px 16px 8px",
@@ -623,7 +921,7 @@ const floatingLabelStyle: CSSProperties = {
 const passwordWrap: CSSProperties = {
   display: "flex",
   alignItems: "center",
-  height: "58px",
+  height: "60px",
   borderRadius: "16px",
   background: "#ffffff",
   overflow: "hidden",
@@ -651,15 +949,33 @@ const showButton: CSSProperties = {
   height: "100%",
 }
 
+const helperRowStyle: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "8px",
+  marginTop: "2px",
+  marginBottom: "14px",
+}
+
+const helperChipStyle: CSSProperties = {
+  padding: "8px 10px",
+  borderRadius: "999px",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontSize: "12px",
+  fontWeight: 700,
+  border: "1px solid #dbeafe",
+}
+
 const submitButton: CSSProperties = {
   width: "100%",
-  height: "56px",
+  height: "58px",
   border: "none",
-  borderRadius: "16px",
+  borderRadius: "18px",
   color: "#fff",
   fontSize: "17px",
-  fontWeight: 700,
-  boxShadow: "0 10px 24px rgba(21,87,255,0.24)",
+  fontWeight: 800,
+  boxShadow: "0 16px 34px rgba(21,87,255,0.28)",
   transition: "0.2s ease",
 }
 
@@ -678,17 +994,36 @@ const dividerLine: CSSProperties = {
 
 const googleButton: CSSProperties = {
   width: "100%",
-  height: "54px",
-  borderRadius: "14px",
+  height: "56px",
+  borderRadius: "16px",
   border: "2px solid #1557ff",
   background: "#ffffff",
   color: "#1557ff",
   fontSize: "15px",
-  fontWeight: 700,
+  fontWeight: 800,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   gap: "10px",
+  boxShadow: "0 10px 24px rgba(21,87,255,0.08)",
+}
+
+const trustRowStyle: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "8px",
+  marginTop: "16px",
+  justifyContent: "center",
+}
+
+const trustChipStyle: CSSProperties = {
+  padding: "9px 12px",
+  borderRadius: "999px",
+  background: "#f8fafc",
+  color: "#334155",
+  fontSize: "12px",
+  fontWeight: 700,
+  border: "1px solid #e2e8f0",
 }
 
 const footerLinkWrap: CSSProperties = {
@@ -700,7 +1035,7 @@ const footerLinkWrap: CSSProperties = {
 
 const footerLink: CSSProperties = {
   color: "#1557ff",
-  fontWeight: 700,
+  fontWeight: 800,
   textDecoration: "none",
 }
 
@@ -715,17 +1050,17 @@ const fieldErrorText: CSSProperties = {
   marginTop: "8px",
   fontSize: "13px",
   color: "#dc2626",
-  fontWeight: 600,
+  fontWeight: 700,
 }
 
 const errorBox: CSSProperties = {
   marginBottom: "16px",
-  padding: "12px 14px",
-  borderRadius: "12px",
+  padding: "13px 14px",
+  borderRadius: "14px",
   background: "#fee2e2",
   color: "#991b1b",
   fontSize: "14px",
-  fontWeight: 600,
+  fontWeight: 700,
   border: "1px solid #fecaca",
 }
 
@@ -771,19 +1106,35 @@ const modalOverlayStyle: CSSProperties = {
 
 const modalCardStyle: CSSProperties = {
   width: "100%",
-  maxWidth: "420px",
-  background: "#ffffff",
-  borderRadius: "24px",
-  padding: "28px 24px",
+  maxWidth: "440px",
+  background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+  borderRadius: "28px",
+  padding: "30px 24px",
   boxShadow: "0 30px 80px rgba(0,0,0,0.18)",
   textAlign: "center",
   transition: "all 0.35s ease",
+  position: "relative",
+  overflow: "hidden",
+  border: "1px solid rgba(255,255,255,0.85)",
+}
+
+const rewardGlowStyle: CSSProperties = {
+  position: "absolute",
+  top: "-90px",
+  left: "50%",
+  transform: "translateX(-50%)",
+  width: "220px",
+  height: "220px",
+  borderRadius: "999px",
+  background:
+    "radial-gradient(circle, rgba(250,204,21,0.35) 0%, rgba(250,204,21,0) 72%)",
+  pointerEvents: "none",
 }
 
 const successIconStyle: CSSProperties = {
-  width: "72px",
-  height: "72px",
-  margin: "0 auto 16px",
+  width: "74px",
+  height: "74px",
+  margin: "0 auto 14px",
   borderRadius: "999px",
   background: "linear-gradient(180deg, #22c55e 0%, #16a34a 100%)",
   color: "#ffffff",
@@ -793,14 +1144,58 @@ const successIconStyle: CSSProperties = {
   fontSize: "34px",
   fontWeight: 800,
   boxShadow: "0 14px 30px rgba(34,197,94,0.28)",
+  position: "relative",
+  zIndex: 2,
+}
+
+const rewardBadgeStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "8px",
+  padding: "10px 16px",
+  borderRadius: "999px",
+  background: "linear-gradient(180deg, #fff7cc 0%, #ffe48a 100%)",
+  color: "#8a5a00",
+  fontWeight: 800,
+  fontSize: "14px",
+  border: "1px solid rgba(245, 158, 11, 0.35)",
+  boxShadow: "0 10px 24px rgba(250, 204, 21, 0.22)",
+  animation: "reward-pulse 1.8s ease-in-out infinite",
+  position: "relative",
+  zIndex: 2,
+}
+
+const rewardBadgeIconStyle: CSSProperties = {
+  fontSize: "16px",
+  lineHeight: 1,
+}
+
+const coinBurstWrapStyle: CSSProperties = {
+  position: "relative",
+  height: "44px",
+  marginTop: "12px",
+  marginBottom: "2px",
+  overflow: "hidden",
+}
+
+const coinBurstItemStyle: CSSProperties = {
+  position: "absolute",
+  bottom: "0",
+  fontSize: "20px",
+  lineHeight: 1,
+  animation: "coin-float 1.8s ease-in-out infinite",
+  opacity: 0,
 }
 
 const modalTitleStyle: CSSProperties = {
-  margin: 0,
+  margin: "6px 0 0",
   fontSize: "28px",
   fontWeight: 800,
   color: "#0f172a",
   lineHeight: 1.2,
+  position: "relative",
+  zIndex: 2,
 }
 
 const modalTextStyle: CSSProperties = {
@@ -809,14 +1204,71 @@ const modalTextStyle: CSSProperties = {
   fontSize: "16px",
   color: "#334155",
   lineHeight: 1.6,
+  position: "relative",
+  zIndex: 2,
+}
+
+const rewardPanelStyle: CSSProperties = {
+  marginTop: "16px",
+  borderRadius: "22px",
+  padding: "16px 18px",
+  background: "linear-gradient(180deg, #fff9db 0%, #fff2b8 100%)",
+  border: "1px solid rgba(245, 158, 11, 0.22)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
+  position: "relative",
+  zIndex: 2,
+}
+
+const rewardPanelLabelStyle: CSSProperties = {
+  fontSize: "13px",
+  fontWeight: 800,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  color: "#a16207",
+}
+
+const rewardPanelValueStyle: CSSProperties = {
+  marginTop: "6px",
+  fontSize: "30px",
+  lineHeight: 1.1,
+  fontWeight: 900,
+  color: "#7c5100",
+}
+
+const rewardPanelSubStyle: CSSProperties = {
+  marginTop: "8px",
+  fontSize: "14px",
+  lineHeight: 1.5,
+  color: "#8a5a00",
+}
+
+const modalButtonRowStyle: CSSProperties = {
+  marginTop: "16px",
+  display: "flex",
+  justifyContent: "center",
+}
+
+const dashboardButtonStyle: CSSProperties = {
+  border: "none",
+  borderRadius: "14px",
+  height: "46px",
+  padding: "0 18px",
+  background: "linear-gradient(135deg, #1557ff 0%, #3b82f6 100%)",
+  color: "#ffffff",
+  fontSize: "14px",
+  fontWeight: 800,
+  cursor: "pointer",
+  boxShadow: "0 12px 24px rgba(21,87,255,0.24)",
 }
 
 const modalSubTextStyle: CSSProperties = {
-  marginTop: "10px",
+  marginTop: "14px",
   marginBottom: 0,
   fontSize: "15px",
   color: "#64748b",
   lineHeight: 1.6,
+  position: "relative",
+  zIndex: 2,
 }
 
 const modalAdminTextStyle: CSSProperties = {
@@ -824,4 +1276,6 @@ const modalAdminTextStyle: CSSProperties = {
   fontSize: "14px",
   fontWeight: 700,
   color: "#1557ff",
+  position: "relative",
+  zIndex: 2,
 }

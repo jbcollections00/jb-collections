@@ -6,10 +6,25 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 
 type UserProfile = {
+  id?: string | null
   full_name?: string | null
   name?: string | null
   username?: string | null
   role?: string | null
+  coins?: number | null
+}
+
+type WalletSummaryResponse = {
+  ok?: boolean
+  summary?: {
+    balance?: number | string | null
+    pendingCoins?: number | string | null
+    lifetimePurchased?: number | string | null
+  }
+  balance?: number | string | null
+}
+
+type ProfileCoinsResponse = {
   coins?: number | null
 }
 
@@ -38,6 +53,11 @@ const navItems = [
   { label: "JB STORE", href: "/upgrade", icon: "🪙" },
 ]
 
+function toSafeNumber(value: unknown) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 export default function SiteHeader() {
   const rawPathname = usePathname()
   const pathname = rawPathname ?? ""
@@ -63,6 +83,9 @@ export default function SiteHeader() {
   const burstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const walletPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const walletShakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const currentUserIdRef = useRef<string | null>(null)
+  const currentCoinsRef = useRef(0)
 
   function clearPopupTimers() {
     if (popupTimerRef.current) {
@@ -153,6 +176,51 @@ export default function SiteHeader() {
     }, 2200)
   }
 
+  async function refreshWalletSummary(showPopupForIncrease = false) {
+    try {
+      const currentUserId = currentUserIdRef.current
+
+      if (!currentUserId) return
+
+      let nextBalance = 0
+
+      const { data: profileRow, error: profileError } = await supabase
+        .from("profiles")
+        .select("coins")
+        .eq("id", currentUserId)
+        .maybeSingle()
+
+      if (!profileError && profileRow) {
+        nextBalance = toSafeNumber((profileRow as ProfileCoinsResponse).coins)
+      } else {
+        const res = await fetch("/api/wallet/summary", {
+          method: "GET",
+          cache: "no-store",
+        })
+
+        const data = (await res.json().catch(() => null)) as WalletSummaryResponse | null
+
+        if (!res.ok) {
+          throw new Error("Failed to load wallet summary.")
+        }
+
+        nextBalance = toSafeNumber(data?.summary?.balance ?? data?.balance)
+      }
+
+      const previousBalance = currentCoinsRef.current
+
+      setCoins(nextBalance)
+      currentCoinsRef.current = nextBalance
+      setProfile((prev) => (prev ? { ...prev, coins: nextBalance } : prev))
+
+      if (showPopupForIncrease && nextBalance > previousBalance) {
+        showAnimatedCoinPopup(nextBalance - previousBalance, "Wallet updated")
+      }
+    } catch (error) {
+      console.error("Failed to load wallet summary:", error)
+    }
+  }
+
   async function loadUnreadCount(userId: string) {
     try {
       const { data: participants, error: participantsError } = await supabase
@@ -201,7 +269,6 @@ export default function SiteHeader() {
 
   useEffect(() => {
     let active = true
-    let currentUserId: string | null = null
 
     async function loadProfile() {
       const {
@@ -210,26 +277,30 @@ export default function SiteHeader() {
 
       if (!user || !active) return
 
-      currentUserId = user.id
+      currentUserIdRef.current = user.id
 
       const { data } = await supabase
         .from("profiles")
-        .select("full_name, name, username, role, coins")
+        .select("id, full_name, name, username, role, coins")
         .eq("id", user.id)
         .maybeSingle()
 
+      const nextProfile = (data as UserProfile | null) || null
+
       if (active) {
-        setProfile((data as UserProfile | null) || null)
-        setCoins(Number(data?.coins || 0))
+        setProfile(nextProfile)
+        const nextCoins = toSafeNumber(nextProfile?.coins)
+        setCoins(nextCoins)
+        currentCoinsRef.current = nextCoins
       }
 
-      await loadUnreadCount(user.id)
+      await Promise.all([refreshWalletSummary(false), loadUnreadCount(user.id)])
     }
 
     void loadProfile()
 
     function handleCoinUpdate() {
-      void loadProfile()
+      void refreshWalletSummary(true)
       triggerWalletPulse()
     }
 
@@ -241,7 +312,7 @@ export default function SiteHeader() {
       const amount = Number(customEvent.detail?.coins || 0)
       const label = customEvent.detail?.label || "Daily reward claimed"
 
-      void loadProfile()
+      void refreshWalletSummary(false)
       showAnimatedCoinPopup(amount, label)
     }
 
@@ -250,13 +321,20 @@ export default function SiteHeader() {
       const amount = Number(customEvent.detail?.amount || 0)
       const label = customEvent.detail?.label || ""
 
-      void loadProfile()
+      void refreshWalletSummary(false)
       showAnimatedCoinPopup(amount, label)
     }
 
     function handleManualUnreadRefresh() {
-      if (currentUserId) {
-        void loadUnreadCount(currentUserId)
+      if (currentUserIdRef.current) {
+        void loadUnreadCount(currentUserIdRef.current)
+      }
+    }
+
+    function handleWindowFocus() {
+      void refreshWalletSummary(false)
+      if (currentUserIdRef.current) {
+        void loadUnreadCount(currentUserIdRef.current)
       }
     }
 
@@ -264,15 +342,16 @@ export default function SiteHeader() {
     window.addEventListener("jb-daily-reward-claimed", handleDailyRewardClaimed as EventListener)
     window.addEventListener("jb-coins-popup", handleGenericCoinPopup as EventListener)
     window.addEventListener("jb-messages-updated", handleManualUnreadRefresh)
+    window.addEventListener("focus", handleWindowFocus)
 
-    const channel = supabase
+    const unreadChannel = supabase
       .channel("site-header-unread")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "conversation_messages" },
         async () => {
-          if (currentUserId) {
-            await loadUnreadCount(currentUserId)
+          if (currentUserIdRef.current) {
+            await loadUnreadCount(currentUserIdRef.current)
           }
         }
       )
@@ -280,12 +359,37 @@ export default function SiteHeader() {
         "postgres_changes",
         { event: "*", schema: "public", table: "conversation_participants" },
         async () => {
-          if (currentUserId) {
-            await loadUnreadCount(currentUserId)
+          if (currentUserIdRef.current) {
+            await loadUnreadCount(currentUserIdRef.current)
           }
         }
       )
       .subscribe()
+
+    const walletChannel = supabase
+      .channel("site-header-wallet")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "coin_history" },
+        async (payload) => {
+          const row = payload.new as { user_id?: string; amount?: number }
+          if (row?.user_id && row.user_id === currentUserIdRef.current) {
+            await refreshWalletSummary(true)
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "upgrades" },
+        async () => {
+          await refreshWalletSummary(false)
+        }
+      )
+      .subscribe()
+
+    pollTimerRef.current = setInterval(() => {
+      void refreshWalletSummary(false)
+    }, 15000)
 
     return () => {
       active = false
@@ -294,7 +398,14 @@ export default function SiteHeader() {
       window.removeEventListener("jb-daily-reward-claimed", handleDailyRewardClaimed as EventListener)
       window.removeEventListener("jb-coins-popup", handleGenericCoinPopup as EventListener)
       window.removeEventListener("jb-messages-updated", handleManualUnreadRefresh)
-      void supabase.removeChannel(channel)
+      window.removeEventListener("focus", handleWindowFocus)
+      void supabase.removeChannel(unreadChannel)
+      void supabase.removeChannel(walletChannel)
+
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
     }
   }, [supabase])
 
@@ -386,6 +497,16 @@ export default function SiteHeader() {
           }
         }
 
+        @keyframes jbBadgePulse {
+          0%,
+          100% {
+            transform: scale(1);
+          }
+          50% {
+            transform: scale(1.08);
+          }
+        }
+
         .jb-coin-popup-in {
           animation: jbCoinPopupIn 0.28s ease-out;
         }
@@ -397,43 +518,35 @@ export default function SiteHeader() {
         .jb-wallet-shake {
           animation: jbWalletShake 0.55s ease-in-out;
         }
+
+        .jb-badge-pulse {
+          animation: jbBadgePulse 1.5s ease-in-out infinite;
+        }
       `}</style>
 
-      <header className="fixed inset-x-0 top-0 z-50 bg-transparent px-3 pt-3 sm:px-4 sm:pt-4">
-        <div className="mx-auto w-full max-w-[1800px] overflow-hidden rounded-[24px] bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 shadow-[0_12px_30px_rgba(37,99,235,0.22)]">
-          <div className="flex items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-            <Link href="/dashboard" className="flex items-center gap-3">
-              <img
-                src="/jb-logo.png"
-                alt="JB Collections"
-                className="h-10 w-10 object-contain"
-              />
-              <div className="whitespace-nowrap text-[18px] font-black tracking-[0.15em] text-white sm:text-[20px] lg:text-[22px]">
-                JB COLLECTIONS
+      <header className="fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-4 sm:pt-4">
+        <div className="mx-auto w-full max-w-[1800px] overflow-hidden rounded-[24px] border border-white/15 bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 shadow-[0_14px_34px_rgba(37,99,235,0.22)] backdrop-blur-xl">
+          <div className="flex min-h-[68px] items-center gap-3 px-4 py-2 sm:px-5 lg:px-6">
+            <Link href="/dashboard" className="flex min-w-0 items-center gap-3 pr-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white/12 ring-1 ring-white/15 backdrop-blur">
+                <img
+                  src="/jb-logo.png"
+                  alt="JB Collections"
+                  className="h-7 w-7 object-contain"
+                />
+              </div>
+
+              <div className="min-w-0">
+                <div className="truncate text-[15px] font-black tracking-[0.12em] text-white sm:text-[17px] lg:text-[18px]">
+                  JB COLLECTIONS
+                </div>
+                <div className="hidden text-[9px] font-bold uppercase tracking-[0.28em] text-cyan-100/80 sm:block">
+                  Premium Access Hub
+                </div>
               </div>
             </Link>
 
-            <div
-              className={`hidden items-center gap-2 rounded-full border border-white/20 bg-black/30 px-4 py-2 transition lg:flex ${
-                walletAnimate ? "jb-wallet-pulse" : ""
-              } ${walletShake ? "jb-wallet-shake" : ""}`}
-              title={`${displayName} • ${coins.toLocaleString()} JB Coins`}
-            >
-              <img src="/jb-coin.png" alt="JB Coin" className="h-5 w-5 object-contain" />
-              <span className="text-sm font-bold text-yellow-300">
-                {coins.toLocaleString()} JB
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen((prev) => !prev)}
-              className="inline-flex h-12 w-12 items-center justify-center rounded-[14px] border border-white/20 bg-white/10 text-2xl text-white backdrop-blur md:hidden"
-            >
-              ☰
-            </button>
-
-            <div className="hidden items-center gap-2 lg:flex">
+            <nav className="ml-2 hidden items-center gap-2 lg:flex">
               {navItems.map((item) => {
                 const active = isActive(item.href)
                 const isMessages = item.href === "/messages"
@@ -442,47 +555,85 @@ export default function SiteHeader() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
+                    className={`relative inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-bold transition ${
                       active
-                        ? "bg-white text-blue-700 shadow-sm"
-                        : "bg-white/10 text-white hover:bg-white/20"
+                        ? "bg-white text-blue-700 shadow-[0_10px_24px_rgba(255,255,255,0.22)]"
+                        : "bg-white/10 text-white hover:bg-white/18"
                     }`}
                   >
-                    <span>{item.icon}</span>
+                    <span className="text-[15px]">{item.icon}</span>
                     <span>{item.label}</span>
 
                     {isMessages && unreadCount > 0 && (
-                      <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold leading-none text-white shadow-[0_4px_14px_rgba(239,68,68,0.45)]">
+                      <span className="jb-badge-pulse absolute -right-1.5 -top-1.5 inline-flex min-w-[24px] items-center justify-center rounded-full border-2 border-white bg-red-500 px-1.5 py-[3px] text-[10px] font-black leading-none text-white shadow-[0_8px_18px_rgba(239,68,68,0.55)]">
                         {unreadCount > 99 ? "99+" : unreadCount}
                       </span>
                     )}
                   </Link>
                 )
               })}
+            </nav>
+
+            <div className="ml-auto hidden items-center gap-2 lg:flex">
+              <div
+                className={`min-w-[150px] rounded-full border border-white/20 bg-black/30 px-3 py-1.5 transition ${
+                  walletAnimate ? "jb-wallet-pulse" : ""
+                } ${walletShake ? "jb-wallet-shake" : ""}`}
+                title={`${displayName} • ${coins.toLocaleString()} JB Coins`}
+              >
+                <div className="flex items-center gap-2">
+                  <img src="/jb-coin.png" alt="JB Coin" className="h-4 w-4 object-contain" />
+                  <div className="min-w-0">
+                    <div className="truncate text-[9px] font-bold uppercase tracking-[0.2em] text-white/65">
+                      JB Wallet
+                    </div>
+                    <div className="truncate text-sm font-black text-yellow-300">
+                      {coins.toLocaleString()} JB
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               <button
                 onClick={handleLogout}
                 disabled={loggingOut}
-                className="inline-flex items-center rounded-full bg-red-500 px-5 py-2 text-xs font-bold text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
+                className="inline-flex h-10 items-center rounded-full border border-red-300/20 bg-red-500 px-4 text-xs font-bold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {loggingOut ? "..." : "Logout"}
+                {loggingOut ? "Logging out..." : "Logout"}
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-[14px] border border-white/20 bg-white/10 text-xl text-white backdrop-blur transition hover:bg-white/15 lg:hidden"
+              aria-label="Toggle menu"
+            >
+              {mobileMenuOpen ? "✕" : "☰"}
+            </button>
           </div>
 
           {mobileMenuOpen && (
             <div className="border-t border-white/15 px-4 pb-4 pt-3 lg:hidden">
-              <div className="grid gap-2">
+              <div className="grid gap-2.5">
                 <div
-                  className={`flex items-center gap-2 rounded-xl bg-black/30 px-4 py-2 font-bold text-yellow-300 transition ${
+                  className={`flex items-center gap-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-yellow-300 transition ${
                     walletAnimate ? "jb-wallet-pulse" : ""
                   } ${walletShake ? "jb-wallet-shake" : ""}`}
                 >
                   <img src="/jb-coin.png" alt="JB Coin" className="h-5 w-5 object-contain" />
-                  {coins.toLocaleString()} JB Coins
+                  <div className="min-w-0">
+                    <div className="truncate text-[10px] font-bold uppercase tracking-[0.22em] text-white/65">
+                      {displayName}
+                    </div>
+                    <div className="truncate text-sm font-black text-yellow-300">
+                      {coins.toLocaleString()} JB Coins
+                    </div>
+                  </div>
                 </div>
 
                 {navItems.map((item) => {
+                  const active = isActive(item.href)
                   const isMessages = item.href === "/messages"
 
                   return (
@@ -490,32 +641,39 @@ export default function SiteHeader() {
                       key={item.href}
                       href={item.href}
                       onClick={() => setMobileMenuOpen(false)}
-                      className="flex items-center justify-between rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white"
+                      className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-sm font-bold transition ${
+                        active
+                          ? "border-white/20 bg-white text-blue-700"
+                          : "border-white/10 bg-white/10 text-white hover:bg-white/15"
+                      }`}
                     >
                       <span>
                         {item.icon} {item.label}
                       </span>
 
-                      {isMessages && unreadCount > 0 && (
-                        <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold leading-none text-white shadow-[0_4px_14px_rgba(239,68,68,0.45)]">
+                      {isMessages && unreadCount > 0 ? (
+                        <span className="inline-flex min-w-[24px] items-center justify-center rounded-full border border-white/60 bg-red-500 px-1.5 py-[3px] text-[10px] font-black leading-none text-white shadow-[0_8px_18px_rgba(239,68,68,0.55)]">
                           {unreadCount > 99 ? "99+" : unreadCount}
                         </span>
-                      )}
+                      ) : null}
                     </Link>
                   )
                 })}
 
                 <button
                   onClick={handleLogout}
-                  className="rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white"
+                  disabled={loggingOut}
+                  className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-red-600 disabled:opacity-70"
                 >
-                  Logout
+                  {loggingOut ? "Logging out..." : "Logout"}
                 </button>
               </div>
             </div>
           )}
         </div>
       </header>
+
+      <div className="h-[84px] sm:h-[92px]" />
 
       {showCoinPopup ? (
         <div className="pointer-events-none fixed inset-0 z-[215] flex items-start justify-center pt-24 sm:pt-28">

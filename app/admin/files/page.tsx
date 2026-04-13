@@ -4,6 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import AdminHeader from "@/app/components/AdminHeader"
 import { createClient } from "@/lib/supabase/client"
+import {
+  BadgeCheck,
+  FolderOpen,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  UploadCloud,
+} from "lucide-react"
 
 type FileItem = {
   id: string
@@ -47,7 +55,6 @@ function normalizeExternalUrl(value?: string | null) {
   if (!value) return null
 
   let url = value.trim()
-
   url = url.replace(/^[^a-zA-Z0-9]+/, "")
 
   if (url.startsWith("Phttp")) {
@@ -61,6 +68,44 @@ function normalizeExternalUrl(value?: string | null) {
   }
 
   return null
+}
+
+function formatDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "—"
+
+  return date.toLocaleString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
+}
+
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  color,
+}: {
+  label: string
+  value: string | number
+  icon: React.ComponentType<{ size?: number; className?: string }>
+  color: string
+}) {
+  return (
+    <div className="rounded-[24px] border border-white/10 bg-slate-900/75 p-4 shadow-[0_14px_34px_rgba(2,6,23,0.32)] backdrop-blur">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
+          {label}
+        </div>
+        <div className="rounded-2xl bg-white/10 p-2 text-sky-200">
+          <Icon size={16} />
+        </div>
+      </div>
+
+      <div className={`mt-3 text-3xl font-black tracking-tight ${color}`}>{value}</div>
+    </div>
+  )
 }
 
 export default function FilesPage() {
@@ -95,6 +140,7 @@ export default function FilesPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   const [statusText, setStatusText] = useState("")
   const [errorMessage, setErrorMessage] = useState("")
@@ -136,7 +182,7 @@ export default function FilesPage() {
         return
       }
 
-      await loadData()
+      await loadData(true)
     } catch (error) {
       console.error("Admin files auth check failed:", error)
       router.replace("/secure-admin-portal-7X9")
@@ -145,8 +191,10 @@ export default function FilesPage() {
     }
   }
 
-  async function loadData() {
-    setLoading(true)
+  async function loadData(showLoader = false) {
+    if (showLoader) setLoading(true)
+    else setRefreshing(true)
+
     setErrorMessage("")
 
     const [
@@ -171,6 +219,7 @@ export default function FilesPage() {
     setFiles((filesData as FileItem[]) || [])
     setCategories((categoriesData as Category[]) || [])
     setLoading(false)
+    setRefreshing(false)
   }
 
   function clearMessages() {
@@ -730,29 +779,29 @@ export default function FilesPage() {
 
   function getVisibilityBadgeClasses(currentVisibility?: string | null) {
     if (currentVisibility === "platinum") {
-      return "bg-fuchsia-100 text-fuchsia-700"
+      return "border-fuchsia-400/20 bg-fuchsia-500/10 text-fuchsia-300"
     }
 
     if (currentVisibility === "premium") {
-      return "bg-slate-900 text-white"
+      return "border-blue-400/20 bg-blue-500/10 text-blue-300"
     }
 
     if (currentVisibility === "private") {
-      return "bg-red-100 text-red-700"
+      return "border-red-400/20 bg-red-500/10 text-red-300"
     }
 
-    return "bg-green-100 text-green-700"
+    return "border-emerald-400/20 bg-emerald-500/10 text-emerald-300"
   }
 
-  const shouldShowFiles =
-    searchTerm.trim() !== "" ||
-    filterCategory !== "all" ||
-    filterVisibility !== "all" ||
-    filterStatus !== "all"
+  function getStatusBadgeClasses(currentStatus?: string | null) {
+    if (currentStatus === "published") return "border-emerald-400/20 bg-emerald-500/10 text-emerald-300"
+    if (currentStatus === "review") return "border-amber-400/20 bg-amber-500/10 text-amber-300"
+    if (currentStatus === "flagged") return "border-red-400/20 bg-red-500/10 text-red-300"
+    if (currentStatus === "removed") return "border-slate-500/20 bg-slate-500/10 text-slate-300"
+    return "border-sky-400/20 bg-sky-500/10 text-sky-300"
+  }
 
   const filteredFiles = useMemo(() => {
-    if (!shouldShowFiles) return []
-
     const keyword = searchTerm.trim().toLowerCase()
 
     return files.filter((file) => {
@@ -774,53 +823,88 @@ export default function FilesPage() {
 
       return matchesSearch && matchesCategory && matchesVisibility && matchesStatus
     })
-  }, [files, searchTerm, filterCategory, filterVisibility, filterStatus, shouldShowFiles, categories])
+  }, [files, searchTerm, filterCategory, filterVisibility, filterStatus, categories])
+
+  const stats = useMemo(() => {
+    return {
+      total: files.length,
+      published: files.filter((file) => (file.status || "draft") === "published").length,
+      premium: files.filter((file) => (file.visibility || "free") === "premium" || (file.visibility || "free") === "platinum").length,
+      categories: categories.length,
+    }
+  }, [files, categories])
 
   if (checkingAdmin) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-        <div className="rounded-[20px] border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
-          <p className="text-lg font-bold text-slate-800">Checking admin access...</p>
-          <p className="mt-2 text-sm text-slate-500">Please wait.</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#020617] px-4">
+        <div className="rounded-[24px] border border-slate-800 bg-slate-900 px-8 py-6 text-center shadow-2xl">
+          <p className="text-lg font-bold text-white">Checking admin access...</p>
+          <p className="mt-2 text-sm text-slate-400">Please wait.</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-      <div className="mx-auto w-full max-w-7xl">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.10),transparent_24%),linear-gradient(180deg,#020617_0%,#0b1220_48%,#111827_100%)] px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <div className="mx-auto w-full max-w-[1800px]">
         <AdminHeader />
 
-        <div className="mb-4 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-extrabold text-slate-900 sm:text-3xl">Files</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Upload, edit, and organize your file records.
-            </p>
-          </div>
+        <section className="mt-4 overflow-hidden rounded-[30px] border border-white/10 bg-slate-900/75 shadow-[0_18px_50px_rgba(0,0,0,0.34)] backdrop-blur">
+          <div className="relative">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.18),transparent_32%),radial-gradient(circle_at_top_right,rgba(99,102,241,0.22),transparent_30%),linear-gradient(135deg,#0f172a_0%,#0b1220_45%,#111827_100%)]" />
+            <div className="relative flex flex-col gap-5 px-5 py-6 sm:px-6 sm:py-7 lg:flex-row lg:items-end lg:justify-between lg:px-8">
+              <div className="max-w-3xl">
+                <div className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-500/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.22em] text-sky-200">
+                  <ShieldCheck size={14} />
+                  Admin Files
+                </div>
 
-          <div className="inline-flex w-fit rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs font-bold text-blue-600 sm:text-sm">
-            Total Files: {files.length}
+                <h1 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl">
+                  File Upload & Library
+                </h1>
+
+                <p className="mt-2 text-sm leading-7 text-slate-300">
+                  Upload, edit, monetize, and organize your file records in a cleaner premium admin layout.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void loadData(false)}
+                disabled={refreshing}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
+              >
+                <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+                {refreshing ? "Refreshing..." : "Refresh Files"}
+              </button>
+            </div>
           </div>
-        </div>
+        </section>
+
+        <section className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <StatCard label="Total Files" value={stats.total} icon={BadgeCheck} color="text-white" />
+          <StatCard label="Published" value={stats.published} icon={UploadCloud} color="text-emerald-300" />
+          <StatCard label="Premium Files" value={stats.premium} icon={ShieldCheck} color="text-blue-300" />
+          <StatCard label="Categories" value={stats.categories} icon={FolderOpen} color="text-amber-300" />
+        </section>
 
         {(errorMessage || successMessage || statusText) && (
           <div
-            className={`mb-4 rounded-xl px-4 py-3 text-sm font-bold ${
+            className={`mt-5 rounded-2xl border px-4 py-3 text-sm font-bold ${
               errorMessage
-                ? "border border-red-200 bg-red-50 text-red-700"
+                ? "border-red-400/20 bg-red-500/10 text-red-300"
                 : successMessage
-                  ? "border border-green-200 bg-green-50 text-green-700"
-                  : "border border-blue-200 bg-blue-50 text-blue-700"
+                  ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-300"
+                  : "border-sky-400/20 bg-sky-500/10 text-sky-300"
             }`}
           >
             <div>{errorMessage || successMessage || statusText}</div>
 
             {!errorMessage && !successMessage && uploadProgress > 0 && (
-              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-blue-100">
+              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-sky-950">
                 <div
-                  className="h-full rounded-full bg-blue-600 transition-all"
+                  className="h-full rounded-full bg-sky-500 transition-all"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
@@ -828,10 +912,17 @@ export default function FilesPage() {
           </div>
         )}
 
-        <div className="mb-5 rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <h2 className="mb-4 text-xl font-extrabold text-slate-900 sm:text-2xl">
-            {editingId ? "Edit File" : "Upload File"}
-          </h2>
+        <section className="mt-5 rounded-[28px] border border-white/10 bg-slate-900/75 p-4 shadow-[0_18px_40px_rgba(0,0,0,0.26)] backdrop-blur sm:p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-2xl font-black text-white">
+              {editingId ? "Edit File" : "Upload File"}
+            </h2>
+            {editingId ? (
+              <span className="rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-300">
+                Editing Mode
+              </span>
+            ) : null}
+          </div>
 
           <div className="grid gap-4">
             <div className="grid gap-4 md:grid-cols-2">
@@ -844,18 +935,18 @@ export default function FilesPage() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 disabled={saving}
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/40"
               />
 
               <select
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
                 disabled={saving}
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/40"
               >
                 <option value="">Select category</option>
                 {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
+                  <option key={cat.id} value={cat.id} className="text-black">
                     {cat.name}
                   </option>
                 ))}
@@ -868,7 +959,7 @@ export default function FilesPage() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 disabled={saving}
-                className="min-h-[86px] w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 md:col-span-2"
+                className="min-h-[96px] w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/40 md:col-span-2"
               />
 
               <div className="grid gap-4">
@@ -876,25 +967,25 @@ export default function FilesPage() {
                   value={visibility}
                   onChange={(e) => setVisibility(e.target.value as Visibility)}
                   disabled={saving}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/40"
                 >
-                  <option value="free">Free</option>
-                  <option value="premium">Premium</option>
-                  <option value="platinum">Platinum</option>
-                  <option value="private">Private</option>
+                  <option value="free" className="text-black">Free</option>
+                  <option value="premium" className="text-black">Premium</option>
+                  <option value="platinum" className="text-black">Platinum</option>
+                  <option value="private" className="text-black">Private</option>
                 </select>
 
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value as FileStatus)}
                   disabled={saving}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/40"
                 >
-                  <option value="draft">Draft</option>
-                  <option value="review">Review</option>
-                  <option value="published">Published</option>
-                  <option value="flagged">Flagged</option>
-                  <option value="removed">Removed</option>
+                  <option value="draft" className="text-black">Draft</option>
+                  <option value="review" className="text-black">Review</option>
+                  <option value="published" className="text-black">Published</option>
+                  <option value="flagged" className="text-black">Flagged</option>
+                  <option value="removed" className="text-black">Removed</option>
                 </select>
               </div>
             </div>
@@ -905,7 +996,7 @@ export default function FilesPage() {
                 value={shrinkmeUrl}
                 onChange={(e) => setShrinkmeUrl(e.target.value)}
                 disabled={saving}
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/40"
               />
 
               <input
@@ -913,11 +1004,11 @@ export default function FilesPage() {
                 value={linkvertiseUrl}
                 onChange={(e) => setLinkvertiseUrl(e.target.value)}
                 disabled={saving}
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/40"
               />
             </div>
 
-            <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+            <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm font-medium text-slate-200">
               <input
                 type="checkbox"
                 checked={monetizationEnabled}
@@ -928,16 +1019,16 @@ export default function FilesPage() {
               Enable Linkvertise monetization for this file
             </label>
 
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+            <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
               Save one monetized link per file. Example:
               <span className="ml-1 font-semibold">https://direct-link.net/...</span>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
                 <label
                   htmlFor="file-upload-input"
-                  className="mb-2 block text-sm font-bold text-slate-700"
+                  className="mb-2 block text-sm font-bold text-slate-200"
                 >
                   {editingId
                     ? "Replace file (optional, up to 5GB)"
@@ -964,17 +1055,17 @@ export default function FilesPage() {
                       handleMultipleFiles(fileList)
                     }
                   }}
-                  className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white"
+                  className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-sky-600 file:px-4 file:py-2 file:font-semibold file:text-white"
                 />
 
                 {selectedFiles.length > 0 && !editingId && (
-                  <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
-                    <p className="text-sm font-bold text-blue-700">
+                  <div className="mt-3 rounded-2xl border border-sky-400/20 bg-sky-500/10 p-3">
+                    <p className="text-sm font-bold text-sky-200">
                       {selectedFiles.length} files selected
                     </p>
                     <div className="mt-2 max-h-36 space-y-1 overflow-auto pr-1">
                       {selectedFiles.map((file, index) => (
-                        <div key={`${file.name}-${index}`} className="text-xs text-blue-700">
+                        <div key={`${file.name}-${index}`} className="text-xs text-sky-200">
                           {index + 1}. {file.name} — {formatFileSize(file.size)}
                         </div>
                       ))}
@@ -984,8 +1075,8 @@ export default function FilesPage() {
 
                 {selectedFile && (
                   <div className="mt-3">
-                    <p className="text-sm font-bold text-blue-600">{selectedFile.name}</p>
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="text-sm font-bold text-sky-300">{selectedFile.name}</p>
+                    <p className="mt-1 text-xs text-slate-400">
                       Size: {formatFileSize(selectedFile.size)}
                     </p>
                   </div>
@@ -993,9 +1084,9 @@ export default function FilesPage() {
 
                 {!selectedFile && selectedFiles.length === 0 && editingId && (
                   <div className="mt-3">
-                    <p className="text-xs font-bold text-slate-500">Current file attached</p>
+                    <p className="text-xs font-bold text-slate-400">Current file attached</p>
                     {existingFileSize ? (
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-slate-400">
                         Size: {formatFileSize(existingFileSize)}
                       </p>
                     ) : null}
@@ -1003,10 +1094,10 @@ export default function FilesPage() {
                 )}
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
                 <label
                   htmlFor="thumbnail-upload-input"
-                  className="mb-2 block text-sm font-bold text-slate-700"
+                  className="mb-2 block text-sm font-bold text-slate-200"
                 >
                   {editingId
                     ? "Replace thumbnail (optional)"
@@ -1021,14 +1112,14 @@ export default function FilesPage() {
                   accept="image/*"
                   disabled={saving}
                   onChange={(e) => handleThumbnailChange(e.target.files?.[0] || null)}
-                  className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white"
+                  className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-sky-600 file:px-4 file:py-2 file:font-semibold file:text-white"
                 />
 
                 {selectedThumbnail && (
                   <img
                     src={URL.createObjectURL(selectedThumbnail)}
                     alt="Thumbnail preview"
-                    className="mt-3 h-24 w-24 rounded-xl border border-slate-300 object-cover"
+                    className="mt-3 h-24 w-24 rounded-2xl border border-white/10 object-cover"
                   />
                 )}
 
@@ -1036,7 +1127,7 @@ export default function FilesPage() {
                   <img
                     src={existingThumbnailUrl}
                     alt="Current thumbnail"
-                    className="mt-3 h-24 w-24 rounded-xl border border-slate-300 object-cover"
+                    className="mt-3 h-24 w-24 rounded-2xl border border-white/10 object-cover"
                     onError={(e) => {
                       e.currentTarget.style.display = "none"
                     }}
@@ -1049,7 +1140,7 @@ export default function FilesPage() {
               <button
                 onClick={saveFile}
                 disabled={saving}
-                className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
+                className="inline-flex items-center justify-center rounded-2xl bg-sky-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {saving
                   ? "Uploading..."
@@ -1063,45 +1154,47 @@ export default function FilesPage() {
               <button
                 onClick={clearForm}
                 disabled={saving}
-                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+                className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 Clear
               </button>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <section className="mt-5 rounded-[28px] border border-white/10 bg-slate-900/75 p-4 shadow-[0_18px_40px_rgba(0,0,0,0.26)] backdrop-blur sm:p-5">
           <div className="mb-4 flex flex-col gap-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-xl font-extrabold text-slate-900 sm:text-2xl">
-                Uploaded Files
-              </h2>
+              <h2 className="text-2xl font-black text-white">Uploaded Files</h2>
 
-              <div className="inline-flex w-fit rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 sm:text-sm">
-                {shouldShowFiles
-                  ? `Showing ${filteredFiles.length} of ${files.length}`
-                  : "Hidden until search/filter"}
+              <div className="inline-flex w-fit rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-300 sm:text-sm">
+                Showing {filteredFiles.length} of {files.length}
               </div>
             </div>
 
             <div className="grid gap-3 lg:grid-cols-4">
-              <input
-                type="text"
-                placeholder="Search..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 lg:col-span-1"
-              />
+              <div className="relative lg:col-span-1">
+                <Search
+                  size={16}
+                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  type="text"
+                  placeholder="Search files..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950/70 py-3 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/40"
+                />
+              </div>
 
               <select
                 value={filterCategory}
                 onChange={(e) => setFilterCategory(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/40"
               >
-                <option value="all">Select category</option>
+                <option value="all" className="text-black">All categories</option>
                 {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
+                  <option key={cat.id} value={cat.id} className="text-black">
                     {cat.name}
                   </option>
                 ))}
@@ -1112,38 +1205,36 @@ export default function FilesPage() {
                 onChange={(e) =>
                   setFilterVisibility(e.target.value as Visibility | "all")
                 }
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/40"
               >
-                <option value="all">Select visibility</option>
-                <option value="free">Free</option>
-                <option value="premium">Premium</option>
-                <option value="platinum">Platinum</option>
-                <option value="private">Private</option>
+                <option value="all" className="text-black">All visibility</option>
+                <option value="free" className="text-black">Free</option>
+                <option value="premium" className="text-black">Premium</option>
+                <option value="platinum" className="text-black">Platinum</option>
+                <option value="private" className="text-black">Private</option>
               </select>
 
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value as FileStatus | "all")}
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/40"
               >
-                <option value="all">Select status</option>
-                <option value="draft">Draft</option>
-                <option value="review">Review</option>
-                <option value="published">Published</option>
-                <option value="flagged">Flagged</option>
-                <option value="removed">Removed</option>
+                <option value="all" className="text-black">All status</option>
+                <option value="draft" className="text-black">Draft</option>
+                <option value="review" className="text-black">Review</option>
+                <option value="published" className="text-black">Published</option>
+                <option value="flagged" className="text-black">Flagged</option>
+                <option value="removed" className="text-black">Removed</option>
               </select>
             </div>
           </div>
 
           {loading ? (
-            <p className="text-sm text-slate-500">Loading files...</p>
-          ) : !shouldShowFiles ? (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm font-bold text-slate-500">
-              Files are hidden by default. Use Search or Filters to display files.
+            <div className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-12 text-center text-sm text-slate-400">
+              Loading files...
             </div>
           ) : filteredFiles.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm font-bold text-slate-500">
+            <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/70 px-4 py-12 text-center text-sm font-bold text-slate-400">
               No files matched your search or filters.
             </div>
           ) : (
@@ -1155,9 +1246,9 @@ export default function FilesPage() {
                 return (
                   <div
                     key={file.id}
-                    className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                    className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-950/80 shadow-[0_14px_34px_rgba(2,6,23,0.32)] transition hover:-translate-y-0.5 hover:border-sky-400/20"
                   >
-                    <div className="flex aspect-[4/5] items-center justify-center bg-slate-100">
+                    <div className="flex aspect-[4/5] items-center justify-center bg-slate-900">
                       {displayThumbnail ? (
                         <img
                           src={displayThumbnail}
@@ -1169,54 +1260,58 @@ export default function FilesPage() {
                             if (parent && !parent.querySelector("[data-no-thumb]")) {
                               const fallback = document.createElement("span")
                               fallback.setAttribute("data-no-thumb", "true")
-                              fallback.className = "text-xs font-bold text-slate-400"
+                              fallback.className = "text-xs font-bold text-slate-500"
                               fallback.textContent = "No Thumbnail"
                               parent.appendChild(fallback)
                             }
                           }}
                         />
                       ) : (
-                        <span className="text-xs font-bold text-slate-400">No Thumbnail</span>
+                        <span className="text-xs font-bold text-slate-500">No Thumbnail</span>
                       )}
                     </div>
 
                     <div className="p-4">
                       <div
-                        className="mb-2 line-clamp-2 min-h-[48px] text-base font-extrabold leading-6 text-slate-900"
+                        className="mb-2 line-clamp-2 min-h-[48px] text-base font-extrabold leading-6 text-white"
                         title={file.title}
                       >
                         {file.title}
                       </div>
 
-                      <p className="mb-3 line-clamp-2 min-h-[40px] text-sm text-slate-500">
+                      <p className="mb-3 line-clamp-2 min-h-[40px] text-sm text-slate-400">
                         {file.description || "No description"}
                       </p>
 
-                      <div className="mb-3 text-xs font-semibold text-slate-500">
-                        Category: {getCategoryName(file.category_id)}
+                      <div className="mb-3 text-xs font-semibold text-slate-400">
+                        {getCategoryName(file.category_id)} • {formatDate(file.created_at)}
                       </div>
 
                       <div className="mb-3 flex flex-wrap gap-2">
                         <span
-                          className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${getVisibilityBadgeClasses(
+                          className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${getVisibilityBadgeClasses(
                             file.visibility
                           )}`}
                         >
                           {file.visibility || "free"}
                         </span>
 
-                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-700">
+                        <span
+                          className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${getStatusBadgeClasses(
+                            file.status
+                          )}`}
+                        >
                           {file.status || "draft"}
                         </span>
                       </div>
 
-                      <div className="mb-4 space-y-1 text-[11px] font-bold text-slate-500">
+                      <div className="mb-4 space-y-1 text-[11px] font-bold text-slate-400">
                         <p>{file.shrinkme_url ? "ShrinkMe: Added" : "ShrinkMe: None"}</p>
                         <p>{file.linkvertise_url ? "Linkvertise: Added" : "Linkvertise: None"}</p>
                         <p>
                           Monetization:{" "}
                           <span
-                            className={monetizationIsOn ? "text-green-600" : "text-red-500"}
+                            className={monetizationIsOn ? "text-emerald-300" : "text-red-300"}
                           >
                             {monetizationIsOn ? "Enabled" : "Disabled"}
                           </span>
@@ -1226,7 +1321,7 @@ export default function FilesPage() {
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           onClick={() => editFile(file)}
-                          className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                          className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-bold text-slate-200 transition hover:bg-white/10"
                         >
                           Edit
                         </button>
@@ -1234,7 +1329,7 @@ export default function FilesPage() {
                         <button
                           onClick={() => deleteFile(file.id)}
                           disabled={deletingId === file.id}
-                          className="rounded-xl bg-red-500 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
+                          className="rounded-2xl bg-red-600 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70"
                         >
                           {deletingId === file.id ? "..." : "Delete"}
                         </button>
@@ -1245,7 +1340,7 @@ export default function FilesPage() {
               })}
             </div>
           )}
-        </div>
+        </section>
       </div>
     </div>
   )
