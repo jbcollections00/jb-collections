@@ -1277,7 +1277,7 @@ export default function ProfilePageClient() {
       <>
         <SiteHeader />
         <div className="min-h-screen bg-slate-950 pt-28">
-          <div className="mx-auto max-w-7xl px-4 pb-10">
+          <div className="mx-auto w-full max-w-md px-3 pb-10 sm:max-w-2xl sm:px-4 lg:max-w-7xl">
             <div className="h-56 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
             <div className="-mt-14 h-72 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
             <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -1476,9 +1476,9 @@ export default function ProfilePageClient() {
             <div className="profile-glow absolute right-8 top-4 h-48 w-48 rounded-full bg-fuchsia-300/18 blur-3xl" />
             <div className="profile-glow absolute bottom-0 left-1/3 h-36 w-36 rounded-full bg-amber-300/18 blur-3xl" />
 
-            <div className="relative px-6 py-8 sm:px-8 lg:px-10">
-              <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-                <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
+            <div className="relative px-4 py-6 sm:px-8 lg:px-10">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex flex-col items-center gap-5 lg:flex-row lg:items-center">
                   <div className="relative">
                     {profile?.avatar_url ? (
                       <img
@@ -1508,7 +1508,7 @@ export default function ProfilePageClient() {
                     <p className="mt-1 text-sm font-semibold text-cyan-100">{displayEmail}</p>
                     <p className="mt-1 text-xs uppercase tracking-[0.2em] text-cyan-100/70">{displayStatus}</p>
 
-                    <div className="mt-4 flex flex-wrap gap-2">
+                    <div className="mt-4 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
                       {achievementCards.map((item) => (
                         <div
                           key={item.label}
@@ -1525,7 +1525,7 @@ export default function ProfilePageClient() {
                 </div>
 
                 <div
-                  className={`rounded-[28px] border border-amber-300/20 bg-black/20 p-5 text-white shadow-2xl backdrop-blur ${
+                  className={`w-full lg:w-[380px] rounded-[28px] border border-amber-300/20 bg-black/20 p-5 text-white shadow-2xl backdrop-blur ${
                     walletPulse ? "wallet-pulse" : ""
                   } ${walletShake ? "wallet-shake" : ""}`}
                 >
@@ -1599,7 +1599,7 @@ export default function ProfilePageClient() {
                 </div>
               </div>
 
-              <div className="mt-7 flex flex-wrap gap-3">
+              <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <button
                   type="button"
                   onClick={() => setEditOpen((prev) => !prev)}
@@ -1628,7 +1628,7 @@ export default function ProfilePageClient() {
             </div>
           </section>
 
-          <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-5">
+          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <StatCard label="JB Coins" value={jbPoints.toLocaleString()} hint="Your current balance" icon="🪙" />
             <StatCard
               label="Daily Streak"
@@ -1755,7 +1755,7 @@ export default function ProfilePageClient() {
           ) : null}
 
           {activeTab === "overview" ? (
-            <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr,0.95fr]">
+            <div className="mt-6 grid gap-6 lg:grid-cols-[1.35fr,0.95fr]">
               <div className="space-y-6">
                 <SectionCard
                   title="Profile Identity"
