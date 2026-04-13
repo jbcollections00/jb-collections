@@ -524,7 +524,7 @@ function FileSection({
       <SectionHeader title={title} subtitle={subtitle} count={files.length} badge={badge} />
 
       {loading ? (
-        <div className="grid grid-cols-2 gap-5 md:grid-cols-4 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
           {Array.from({ length: 10 }).map((_, index) => (
             <div
               key={index}
@@ -544,7 +544,7 @@ function FileSection({
           {emptyMessage}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-5 md:grid-cols-4 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
           {files.map((file) => (
             <HomeFileCard key={file.id} file={file} />
           ))}
@@ -1199,7 +1199,7 @@ export default function DashboardPage() {
                 />
 
                 {sectionsLoading ? (
-                  <div className="grid grid-cols-2 gap-5 md:grid-cols-4 lg:grid-cols-5">
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
                     {Array.from({ length: 5 }).map((_, index) => (
                       <div
                         key={index}
@@ -1219,7 +1219,7 @@ export default function DashboardPage() {
                     🚀 No recommendations yet. Add more featured files or activity to power this section.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-5 md:grid-cols-4 lg:grid-cols-5">
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
                     {recommendedFiles.map((file) => (
                       <HomeFileCard key={file.id} file={file} />
                     ))}
@@ -1311,7 +1311,7 @@ export default function DashboardPage() {
                 />
 
                 {loading ? (
-                  <div className="grid grid-cols-2 gap-5 md:grid-cols-4 lg:grid-cols-5">
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
                     {Array.from({ length: 5 }).map((_, index) => (
                       <div
                         key={index}
@@ -1330,7 +1330,7 @@ export default function DashboardPage() {
                     📁 No categories available yet. Create your first collection and this area will light up.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-5 md:grid-cols-4 lg:grid-cols-5">
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
                     {categories.map((category) => {
                       const image = getCategoryImage(category)
                       const count = fileCounts[category.id] || 0

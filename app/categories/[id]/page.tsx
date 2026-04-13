@@ -606,7 +606,7 @@ export default function CategoryPage() {
               <div key={index} className="h-24 animate-pulse rounded-[24px] border border-white/10 bg-slate-900/80" />
             ))}
           </div>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
             {Array.from({ length: 10 }).map((_, index) => (
               <div key={index} className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-900/80 shadow-sm ring-1 ring-white/5">
                 <div className="aspect-[3/4] animate-pulse bg-slate-800" />
@@ -850,7 +850,7 @@ export default function CategoryPage() {
                 <p className="mt-1 text-sm text-slate-400">Quick access to the hottest files in this category</p>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-5 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {topDownloads.length > 0 ? (
                 topDownloads.map((file, index) => {
                   const previewImage = getPreviewImage(file)
@@ -961,7 +961,7 @@ export default function CategoryPage() {
               <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300">Page {currentPage} of {totalPages}</div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
               {paginatedFiles.map((file) => {
                 const previewImage = getPreviewImage(file)
                 const type = getDisplayFileType(file)
@@ -1106,7 +1106,7 @@ export default function CategoryPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
                   {relatedFiles.map((file) => {
                     const previewImage = getPreviewImage(file)
                     return (
