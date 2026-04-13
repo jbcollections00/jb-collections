@@ -248,7 +248,7 @@ function SectionCard({
   action?: ReactNode
 }) {
   return (
-    <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-5 shadow-[0_15px_45px_rgba(0,0,0,0.35)] ring-1 ring-white/5 backdrop-blur transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.18)]">
+    <div className="w-full rounded-[28px] border border-white/10 bg-slate-900/80 p-4 sm:p-5 shadow-[0_15px_45px_rgba(0,0,0,0.35)] ring-1 ring-white/5 backdrop-blur transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.18)]">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h3 className="text-lg font-black text-white">{title}</h3>
@@ -273,7 +273,7 @@ function StatCard({
   icon?: string
 }) {
   return (
-    <div className="rounded-[24px] border border-white/10 bg-slate-900/80 p-4 shadow-sm ring-1 ring-white/5 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.25)]">
+    <div className="w-full rounded-[24px] border border-white/10 bg-slate-900/80 p-4 shadow-sm ring-1 ring-white/5 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.25)]">
       <div className="flex items-start justify-between gap-3">
         <p className="text-xs uppercase tracking-[0.16em] text-slate-400">{label}</p>
         {icon ? <span className="text-lg">{icon}</span> : null}
@@ -1276,7 +1276,7 @@ export default function ProfilePageClient() {
     return (
       <>
         <SiteHeader />
-        <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 pt-28">
+        <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 pt-24 sm:pt-28">
           <div className="mx-auto w-full max-w-md px-3 pb-10 sm:max-w-2xl sm:px-4 lg:max-w-7xl">
             <div className="h-56 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
             <div className="-mt-14 h-72 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
@@ -1424,7 +1424,7 @@ export default function ProfilePageClient() {
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.15),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(139,92,246,0.15),transparent_30%)]" />
 
         <div className="pointer-events-none fixed inset-x-0 top-28 z-50 flex justify-center">
-          <div className="relative w-full max-w-full px-3 sm:max-w-2xl sm:px-4 lg:max-w-7xl">
+          <div className="relative mx-auto w-full max-w-full px-3 sm:max-w-2xl sm:px-4 lg:max-w-7xl">
             {coinToasts.map((toast) => (
               <div
                 key={toast.id}
@@ -1446,7 +1446,7 @@ export default function ProfilePageClient() {
           </div>
         </div>
 
-        <div className="w-full max-w-full px-3 pb-10 sm:mx-auto sm:max-w-2xl sm:px-4 lg:max-w-7xl">
+        <div className="mx-auto w-full max-w-full px-3 pb-10 sm:max-w-2xl sm:px-4 lg:max-w-7xl">
           {successMessage && (
             <div className="mb-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-300 shadow-sm">
               {successMessage}
@@ -1471,13 +1471,13 @@ export default function ProfilePageClient() {
             </div>
           )}
 
-          <section className="relative overflow-hidden rounded-[36px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.28),transparent_30%),radial-gradient(circle_at_top_right,rgba(139,92,246,0.25),transparent_32%),linear-gradient(135deg,#0ea5e9_0%,#2563eb_40%,#4f46e5_70%,#7c3aed_100%)] shadow-[0_25px_80px_rgba(0,0,0,0.45)]">
+          <section className="relative w-full overflow-hidden rounded-[36px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.28),transparent_30%),radial-gradient(circle_at_top_right,rgba(139,92,246,0.25),transparent_32%),linear-gradient(135deg,#0ea5e9_0%,#2563eb_40%,#4f46e5_70%,#7c3aed_100%)] shadow-[0_25px_80px_rgba(0,0,0,0.45)]">
             <div className="profile-glow absolute -left-10 top-10 h-44 w-44 rounded-full bg-cyan-300/20 blur-3xl" />
             <div className="profile-glow absolute right-8 top-4 h-48 w-48 rounded-full bg-fuchsia-300/18 blur-3xl" />
             <div className="profile-glow absolute bottom-0 left-1/3 h-36 w-36 rounded-full bg-amber-300/18 blur-3xl" />
 
-            <div className="relative px-4 py-6 sm:px-8 lg:px-10">
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="relative px-3 py-5 sm:px-8 lg:px-10">
+              <div className="flex w-full flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex w-full flex-col items-center gap-5 lg:flex-row lg:items-center">
                   <div className="relative">
                     {profile?.avatar_url ? (
@@ -1496,8 +1496,8 @@ export default function ProfilePageClient() {
                     </div>
                   </div>
 
-                  <div className="min-w-0 w-full text-center lg:text-left">
-                    <div className="flex flex-wrap items-center justify-center gap-3 lg:justify-start">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-3">
                       <div className={membershipBadgeClasses}>{displayMembership}</div>
                       <div className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-white/90">
                         {gamerTitle}
@@ -1508,7 +1508,7 @@ export default function ProfilePageClient() {
                     <p className="mt-1 text-sm font-semibold text-cyan-100">{displayEmail}</p>
                     <p className="mt-1 text-xs uppercase tracking-[0.2em] text-cyan-100/70">{displayStatus}</p>
 
-                    <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="mt-4 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
                       {achievementCards.map((item) => (
                         <div
                           key={item.label}
@@ -1525,14 +1525,14 @@ export default function ProfilePageClient() {
                 </div>
 
                 <div
-                  className={`w-full lg:w-[380px] rounded-[28px] border border-amber-300/20 bg-black/20 p-5 text-white shadow-2xl backdrop-blur ${
+                  className={`w-full min-w-0 lg:w-[380px] rounded-[28px] border border-amber-300/20 bg-black/20 p-4 sm:p-5 text-white shadow-2xl backdrop-blur ${
                     walletPulse ? "wallet-pulse" : ""
                   } ${walletShake ? "wallet-shake" : ""}`}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-xs uppercase tracking-[0.2em] text-amber-100/80">JB Coin Wallet</p>
-                      <div className="mt-2 flex items-end gap-3">
+                      <div className="mt-2 flex items-center gap-3">
                         <span className="coin-float text-4xl">🪙</span>
                         <div>
                           <p className="text-4xl font-black text-amber-200">{jbPoints.toLocaleString()}</p>
@@ -1549,7 +1549,7 @@ export default function ProfilePageClient() {
                     </div>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-2 gap-2">
+                  <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/70">
                         Recent Credits
@@ -1651,7 +1651,7 @@ export default function ProfilePageClient() {
             <StatCard label="Reactions" value={reactionTotal.toLocaleString()} hint="Love from your profile" icon="❤️" />
           </div>
 
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+          <div className="mt-6 grid grid-cols-1 gap-3 sm:flex sm:flex-wrap">
             <button type="button" onClick={() => setActiveTab("overview")} className={tabClass(activeTab === "overview")}>
               Overview
             </button>
@@ -1755,7 +1755,7 @@ export default function ProfilePageClient() {
           ) : null}
 
           {activeTab === "overview" ? (
-            <div className="mt-6 grid gap-6 lg:grid-cols-[1.35fr,0.95fr]">
+            <div className="mt-6 grid w-full gap-6 lg:grid-cols-[1.35fr,0.95fr]">
               <div className="space-y-6">
                 <SectionCard
                   title="Profile Identity"
