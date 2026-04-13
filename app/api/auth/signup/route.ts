@@ -5,20 +5,6 @@ import { createClient } from "@supabase/supabase-js"
 
 export const runtime = "nodejs"
 
-type CookieToSet = {
-  name: string
-  value: string
-  options?: {
-    domain?: string
-    path?: string
-    maxAge?: number
-    expires?: Date
-    httpOnly?: boolean
-    secure?: boolean
-    sameSite?: "lax" | "strict" | "none"
-  }
-}
-
 const SIGNUP_REWARD = 35
 const REFERRAL_REWARD = 25
 
@@ -28,6 +14,15 @@ function redirect(origin: string, error?: string) {
     : `${origin}/signup?success=true`
 
   return NextResponse.redirect(target, { status: 303 })
+}
+
+function normalizeSameSite(
+  value: unknown
+): "lax" | "strict" | "none" | undefined {
+  if (value === "lax" || value === "strict" || value === "none") {
+    return value
+  }
+  return undefined
 }
 
 function buildAuthClient(response: NextResponse) {
@@ -41,9 +36,19 @@ function buildAuthClient(response: NextResponse) {
         getAll() {
           return cookieStore.getAll()
         },
-        setAll(cookiesToSet: CookieToSet[]) {
+        setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set({ name, value, ...(options ?? {}) })
+            response.cookies.set({
+              name,
+              value,
+              domain: options?.domain,
+              path: options?.path,
+              maxAge: options?.maxAge,
+              expires: options?.expires,
+              httpOnly: options?.httpOnly,
+              secure: options?.secure,
+              sameSite: normalizeSameSite(options?.sameSite),
+            })
           })
         },
       },
@@ -64,11 +69,14 @@ function buildAdminClient() {
   )
 }
 
-async function ensureProfile(admin: ReturnType<typeof buildAdminClient>, params: {
-  userId: string
-  email: string
-  fullName: string
-}) {
+async function ensureProfile(
+  admin: ReturnType<typeof buildAdminClient>,
+  params: {
+    userId: string
+    email: string
+    fullName: string
+  }
+) {
   const { userId, email, fullName } = params
 
   const { error } = await admin.from("profiles").upsert(
@@ -83,7 +91,10 @@ async function ensureProfile(admin: ReturnType<typeof buildAdminClient>, params:
   return error
 }
 
-async function grantSignupRewardOnce(admin: ReturnType<typeof buildAdminClient>, userId: string) {
+async function grantSignupRewardOnce(
+  admin: ReturnType<typeof buildAdminClient>,
+  userId: string
+) {
   const rewardTag = `signup_reward:${userId}`
 
   const { data: existing, error: lookupError } = await admin
@@ -142,7 +153,11 @@ async function applyReferralIfValid(
   }
 
   if (owner.id === userId) {
-    return { ok: true as const, skipped: true as const, selfReferralBlocked: true as const }
+    return {
+      ok: true as const,
+      skipped: true as const,
+      selfReferralBlocked: true as const,
+    }
   }
 
   const referralRef = `referral_bonus:${owner.id}:${userId}`
@@ -158,7 +173,11 @@ async function applyReferralIfValid(
   }
 
   if (existingReferral) {
-    return { ok: true as const, skipped: true as const, duplicateBlocked: true as const }
+    return {
+      ok: true as const,
+      skipped: true as const,
+      duplicateBlocked: true as const,
+    }
   }
 
   const { error: linkError } = await admin
@@ -182,7 +201,11 @@ async function applyReferralIfValid(
   }
 
   if (!linkedProfile?.referred_by || linkedProfile.referred_by !== owner.id) {
-    return { ok: true as const, skipped: true as const, duplicateBlocked: true as const }
+    return {
+      ok: true as const,
+      skipped: true as const,
+      duplicateBlocked: true as const,
+    }
   }
 
   const { error: referralRewardError } = await admin.rpc("handle_coin_change", {
