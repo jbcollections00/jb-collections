@@ -1938,7 +1938,7 @@ function MessagesPageContent() {
       case "😡":
         return "bg-[#fff1eb] text-[#e4602a] ring-1 ring-[#ffd8c7]"
       default:
-        return "bg-white text-slate-700 ring-1 ring-slate-200"
+        return "bg-[#0f172a] text-slate-200 ring-1 ring-slate-200"
     }
   }
 
@@ -2243,7 +2243,7 @@ function MessagesPageContent() {
             onClick={() => setPreviewImageUrl(url)}
             className={`group relative block overflow-hidden rounded-[22px] border text-left transition hover:brightness-110 ${
               isMine
-                ? "border-white/15 bg-white/10"
+                ? "border-white/15 bg-[#0f172a]/10"
                 : "border-white/10 bg-slate-950/30"
             }`}
           >
@@ -2286,7 +2286,7 @@ function MessagesPageContent() {
       return (
         <div className={`mt-3 w-full max-w-[300px] rounded-[22px] border px-3 py-3 ${
           isMine
-            ? "border-white/15 bg-white/10"
+            ? "border-white/15 bg-[#0f172a]/10"
             : "border-white/10 bg-slate-950/30"
         }`}>
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
@@ -2308,12 +2308,12 @@ function MessagesPageContent() {
         rel="noopener noreferrer"
         className={`mt-3 flex w-full max-w-[300px] items-center gap-3 rounded-[22px] border px-3 py-3 text-left text-xs font-semibold transition hover:brightness-110 ${
           isMine
-            ? "border-white/15 bg-white/10 text-white"
+            ? "border-white/15 bg-[#0f172a]/10 text-white"
             : "border-white/10 bg-slate-950/30 text-slate-100"
         }`}
       >
         <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
-          isMine ? "bg-white/10" : "bg-white/5"
+          isMine ? "bg-[#0f172a]/10" : "bg-[#0f172a]/5"
         }`}>
           <FileText size={18} />
         </span>
@@ -2459,18 +2459,18 @@ function MessagesPageContent() {
     <>
       <SiteHeader />
 
-      <main className="relative min-h-screen overflow-x-hidden bg-[#eef2f7] pt-24 text-slate-900 sm:pt-28">
-        <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(96,165,250,0.12),_transparent_28%),linear-gradient(180deg,_#f7faff_0%,_#eef2f7_100%)]" />
+      <main className="relative min-h-screen overflow-x-hidden bg-[#0b1220] pt-24 text-white sm:pt-28">
+        <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.18),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(168,85,247,0.14),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#081120_100%)]" />
 
         <div className="mx-auto w-full max-w-[1800px] px-4 pb-6 sm:px-6 sm:pb-8 lg:px-8">
-          <section className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.12)] sm:rounded-[30px]">
+          <section className="overflow-hidden rounded-[22px] border border-white/10 bg-[#0f172a] shadow-[0_24px_60px_rgba(0,0,0,0.38)] sm:rounded-[30px]">
             <div className="grid min-h-[calc(100vh-8rem)] grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]">
-              <aside className="hidden border-r border-slate-200 bg-[#f8fafc] lg:flex lg:flex-col">
-                <div className="border-b border-slate-200 px-5 py-5">
+              <aside className="hidden border-r border-white/10 bg-[#0b1220]-200 bg-[#111827] lg:flex lg:flex-col">
+                <div className="border-b border-white/10 px-5 py-5">
                   <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#1877f2]">
                     Messenger
                   </div>
-                  <h2 className="mt-2 flex items-center gap-2 text-2xl font-black text-slate-900">
+                  <h2 className="mt-2 flex items-center gap-2 text-2xl font-black text-white">
                     <span>Chats</span>
                     {totalUnreadCount > 0 && (
                       <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-red-500 px-2 text-xs font-bold text-white shadow-lg shadow-red-950/40">
@@ -2483,22 +2483,22 @@ function MessagesPageContent() {
                   </p>
                 </div>
 
-                <div className="border-b border-slate-200 p-4">
+                <div className="border-b border-white/10 p-4">
                   <div className="relative">
                     <Search
                       size={16}
-                      className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                      className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
                     />
                     <input
                       value={userSearch}
                       onChange={(e) => setUserSearch(e.target.value)}
                       placeholder="Search users to start a chat..."
-                      className="w-full rounded-full border border-slate-200 bg-[#eef2f7] py-3 pl-11 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-[#1877f2]"
+                      className="w-full rounded-full border border-white/10 bg-[#0b1220] py-3 pl-11 pr-4 text-sm text-white outline-none placeholder:text-slate-500 focus:border-[#1877f2]"
                     />
                   </div>
 
                   {(userSearch.trim() || searchingUsers || userResults.length > 0) && (
-                    <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white">
+                    <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-white/10 bg-[#0f172a]">
                       {searchingUsers ? (
                         <div className="px-4 py-3 text-sm text-slate-500">Searching users...</div>
                       ) : userResults.length === 0 ? (
@@ -2510,7 +2510,7 @@ function MessagesPageContent() {
                             type="button"
                             onClick={() => void startConversationWithUser(profile.id)}
                             disabled={startingChatUserId === profile.id}
-                            className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 disabled:opacity-60"
+                            className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left transition hover:bg-[#0f172a]/[0.03] disabled:opacity-60"
                           >
                             <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white">
                               <User size={16} />
@@ -2520,10 +2520,10 @@ function MessagesPageContent() {
                             </div>
 
                             <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-bold text-slate-900">
+                              <div className="truncate text-sm font-bold text-white">
                                 {getDisplayName(profile)}
                               </div>
-                              <div className="truncate text-xs text-slate-400">
+                              <div className="truncate text-xs text-slate-500">
                                 {isOnline(profile.id) ? "Active now" : getSubtitle(profile)}
                               </div>
                             </div>
@@ -2540,11 +2540,11 @@ function MessagesPageContent() {
 
                 <div className="flex-1 overflow-y-auto p-3">
                   {loading ? (
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-500">
+                    <div className="rounded-2xl border border-white/10 bg-[#0f172a] px-4 py-4 text-sm text-slate-500">
                       Loading conversations...
                     </div>
                   ) : filteredConversations.length === 0 ? (
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
+                    <div className="rounded-2xl border border-white/10 bg-[#0f172a] px-4 py-5 text-sm text-slate-500">
                       No conversations yet. Search a user above to start chatting.
                     </div>
                   ) : (
@@ -2581,7 +2581,7 @@ function MessagesPageContent() {
                             className={`flex w-full items-center gap-3 rounded-[20px] border px-3.5 py-3 text-left transition ${
                               active
                                 ? "border-[#cfe2ff] bg-[#e7f3ff]"
-                                : "border-transparent bg-white hover:border-slate-200 hover:bg-slate-50"
+                                : "border-transparent bg-[#0f172a] hover:border-white/10 hover:bg-[#0f172a]/[0.03]"
                             }`}
                           >
                             <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white shadow-lg shadow-blue-950/40">
@@ -2593,7 +2593,7 @@ function MessagesPageContent() {
 
                             <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
                               <div className="min-w-0 flex-1">
-                                <div className="truncate text-base font-bold text-slate-900">
+                                <div className="truncate text-base font-bold text-white">
                                   {otherName}
                                 </div>
                                 <div className="mt-1 truncate text-sm text-slate-500">
@@ -2616,13 +2616,13 @@ function MessagesPageContent() {
               </aside>
 
               <section className="flex min-h-[calc(100vh-8rem)] flex-col overflow-x-hidden bg-[#f5f7fb]">
-                <div className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
+                <div className="border-b border-white/10 bg-[#0f172a] px-4 py-4 sm:px-6">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
                       <button
                         type="button"
                         onClick={() => setMobileChatsOpen(true)}
-                        className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-[#f0f2f5] text-slate-600 transition hover:bg-slate-200 lg:hidden"
+                        className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#f0f2f5] text-slate-300 transition hover:bg-slate-200 lg:hidden"
                         aria-label="Open chats"
                       >
                         <MessageSquare size={18} />
@@ -2642,7 +2642,7 @@ function MessagesPageContent() {
                       </div>
 
                       <div className="min-w-0">
-                        <h1 className="truncate text-xl font-black text-slate-900 sm:text-2xl">
+                        <h1 className="truncate text-xl font-black text-white sm:text-2xl">
                           {selectedConversation
                             ? getDisplayName(selectedConversation.otherUser)
                             : "Messenger"}
@@ -2690,19 +2690,19 @@ function MessagesPageContent() {
                     <div className="relative">
                       <Search
                         size={16}
-                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
                       />
                       <input
                         value={userSearch}
                         onChange={(e) => setUserSearch(e.target.value)}
                         placeholder="Search users to start a chat..."
-                        className="w-full rounded-full border border-slate-200 bg-[#eef2f7] py-3 pl-11 pr-14 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-[#1877f2]"
+                        className="w-full rounded-full border border-white/10 bg-[#0b1220] py-3 pl-11 pr-14 text-sm text-white outline-none placeholder:text-slate-500 focus:border-[#1877f2]"
                       />
 
                       <button
                         type="button"
                         onClick={() => setMobileChatsOpen(true)}
-                        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100"
+                        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-300 transition hover:bg-[#0f172a]/[0.04]"
                         aria-label="Open chats list"
                         title="Open chats list"
                       >
@@ -2711,7 +2711,7 @@ function MessagesPageContent() {
                     </div>
 
                     {(userSearch.trim() || searchingUsers || userResults.length > 0) && (
-                      <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white">
+                      <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-white/10 bg-[#0f172a]">
                         {searchingUsers ? (
                           <div className="px-4 py-3 text-sm text-slate-500">Searching users...</div>
                         ) : userResults.length === 0 ? (
@@ -2723,7 +2723,7 @@ function MessagesPageContent() {
                               type="button"
                               onClick={() => void startConversationWithUser(profile.id)}
                               disabled={startingChatUserId === profile.id}
-                              className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 disabled:opacity-60"
+                              className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left transition hover:bg-[#0f172a]/[0.03] disabled:opacity-60"
                             >
                               <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white">
                                 <User size={16} />
@@ -2733,10 +2733,10 @@ function MessagesPageContent() {
                               </div>
 
                               <div className="min-w-0 flex-1">
-                                <div className="truncate text-sm font-bold text-slate-900">
+                                <div className="truncate text-sm font-bold text-white">
                                   {getDisplayName(profile)}
                                 </div>
-                                <div className="truncate text-xs text-slate-400">
+                                <div className="truncate text-xs text-slate-500">
                                   {isOnline(profile.id) ? "Active now" : getSubtitle(profile)}
                                 </div>
                               </div>
@@ -2754,25 +2754,25 @@ function MessagesPageContent() {
 
                 <div ref={messageListRef} onScroll={handleMessageListScroll} className="flex-1 overflow-y-auto overflow-x-hidden bg-[#f5f7fb] px-2 py-3 sm:px-4 sm:py-4">
                   {loading ? (
-                    <div className="mx-auto max-w-3xl rounded-[24px] border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+                    <div className="mx-auto max-w-3xl rounded-[24px] border border-white/10 bg-[#0f172a] p-4 text-sm text-slate-500 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
                       Loading messenger...
                     </div>
                   ) : !selectedConversation ? (
-                    <div className="mx-auto mt-14 max-w-xl rounded-[30px] border border-slate-200 bg-white px-6 py-12 text-center shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
-                      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-sky-500/10 text-sky-300">
+                    <div className="mx-auto mt-14 max-w-xl rounded-[30px] border border-white/10 bg-[#0f172a] px-6 py-12 text-center shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+                      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-sky-500/15 text-sky-300">
                         <MessageSquare size={34} />
                       </div>
-                      <h3 className="mt-5 text-3xl font-black text-slate-900">Start messaging</h3>
+                      <h3 className="mt-5 text-3xl font-black text-white">Start messaging</h3>
                       <p className="mx-auto mt-3 max-w-md text-base leading-7 text-slate-500">
                         Search a user from the left side and start a real-time conversation.
                       </p>
                     </div>
                   ) : messages.length === 0 ? (
-                    <div className="mx-auto mt-14 max-w-xl rounded-[30px] border border-slate-200 bg-white px-6 py-12 text-center shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
-                      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-sky-500/10 text-sky-300">
+                    <div className="mx-auto mt-14 max-w-xl rounded-[30px] border border-white/10 bg-[#0f172a] px-6 py-12 text-center shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+                      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-sky-500/15 text-sky-300">
                         <User size={34} />
                       </div>
-                      <h3 className="mt-5 text-3xl font-black text-slate-900">
+                      <h3 className="mt-5 text-3xl font-black text-white">
                         Message {getDisplayName(selectedConversation.otherUser)}
                       </h3>
                       <p className="mx-auto mt-3 max-w-md text-base leading-7 text-slate-500">
@@ -2828,7 +2828,7 @@ function MessagesPageContent() {
                               onTouchCancel={cancelLongPress}
                             >
                               {!isMine && showSenderLabel ? (
-                                <div className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+                                <div className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                                   {getDisplayName(selectedConversation.otherUser)}
                                 </div>
                               ) : null}
@@ -2836,7 +2836,7 @@ function MessagesPageContent() {
                               <div className={`relative max-w-full ${isMine ? "pr-7 sm:pr-8" : "pl-7 sm:pl-8"}`}>
                                 {reactionsEnabled && (hoveredMessageId === item.id || openReactionPickerMessageId === item.id) && !isMenuOpen && (
                                   <div
-                                    className={`absolute -top-12 z-20 hidden rounded-full border border-slate-200 bg-white/95 px-1.5 py-1 shadow-[0_14px_34px_rgba(15,23,42,0.14)] backdrop-blur sm:flex ${
+                                    className={`absolute -top-12 z-20 hidden rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-1 shadow-[0_14px_34px_rgba(15,23,42,0.14)] backdrop-blur sm:flex ${
                                       isMine ? "left-0" : "right-0"
                                     }`}
                                   >
@@ -2848,7 +2848,7 @@ function MessagesPageContent() {
                                           type="button"
                                           onClick={() => void toggleReaction(item.id, emoji)}
                                                                                     className={`mx-0.5 flex h-9 w-9 items-center justify-center rounded-full text-[20px] transition duration-200 hover:-translate-y-2 hover:scale-[1.24] hover:animate-[fbReactionPop_0.28s_ease-out] ${
-                                            activeReaction ? getReactionSkin(emoji) : "hover:bg-slate-100"
+                                            activeReaction ? getReactionSkin(emoji) : "hover:bg-[#0f172a]/[0.04]"
                                           }`}
                                         >
                                           <span className="leading-none transition-transform duration-200 group-hover:scale-[1.16]">{emoji}</span>
@@ -2861,7 +2861,7 @@ function MessagesPageContent() {
                                 <button
                                   type="button"
                                   onClick={(event) => openMessageMenu(event, item.id, isMine)}
-                                  className={`absolute top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-md transition hover:bg-slate-100 ${
+                                  className={`absolute top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-500 shadow-md transition hover:bg-[#0f172a]/[0.04] ${
                                     isMine
                                       ? "left-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                                       : "right-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
@@ -2885,7 +2885,7 @@ function MessagesPageContent() {
 
                                     <div
                                       ref={actionMenuRef}
-                                      className="fixed z-[90] w-[min(208px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
+                                      className="fixed z-[90] w-[min(208px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-white/10 bg-[#0f172a] shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
                                       style={{
                                         top: menuPosition.top,
                                         left: menuPosition.left,
@@ -2904,7 +2904,7 @@ function MessagesPageContent() {
                                             setOpenMessageMenuId(null)
                                             setMenuPosition(null)
                                           }}
-                                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-200 transition hover:bg-[#0f172a]/[0.03]"
                                         >
                                           <Smile size={15} />
                                           React
@@ -2914,7 +2914,7 @@ function MessagesPageContent() {
                                       <button
                                         type="button"
                                         onClick={() => startReply(item)}
-                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-200 transition hover:bg-[#0f172a]/[0.03]"
                                       >
                                         <Reply size={15} />
                                         Reply
@@ -2923,7 +2923,7 @@ function MessagesPageContent() {
                                       <button
                                         type="button"
                                         onClick={() => openForwardModal(item)}
-                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-200 transition hover:bg-[#0f172a]/[0.03]"
                                       >
                                         <Forward size={15} />
                                         Forward
@@ -2932,7 +2932,7 @@ function MessagesPageContent() {
                                       <button
                                         type="button"
                                         onClick={() => deleteForMe(item.id)}
-                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-200 transition hover:bg-[#0f172a]/[0.03]"
                                       >
                                         <Trash2 size={15} />
                                         Delete for me
@@ -2942,7 +2942,7 @@ function MessagesPageContent() {
                                         <button
                                           type="button"
                                           onClick={() => startEditing(item)}
-                                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-200 transition hover:bg-[#0f172a]/[0.03]"
                                         >
                                           <Pencil size={15} />
                                           {isEditingThis ? "Editing" : "Edit"}
@@ -2966,7 +2966,7 @@ function MessagesPageContent() {
                                 {openReactionPickerMessageId === item.id && (
                                   <div
                                     ref={reactionPickerRef}
-                                    className="fixed z-[95] rounded-full border border-slate-200 bg-white/98 px-2 py-2 shadow-[0_24px_50px_rgba(15,23,42,0.18)] backdrop-blur animate-[fadeIn_0.16s_ease-out]"
+                                    className="fixed z-[95] rounded-full border border-white/10 bg-white/[0.04]/98 px-2 py-2 shadow-[0_24px_50px_rgba(15,23,42,0.18)] backdrop-blur animate-[fadeIn_0.16s_ease-out]"
                                     style={reactionPickerPosition ? { top: reactionPickerPosition.top, left: reactionPickerPosition.left } : undefined}
                                   >
                                     <div className="flex items-center gap-1">
@@ -2978,7 +2978,7 @@ function MessagesPageContent() {
                                             type="button"
                                             onClick={() => void toggleReaction(item.id, emoji)}
                                                                                         className={`group relative flex h-10 w-10 items-center justify-center rounded-full text-[22px] transition duration-200 hover:-translate-y-2 hover:scale-[1.24] hover:animate-[fbReactionPop_0.28s_ease-out] ${
-                                              activeReaction ? getReactionSkin(emoji) : "hover:bg-slate-100"
+                                              activeReaction ? getReactionSkin(emoji) : "hover:bg-[#0f172a]/[0.04]"
                                             }`}
                                           >
                                             {emoji}
@@ -3004,15 +3004,15 @@ function MessagesPageContent() {
                                   className={`rounded-[22px] px-3 py-2.5 text-[14px] leading-5 shadow-[0_6px_18px_rgba(15,23,42,0.10)] transition-all sm:px-3.5 sm:py-2.5 ${
                                     isMine
                                       ? "rounded-br-md bg-[#0084ff] text-white"
-                                      : "rounded-bl-md bg-[#e4e6eb] text-slate-900"
+                                      : "rounded-bl-md bg-[#e4e6eb] text-white"
                                   }`}
                                 >
                                   {item.forwarded_from_message_id && (
                                     <div
                                       className={`mb-3 rounded-2xl border px-3 py-2 text-xs font-semibold ${
                                         isMine
-                                          ? "border-white/20 bg-white/10 text-white/90"
-                                          : "border-sky-400/30 bg-sky-500/10 text-sky-200"
+                                          ? "border-white/20 bg-[#0f172a]/10 text-white/90"
+                                          : "border-sky-400/30 bg-sky-500/15 text-sky-200"
                                       }`}
                                     >
                                       <div className="flex items-center gap-1">
@@ -3077,7 +3077,7 @@ function MessagesPageContent() {
                                         title={getReactionTooltipText(item.id, reaction.emoji)}
                                         onClick={() => void toggleReaction(item.id, reaction.emoji)}
                                         className={`group relative inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold shadow-[0_6px_18px_rgba(15,23,42,0.10)] transition duration-200 hover:-translate-y-1 hover:scale-[1.08] hover:animate-[fbReactionPill_0.24s_ease-out] ${
-                                          activeReaction ? getReactionSkin(reaction.emoji) : "border-slate-200 bg-white text-slate-700"
+                                          activeReaction ? getReactionSkin(reaction.emoji) : "border-white/10 bg-[#0f172a] text-slate-200"
                                         }`}
                                       >
                                         <span className="text-[13px] leading-none">{reaction.emoji}</span>
@@ -3092,14 +3092,14 @@ function MessagesPageContent() {
                               )}
 
                               <div
-                                className={`mt-1 flex flex-wrap items-center gap-1.5 px-2 text-[11px] text-slate-400 ${
+                                className={`mt-1 flex flex-wrap items-center gap-1.5 px-2 text-[11px] text-slate-500 ${
                                   isMine ? "justify-end" : "justify-start"
                                 }`}
                               >
                                 <span>{formatTime(item.created_at)}</span>
 
                                 {item.edited_at && (
-                                  <span className="font-medium text-slate-400">(edited)</span>
+                                  <span className="font-medium text-slate-500">(edited)</span>
                                 )}
 
                                 {isMine && isMyLatest && isLastOfGroup && (
@@ -3108,7 +3108,7 @@ function MessagesPageContent() {
                                       className="inline-flex items-center gap-1.5 font-medium text-slate-500"
                                       title={`Seen by ${getDisplayName(selectedConversation?.otherUser || null)}`}
                                     >
-                                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[9px] text-slate-700">
+                                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[9px] text-slate-200">
                                         <User size={9} />
                                       </span>
                                       Seen
@@ -3126,7 +3126,7 @@ function MessagesPageContent() {
                             {isMine && (
                               <div className="w-8 shrink-0">
                                 {showAvatar ? (
-                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-slate-600">
+                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-slate-300">
                                     <User size={14} />
                                   </div>
                                 ) : null}
@@ -3144,7 +3144,7 @@ function MessagesPageContent() {
                             </div>
                           </div>
 
-                          <div className="rounded-3xl rounded-bl-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+                          <div className="rounded-3xl rounded-bl-lg border border-white/10 bg-[#0f172a] px-4 py-3 text-sm text-slate-200 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
                             <div className="flex items-center gap-1">
                               <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.3s]" />
                               <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.15s]" />
@@ -3159,7 +3159,7 @@ function MessagesPageContent() {
                   )}
                 </div>
 
-                <div className="sticky bottom-0 border-t border-slate-200 bg-white/95 px-2 py-2 backdrop-blur-xl sm:px-4">
+                <div className="sticky bottom-0 border-t border-white/10 bg-[#0f172a] px-2 py-2 backdrop-blur-xl sm:px-4">
                   <div className="mx-auto max-w-4xl">
                     {success && (
                       <div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
@@ -3174,7 +3174,7 @@ function MessagesPageContent() {
                             <div className="text-xs font-bold uppercase tracking-[0.16em] text-[#1877f2]">
                               {editingMessageId ? "Editing message" : "Replying to message"}
                             </div>
-                            <div className="mt-1 line-clamp-2 text-sm font-medium text-slate-700">
+                            <div className="mt-1 line-clamp-2 text-sm font-medium text-slate-200">
                               {editingMessageId
                                 ? getMessagePreviewText(messageMap.get(editingMessageId) || null)
                                 : getMessagePreviewText(replyingTo)}
@@ -3187,7 +3187,7 @@ function MessagesPageContent() {
                               setReplyingTo(null)
                               cancelEditing()
                             }}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-[#0f172a]/[0.04]"
                           >
                             <X size={16} />
                           </button>
@@ -3198,7 +3198,7 @@ function MessagesPageContent() {
                     <form onSubmit={handleSendMessage} className="space-y-2">
                       <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex flex-wrap items-center gap-2">
-                          <div className={`rounded-full border px-3 py-1.5 text-xs font-bold ${coinShake ? "border-red-200 bg-red-50 text-red-600" : "border-slate-200 bg-white text-slate-700"}`}>
+                          <div className={`rounded-full border px-3 py-1.5 text-xs font-bold ${coinShake ? "border-red-200 bg-red-50 text-red-600" : "border-white/10 bg-[#0f172a] text-slate-200"}`}>
                             Wallet: {myCoins.toLocaleString()} 🪙
                           </div>
                           {!editingMessageId && (
@@ -3214,9 +3214,9 @@ function MessagesPageContent() {
                         )}
                       </div>
 
-                      <div className={`relative rounded-[28px] border bg-white p-1.5 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition sm:rounded-[30px] ${coinShake ? "border-red-300" : "border-slate-200"}`}>
+                      <div className={`relative rounded-[28px] border bg-[#0f172a] p-1.5 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition sm:rounded-[30px] ${coinShake ? "border-red-300" : "border-white/10"}`}>
                         <div className="flex items-end gap-1.5 sm:gap-2">
-                          <label className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#1877f2] transition hover:bg-slate-100 sm:h-11 sm:w-11">
+                          <label className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#1877f2] transition hover:bg-[#0f172a]/[0.04] sm:h-11 sm:w-11">
                             <Paperclip size={20} />
                             <input
                               id="attachment-input"
@@ -3231,14 +3231,14 @@ function MessagesPageContent() {
                             <button
                               type="button"
                               onClick={() => setShowEmojiPicker((prev) => !prev)}
-                              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#1877f2] transition hover:bg-slate-100 sm:h-11 sm:w-11"
+                              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#1877f2] transition hover:bg-[#0f172a]/[0.04] sm:h-11 sm:w-11"
                               title="Open emoji picker"
                             >
                               <Smile size={20} />
                             </button>
 
                             {showEmojiPicker && (
-                              <div className="absolute bottom-14 left-0 z-30 w-72 rounded-[24px] border border-slate-200 bg-white p-3 shadow-[0_20px_40px_rgba(15,23,42,0.16)]">
+                              <div className="absolute bottom-14 left-0 z-30 w-72 rounded-[24px] border border-white/10 bg-[#0f172a] p-3 shadow-[0_20px_40px_rgba(15,23,42,0.16)]">
                                 <div className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-[#1877f2]">
                                   Emoticons
                                 </div>
@@ -3248,7 +3248,7 @@ function MessagesPageContent() {
                                       key={emoji}
                                       type="button"
                                       onClick={() => appendEmoji(emoji)}
-                                      className="flex h-10 w-10 items-center justify-center rounded-2xl text-xl transition hover:bg-slate-100"
+                                      className="flex h-10 w-10 items-center justify-center rounded-2xl text-xl transition hover:bg-[#0f172a]/[0.04]"
                                     >
                                       {emoji}
                                     </button>
@@ -3272,7 +3272,7 @@ function MessagesPageContent() {
                             }
                             rows={1}
                             disabled={!selectedConversationId}
-                            className="min-h-[42px] max-h-[120px] flex-1 resize-none overflow-y-auto rounded-full bg-[#f0f2f5] px-4 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-500 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[44px] sm:max-h-[140px] sm:py-3"
+                            className="min-h-[42px] max-h-[120px] flex-1 resize-none overflow-y-auto rounded-full bg-[#f0f2f5] px-4 py-2.5 text-sm text-white outline-none placeholder:text-slate-500 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[44px] sm:max-h-[140px] sm:py-3"
                           />
 
                           <button
@@ -3300,7 +3300,7 @@ function MessagesPageContent() {
                         </div>
 
                         {attachment && !editingMessageId && (
-                          <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl bg-[#f0f2f5] px-3 py-2 text-xs font-medium text-slate-600">
+                          <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl bg-[#f0f2f5] px-3 py-2 text-xs font-medium text-slate-300">
                             <span className="truncate">Attached: {attachment.name}</span>
                             <button
                               type="button"
@@ -3314,7 +3314,7 @@ function MessagesPageContent() {
                         )}
                       </div>
 
-                      <div className="px-1 text-xs text-slate-400">
+                      <div className="px-1 text-xs text-slate-500">
                         {uploading
                           ? "Uploading attachment..."
                           : editingMessageId
@@ -3341,13 +3341,13 @@ function MessagesPageContent() {
             />
 
             <div className="absolute left-0 top-0 h-full w-[88%] max-w-sm border-r border-white/10 bg-[#020617] shadow-[0_25px_80px_rgba(0,0,0,0.45)]">
-              <div className="border-b border-slate-200 px-5 py-5">
+              <div className="border-b border-white/10 px-5 py-5">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#1877f2]">
                       Messenger
                     </div>
-                    <h2 className="mt-2 flex items-center gap-2 text-2xl font-black text-slate-900">
+                    <h2 className="mt-2 flex items-center gap-2 text-2xl font-black text-white">
                     <span>Chats</span>
                     {totalUnreadCount > 0 && (
                       <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-red-500 px-2 text-xs font-bold text-white shadow-lg shadow-red-950/40">
@@ -3363,38 +3363,38 @@ function MessagesPageContent() {
                   <button
                     type="button"
                     onClick={() => setMobileChatsOpen(false)}
-                    className="rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-sm font-semibold text-slate-200"
+                    className="rounded-full border border-white/10 bg-white/[0.04]/[0.06] px-4 py-2 text-sm font-semibold text-slate-200"
                   >
                     Close
                   </button>
                 </div>
               </div>
 
-              <div className="border-b border-slate-200 p-4">
+              <div className="border-b border-white/10 p-4">
                 <div className="relative">
                   <Search
                     size={16}
-                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
                   />
                   <input
                     value={userSearch}
                     onChange={(e) => setUserSearch(e.target.value)}
                     placeholder="Search users..."
-                    className="w-full rounded-full border border-slate-200 bg-[#eef2f7] py-3 pl-11 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-[#1877f2]"
+                    className="w-full rounded-full border border-white/10 bg-[#0b1220] py-3 pl-11 pr-4 text-sm text-white outline-none placeholder:text-slate-500 focus:border-[#1877f2]"
                   />
                 </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-4">
                 {userResults.length > 0 && (
-                  <div className="mb-4 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]">
+                  <div className="mb-4 overflow-hidden rounded-2xl border border-white/10 bg-[#0f172a]/[0.04]">
                     {userResults.map((profile) => (
                       <button
                         key={profile.id}
                         type="button"
                         onClick={() => void startConversationWithUser(profile.id)}
                         disabled={startingChatUserId === profile.id}
-                        className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 disabled:opacity-60"
+                        className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left transition hover:bg-[#0f172a]/[0.03] disabled:opacity-60"
                       >
                         <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white">
                           <User size={16} />
@@ -3404,10 +3404,10 @@ function MessagesPageContent() {
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-bold text-slate-900">
+                          <div className="truncate text-sm font-bold text-white">
                             {getDisplayName(profile)}
                           </div>
-                          <div className="truncate text-xs text-slate-400">
+                          <div className="truncate text-xs text-slate-500">
                             {isOnline(profile.id) ? "Active now" : getSubtitle(profile)}
                           </div>
                         </div>
@@ -3421,7 +3421,7 @@ function MessagesPageContent() {
                 )}
 
                 {filteredConversations.length === 0 ? (
-                  <div className="rounded-[24px] border border-white/10 bg-white/[0.05] px-4 py-5 text-sm text-slate-300">
+                  <div className="rounded-[24px] border border-white/10 bg-[#0f172a]/[0.05] px-4 py-5 text-sm text-slate-300">
                     No conversations yet.
                   </div>
                 ) : (
@@ -3443,7 +3443,7 @@ function MessagesPageContent() {
                           onClick={() => {
                             void openConversation(item.conversation.id, "push")
                           }}
-                          className="flex w-full items-center gap-3 rounded-[24px] border border-sky-400/20 bg-sky-500/10 px-4 py-4 text-left transition hover:bg-sky-500/15"
+                          className="flex w-full items-center gap-3 rounded-[24px] border border-sky-400/20 bg-sky-500/15 px-4 py-4 text-left transition hover:bg-sky-500/15"
                         >
                           <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white shadow-lg shadow-blue-950/40">
                             <User size={18} />
@@ -3487,13 +3487,13 @@ function MessagesPageContent() {
                 <button
                   type="button"
                   onClick={closeForwardModal}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-slate-200 hover:bg-white/[0.1]"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]/[0.06] text-slate-200 hover:bg-[#0f172a]/[0.1]"
                 >
                   <X size={18} />
                 </button>
               </div>
 
-              <div className="mt-4 rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
+              <div className="mt-4 rounded-[24px] border border-white/10 bg-[#0f172a]/[0.04] p-4">
                 <div className="text-xs font-bold uppercase tracking-[0.16em] text-[#1877f2]">
                   Message preview
                 </div>
@@ -3501,7 +3501,7 @@ function MessagesPageContent() {
                   {getMessagePreviewText(forwardingMessage)}
                 </div>
                 {forwardingMessage.attachment_url && (
-                  <div className="mt-2 text-xs text-slate-400">
+                  <div className="mt-2 text-xs text-slate-500">
                     Attachment: {getAttachmentName(forwardingMessage.attachment_url)}
                   </div>
                 )}
@@ -3513,17 +3513,17 @@ function MessagesPageContent() {
                   <div className="relative">
                     <Search
                       size={16}
-                      className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                      className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
                     />
                     <input
                       value={forwardSearch}
                       onChange={(e) => setForwardSearch(e.target.value)}
                       placeholder="Search chats..."
-                      className="w-full rounded-full border border-slate-200 bg-[#eef2f7] py-3 pl-11 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-[#1877f2]"
+                      className="w-full rounded-full border border-white/10 bg-[#0b1220] py-3 pl-11 pr-4 text-sm text-white outline-none placeholder:text-slate-500 focus:border-[#1877f2]"
                     />
                   </div>
 
-                  <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white">
+                  <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-white/10 bg-[#0f172a]">
                     {filteredForwardConversations.length === 0 ? (
                       <div className="px-4 py-4 text-sm text-slate-300">
                         No other conversations found.
@@ -3535,17 +3535,17 @@ function MessagesPageContent() {
                           type="button"
                           onClick={() => void forwardToConversation(item.conversation.id)}
                           disabled={forwardingToConversationId === item.conversation.id}
-                          className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left hover:bg-white/[0.05] disabled:opacity-60"
+                          className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left hover:bg-[#0f172a]/[0.05] disabled:opacity-60"
                         >
                           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white">
                             <User size={16} />
                           </div>
 
                           <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-bold text-slate-900">
+                            <div className="truncate text-sm font-bold text-white">
                               {getDisplayName(item.otherUser)}
                             </div>
-                            <div className="truncate text-xs text-slate-400">
+                            <div className="truncate text-xs text-slate-500">
                               {getSubtitle(item.otherUser)}
                             </div>
                           </div>
@@ -3566,17 +3566,17 @@ function MessagesPageContent() {
                   <div className="relative">
                     <Search
                       size={16}
-                      className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                      className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
                     />
                     <input
                       value={forwardUserSearch}
                       onChange={(e) => setForwardUserSearch(e.target.value)}
                       placeholder="Search users..."
-                      className="w-full rounded-full border border-slate-200 bg-[#eef2f7] py-3 pl-11 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-[#1877f2]"
+                      className="w-full rounded-full border border-white/10 bg-[#0b1220] py-3 pl-11 pr-4 text-sm text-white outline-none placeholder:text-slate-500 focus:border-[#1877f2]"
                     />
                   </div>
 
-                  <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white">
+                  <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-white/10 bg-[#0f172a]">
                     {searchingForwardUsers ? (
                       <div className="px-4 py-4 text-sm text-slate-300">Searching users...</div>
                     ) : forwardUserSearch.trim() && forwardUserResults.length === 0 ? (
@@ -3592,17 +3592,17 @@ function MessagesPageContent() {
                           type="button"
                           onClick={() => void forwardToUser(profile.id)}
                           disabled={forwardingToUserId === profile.id}
-                          className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left hover:bg-white/[0.05] disabled:opacity-60"
+                          className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left hover:bg-[#0f172a]/[0.05] disabled:opacity-60"
                         >
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-slate-200">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#0f172a]/10 text-slate-200">
                             <User size={16} />
                           </div>
 
                           <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-bold text-slate-900">
+                            <div className="truncate text-sm font-bold text-white">
                               {getDisplayName(profile)}
                             </div>
-                            <div className="truncate text-xs text-slate-400">
+                            <div className="truncate text-xs text-slate-500">
                               {getSubtitle(profile)}
                             </div>
                           </div>
@@ -3631,7 +3631,7 @@ function MessagesPageContent() {
 
             <div className="relative z-10 h-full w-full max-w-2xl border-l border-white/10 bg-[#071122] shadow-[-20px_0_60px_rgba(0,0,0,0.35)]">
               <div className="flex h-full flex-col">
-                <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
+                <div className="border-b border-white/10 px-5 py-5 sm:px-6">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-sky-300/80">
@@ -3648,7 +3648,7 @@ function MessagesPageContent() {
                     <button
                       type="button"
                       onClick={() => setShowSharedMediaPanel(false)}
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-slate-200 hover:bg-white/[0.1]"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]/[0.06] text-slate-200 hover:bg-[#0f172a]/[0.1]"
                     >
                       <X size={18} />
                     </button>
@@ -3672,7 +3672,7 @@ function MessagesPageContent() {
                           className={`rounded-2xl border px-3 py-3 text-left transition ${
                             active
                               ? "border-sky-400/30 bg-sky-500/15 text-white"
-                              : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"
+                              : "border-white/10 bg-[#0f172a]/[0.04] text-slate-300 hover:bg-[#0f172a]/[0.08]"
                           }`}
                         >
                           <div className="text-sm font-bold">{tab.label}</div>
@@ -3685,12 +3685,12 @@ function MessagesPageContent() {
 
                 <div className="flex-1 overflow-y-auto p-5 sm:p-6">
                   {!selectedConversation ? (
-                    <div className="rounded-[24px] border border-white/10 bg-white/[0.04] px-5 py-10 text-center text-slate-300">
+                    <div className="rounded-[24px] border border-white/10 bg-[#0f172a]/[0.04] px-5 py-10 text-center text-slate-300">
                       Open a conversation first.
                     </div>
                   ) : sharedMediaTab === "photos" ? (
                     sharedPhotos.length === 0 ? (
-                      <div className="rounded-[24px] border border-white/10 bg-white/[0.04] px-5 py-10 text-center text-slate-300">
+                      <div className="rounded-[24px] border border-white/10 bg-[#0f172a]/[0.04] px-5 py-10 text-center text-slate-300">
                         No photos shared yet.
                       </div>
                     ) : (
@@ -3700,7 +3700,7 @@ function MessagesPageContent() {
                             key={item.messageId}
                             type="button"
                             onClick={() => setPreviewImageUrl(item.url)}
-                            className="overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.04] text-left transition hover:scale-[1.02] hover:border-sky-400/20"
+                            className="overflow-hidden rounded-[22px] border border-white/10 bg-[#0f172a]/[0.04] text-left transition hover:scale-[1.02] hover:border-sky-400/20"
                           >
                             <img
                               src={item.url}
@@ -3710,7 +3710,7 @@ function MessagesPageContent() {
                             />
                             <div className="px-3 py-3">
                               <div className="truncate text-sm font-semibold text-white">{item.fileName}</div>
-                              <div className="mt-1 text-xs text-slate-400">{item.senderName} • {formatTime(item.createdAt)}</div>
+                              <div className="mt-1 text-xs text-slate-500">{item.senderName} • {formatTime(item.createdAt)}</div>
                             </div>
                           </button>
                         ))}
@@ -3718,7 +3718,7 @@ function MessagesPageContent() {
                     )
                   ) : sharedMediaTab === "videos" ? (
                     sharedVideos.length === 0 ? (
-                      <div className="rounded-[24px] border border-white/10 bg-white/[0.04] px-5 py-10 text-center text-slate-300">
+                      <div className="rounded-[24px] border border-white/10 bg-[#0f172a]/[0.04] px-5 py-10 text-center text-slate-300">
                         No videos shared yet.
                       </div>
                     ) : (
@@ -3726,7 +3726,7 @@ function MessagesPageContent() {
                         {sharedVideos.map((item) => (
                           <div
                             key={item.messageId}
-                            className="overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.04]"
+                            className="overflow-hidden rounded-[24px] border border-white/10 bg-[#0f172a]/[0.04]"
                           >
                             <video
                               controls
@@ -3738,13 +3738,13 @@ function MessagesPageContent() {
                             <div className="flex items-center justify-between gap-3 px-4 py-3">
                               <div className="min-w-0">
                                 <div className="truncate text-sm font-semibold text-white">{item.fileName}</div>
-                                <div className="mt-1 text-xs text-slate-400">{item.senderName} • {formatTime(item.createdAt)}</div>
+                                <div className="mt-1 text-xs text-slate-500">{item.senderName} • {formatTime(item.createdAt)}</div>
                               </div>
                               <a
                                 href={item.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-slate-200 hover:bg-white/[0.1]"
+                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]/[0.06] text-slate-200 hover:bg-[#0f172a]/[0.1]"
                               >
                                 <Download size={16} />
                               </a>
@@ -3755,7 +3755,7 @@ function MessagesPageContent() {
                     )
                   ) : sharedMediaTab === "audio" ? (
                     sharedAudio.length === 0 ? (
-                      <div className="rounded-[24px] border border-white/10 bg-white/[0.04] px-5 py-10 text-center text-slate-300">
+                      <div className="rounded-[24px] border border-white/10 bg-[#0f172a]/[0.04] px-5 py-10 text-center text-slate-300">
                         No audio shared yet.
                       </div>
                     ) : (
@@ -3763,15 +3763,15 @@ function MessagesPageContent() {
                         {sharedAudio.map((item) => (
                           <div
                             key={item.messageId}
-                            className="rounded-[24px] border border-white/10 bg-white/[0.04] p-4"
+                            className="rounded-[24px] border border-white/10 bg-[#0f172a]/[0.04] p-4"
                           >
                             <div className="mb-3 flex items-center gap-3">
-                              <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.08] text-sky-300">
+                              <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#0f172a]/[0.08] text-sky-300">
                                 <Play size={16} />
                               </div>
                               <div className="min-w-0">
                                 <div className="truncate text-sm font-semibold text-white">{item.fileName}</div>
-                                <div className="mt-1 text-xs text-slate-400">{item.senderName} • {formatTime(item.createdAt)}</div>
+                                <div className="mt-1 text-xs text-slate-500">{item.senderName} • {formatTime(item.createdAt)}</div>
                               </div>
                             </div>
                             <audio controls className="w-full">
@@ -3782,7 +3782,7 @@ function MessagesPageContent() {
                       </div>
                     )
                   ) : sharedFiles.length === 0 ? (
-                    <div className="rounded-[24px] border border-white/10 bg-white/[0.04] px-5 py-10 text-center text-slate-300">
+                    <div className="rounded-[24px] border border-white/10 bg-[#0f172a]/[0.04] px-5 py-10 text-center text-slate-300">
                       No files shared yet.
                     </div>
                   ) : (
@@ -3793,16 +3793,16 @@ function MessagesPageContent() {
                           href={item.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-3 rounded-[24px] border border-white/10 bg-white/[0.04] px-4 py-4 transition hover:border-sky-400/20 hover:bg-white/[0.06]"
+                          className="flex items-center gap-3 rounded-[24px] border border-white/10 bg-[#0f172a]/[0.04] px-4 py-4 transition hover:border-sky-400/20 hover:bg-[#0f172a]/[0.06]"
                         >
-                          <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/[0.08] text-sky-300">
+                          <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#0f172a]/[0.08] text-sky-300">
                             <FileText size={18} />
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-sm font-semibold text-white">{item.fileName}</div>
-                            <div className="mt-1 text-xs text-slate-400">{item.senderName} • {formatTime(item.createdAt)}</div>
+                            <div className="mt-1 text-xs text-slate-500">{item.senderName} • {formatTime(item.createdAt)}</div>
                           </div>
-                          <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-slate-200">
+                          <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]/[0.06] text-slate-200">
                             <Download size={16} />
                           </div>
                         </a>
@@ -3876,10 +3876,10 @@ export default function MessagesPage() {
       fallback={
         <>
           <SiteHeader />
-          <main className="relative min-h-screen overflow-x-hidden bg-[#eef2f7] pt-24 text-slate-900 sm:pt-28">
-            <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(96,165,250,0.12),_transparent_28%),linear-gradient(180deg,_#f7faff_0%,_#eef2f7_100%)]" />
+          <main className="relative min-h-screen overflow-x-hidden bg-[#0b1220] pt-24 text-white sm:pt-28">
+            <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.18),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(168,85,247,0.14),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#081120_100%)]" />
             <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-[1800px] items-center justify-center px-4 pb-6 sm:px-6 sm:pb-8 lg:px-8">
-              <div className="w-full max-w-xl rounded-[30px] border border-white/10 bg-white/[0.04] px-6 py-14 text-center shadow-[0_25px_80px_rgba(0,0,0,0.35)] backdrop-blur-md">
+              <div className="w-full max-w-xl rounded-[30px] border border-white/10 bg-[#0f172a]/[0.04] px-6 py-14 text-center shadow-[0_25px_80px_rgba(0,0,0,0.35)] backdrop-blur-md">
                 <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#1877f2]">Messenger</div>
                 <h2 className="mt-3 text-2xl font-black text-white">Loading messages...</h2>
                 <p className="mt-2 text-sm text-slate-300">Please wait while we open your conversations.</p>
