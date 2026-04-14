@@ -1,78 +1,137 @@
 import type { Metadata } from "next"
-import { createClient } from "@/lib/supabase-server"
 import DownloadPageClient from "./DownloadPageClient"
+import { createClient } from "@/lib/supabase/server"
 
-type Props = {
+type PageProps = {
   params: Promise<{
     slug: string
   }>
 }
 
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value
+type FileRow = {
+  id: string
+  title?: string | null
+  description?: string | null
+  slug?: string | null
+  thumbnail_url?: string | null
+  cover_url?: string | null
+  preview_url?: string | null
+  mime_type?: string | null
+  file_type?: string | null
+  visibility?: string | null
+  downloads_count?: number | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+function getSiteUrl() {
+  return (
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "https://jb-collections.com"
+  ).replace(/\/+$/, "")
+}
+
+function absoluteUrl(url?: string | null) {
+  if (!url) return null
+  if (/^https?:\/\//i.test(url)) return url
+
+  const siteUrl = getSiteUrl()
+  return `${siteUrl}${url.startsWith("/") ? url : `/${url}`}`
+}
+
+function getPreviewImage(file: FileRow | null) {
+  if (!file) return `${getSiteUrl()}/og-default.jpg`
+
+  return (
+    absoluteUrl(file.cover_url) ||
+    absoluteUrl(file.preview_url) ||
+    absoluteUrl(file.thumbnail_url) ||
+    `${getSiteUrl()}/og-default.jpg`
   )
 }
 
-function toAbsoluteUrl(url: string | null | undefined, baseUrl: string) {
-  if (!url) return `${baseUrl}/jb-logo.png`
-  if (url.startsWith("http://") || url.startsWith("https://")) return url
-  if (url.startsWith("/")) return `${baseUrl}${url}`
-  return `${baseUrl}/${url}`
+function getTitle(file: FileRow | null) {
+  const raw = file?.title?.trim()
+  return raw ? `${raw} | JB Collections` : "JB Collections"
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+function getDescription(file: FileRow | null) {
+  const raw = file?.description?.trim()
+  if (raw) return raw
+
+  const visibility = (file?.visibility || "free").toLowerCase()
+  if (visibility === "platinum") return "Platinum-ready file download from JB Collections."
+  if (visibility === "premium") return "Premium-ready file download from JB Collections."
+  return "Premium-ready file download platform."
+}
+
+async function getFileBySlug(slug: string): Promise<FileRow | null> {
+  try {
+    const supabase = await createClient()
+
+    const { data, error } = await supabase
+      .from("files")
+      .select(
+        "id, title, description, slug, thumbnail_url, cover_url, preview_url, mime_type, file_type, visibility, downloads_count, created_at, updated_at, status"
+      )
+      .eq("status", "published")
+      .eq("slug", slug)
+      .maybeSingle()
+
+    if (error) {
+      console.error("generateMetadata file lookup error:", error.message)
+      return null
+    }
+
+    return (data as FileRow | null) ?? null
+  } catch (error) {
+    console.error("generateMetadata unexpected error:", error)
+    return null
+  }
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params
-  const supabase = await createClient()
+  const file = await getFileBySlug(slug)
 
-  const baseQuery = supabase
-    .from("files")
-    .select("title, description, thumbnail_url, cover_url, preview_url")
-    .eq("status", "published")
-
-  const { data: file } = isUuid(slug)
-    ? await baseQuery.eq("id", slug).maybeSingle()
-    : await baseQuery.eq("slug", slug).maybeSingle()
-
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
-    "https://jb-collections.com"
-
-  const title = file?.title ? `${file.title} | JB Collections` : "Download | JB Collections"
-  const description =
-    file?.description ||
-    "Download premium content with preview, trust signals, and instant access on JB Collections."
-  const image = toAbsoluteUrl(file?.cover_url || file?.preview_url || file?.thumbnail_url, baseUrl)
-  const url = `${baseUrl}/download/${slug}`
+  const siteUrl = getSiteUrl()
+  const pageUrl = `${siteUrl}/download/${slug}`
+  const imageUrl = getPreviewImage(file)
+  const title = getTitle(file)
+  const description = getDescription(file)
 
   return {
     title,
     description,
     alternates: {
-      canonical: url,
+      canonical: pageUrl,
     },
     openGraph: {
       title,
       description,
-      url,
+      url: pageUrl,
       siteName: "JB Collections",
+      type: "website",
       images: [
         {
-          url: image,
-          alt: title,
+          url: imageUrl,
+          width: 1200,
+          height: 630,
+          alt: file?.title || "JB Collections preview",
         },
       ],
-      type: "website",
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
-      images: [image],
+      images: [imageUrl],
     },
   }
 }
 
-export default function Page() {
+export default async function DownloadPage({ params }: PageProps) {
+  await params
   return <DownloadPageClient />
 }
