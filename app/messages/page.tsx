@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   Check,
@@ -21,6 +21,9 @@ import {
   Trash2,
   User,
   X,
+  Phone,
+  Video,
+  Info,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import SiteHeader from "@/app/components/SiteHeader"
@@ -88,6 +91,7 @@ type MessageReactionRow = {
   message_id: string
   user_id: string
   emoji: string
+  reaction?: string
   created_at?: string
 }
 
@@ -146,7 +150,12 @@ function MessagesPageContent() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const bottomRef = useRef<HTMLDivElement | null>(null)
+  const messageListRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const lastScrollTopRef = useRef(0)
+  const preserveScrollRef = useRef(false)
+  const stickToBottomRef = useRef(true)
+  const activeConversationRef = useRef<string | null>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const messageActionTimerRef = useRef<NodeJS.Timeout | null>(null)
   const actionMenuRef = useRef<HTMLDivElement | null>(null)
@@ -197,6 +206,11 @@ function MessagesPageContent() {
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; openAbove: boolean } | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [openReactionPickerMessageId, setOpenReactionPickerMessageId] = useState<string | null>(null)
+  const [reactionPickerPosition, setReactionPickerPosition] = useState<{ top: number; left: number } | null>(null)
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
+  const [reactionsEnabled, setReactionsEnabled] = useState(true)
+  const reactionsDisabledRef = useRef(false)
+  const reactionColumnRef = useRef<"emoji" | "reaction" | null>("reaction")
   const [messageReactionsMap, setMessageReactionsMap] = useState<Record<string, MessageReactionRow[]>>({})
   const [reactionBurst, setReactionBurst] = useState<{ messageId: string; emoji: string; key: string } | null>(null)
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
@@ -461,9 +475,34 @@ function MessagesPageContent() {
     }
   }, [supabase, userId, selectedConversationId, conversations])
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+  useLayoutEffect(() => {
+    const el = messageListRef.current
+    if (!el) return
+
+    const applyScroll = () => {
+      if (!preserveScrollRef.current) {
+        el.scrollTop = el.scrollHeight
+        activeConversationRef.current = selectedConversationId
+        return
+      }
+
+      if (stickToBottomRef.current) {
+        el.scrollTop = el.scrollHeight
+      } else {
+        const maxTop = Math.max(0, el.scrollHeight - el.clientHeight)
+        el.scrollTop = Math.min(lastScrollTopRef.current, maxTop)
+      }
+
+      preserveScrollRef.current = false
+      activeConversationRef.current = selectedConversationId
+    }
+
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(applyScroll)
+    } else {
+      applyScroll()
+    }
+  }, [messages, selectedConversationId])
 
   useEffect(() => {
     autoResizeTextarea()
@@ -560,6 +599,93 @@ function MessagesPageContent() {
     emitCoinPopup(0, "Not enough coins")
   }
 
+  function getReactionValue(row: Partial<MessageReactionRow> & Record<string, unknown>) {
+    const emojiValue = typeof row.emoji === "string" ? row.emoji : null
+    const reactionValue = typeof row.reaction === "string" ? row.reaction : null
+    return emojiValue || reactionValue || ""
+  }
+
+  function normalizeReactionRows(rows: Array<Partial<MessageReactionRow> & Record<string, unknown>>) {
+    return rows
+      .map((row) => ({
+        id: typeof row.id === "string" ? row.id : undefined,
+        message_id: typeof row.message_id === "string" ? row.message_id : "",
+        user_id: typeof row.user_id === "string" ? row.user_id : "",
+        emoji: getReactionValue(row),
+        reaction: typeof row.reaction === "string" ? row.reaction : undefined,
+        created_at: typeof row.created_at === "string" ? row.created_at : undefined,
+      }))
+      .filter((row) => row.message_id && row.user_id && row.emoji)
+  }
+
+  async function insertReactionRecord(messageId: string, userIdValue: string, emoji: string) {
+    const preferredColumn = reactionColumnRef.current || "reaction"
+    const payloads = preferredColumn === "emoji"
+      ? [
+          { message_id: messageId, user_id: userIdValue, emoji },
+          { message_id: messageId, user_id: userIdValue, reaction: emoji },
+        ]
+      : [
+          { message_id: messageId, user_id: userIdValue, reaction: emoji },
+          { message_id: messageId, user_id: userIdValue, emoji },
+        ]
+
+    let lastError: unknown = null
+
+    for (const payload of payloads) {
+      const { error } = await supabase
+        .from("conversation_message_reactions")
+        .insert(payload)
+
+      if (!error) {
+        reactionColumnRef.current = "reaction" in payload ? "reaction" : "emoji"
+        return
+      }
+
+      lastError = error
+      const lowered = `${String((error as { message?: string }).message || "")} ${String((error as { details?: string }).details || "")}`.toLowerCase()
+
+      if (lowered.includes("column") || lowered.includes("schema cache") || lowered.includes("could not find")) {
+        continue
+      }
+
+      throw error
+    }
+
+    throw lastError instanceof Error ? lastError : new Error("Failed to insert reaction.")
+  }
+
+
+  function handleMessageListScroll() {
+    const el = messageListRef.current
+    if (!el) return
+
+    lastScrollTopRef.current = el.scrollTop
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    stickToBottomRef.current = distanceFromBottom < 72
+  }
+
+  function captureScrollBeforeMessageRefresh(conversationId: string) {
+    const el = messageListRef.current
+    if (!el) {
+      preserveScrollRef.current = false
+      return
+    }
+
+    const isSameConversation = activeConversationRef.current === conversationId
+    if (!isSameConversation) {
+      preserveScrollRef.current = false
+      lastScrollTopRef.current = 0
+      stickToBottomRef.current = true
+      return
+    }
+
+    lastScrollTopRef.current = el.scrollTop
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    stickToBottomRef.current = distanceFromBottom < 72
+    preserveScrollRef.current = true
+  }
+
 
   function buildConversationUrl(conversationId: string | null) {
     const params = new URLSearchParams(searchParams.toString())
@@ -600,6 +726,7 @@ function MessagesPageContent() {
     setOpenMessageMenuId(null)
     setMenuPosition(null)
     setOpenReactionPickerMessageId(null)
+    setReactionPickerPosition(null)
   }
 
   useEffect(() => {
@@ -658,6 +785,7 @@ function MessagesPageContent() {
 
       if (reactionPickerRef.current && !reactionPickerRef.current.contains(target)) {
         setOpenReactionPickerMessageId(null)
+        setReactionPickerPosition(null)
       }
     }
 
@@ -905,6 +1033,7 @@ function MessagesPageContent() {
 
   async function loadMessages(conversationId: string, withLoader = false) {
     if (withLoader) setLoading(true)
+    captureScrollBeforeMessageRefresh(conversationId)
 
     try {
       const { data, error } = await supabase
@@ -948,36 +1077,56 @@ function MessagesPageContent() {
 
   async function loadMessageReactions(conversationId: string) {
     try {
-      const { data: messageRows, error: messageError } = await supabase
-        .from("conversation_messages")
-        .select("id")
-        .eq("conversation_id", conversationId)
-        .is("deleted_at", null)
+      if (!reactionsEnabled || reactionsDisabledRef.current) {
+        setMessageReactionsMap({})
+        return
+      }
 
-      if (messageError) throw messageError
+      const validMessageIds = messages
+        .map((item) => item.id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
 
-      const messageIds = ((messageRows as { id: string }[] | null) || []).map((item) => item.id)
-
-      if (messageIds.length === 0) {
+      if (validMessageIds.length === 0) {
         setMessageReactionsMap({})
         return
       }
 
       const { data, error } = await supabase
         .from("conversation_message_reactions")
-        .select("id, message_id, user_id, emoji, created_at")
-        .in("message_id", messageIds)
+        .select("*")
+        .in("message_id", validMessageIds)
 
       if (error) {
-        const message = String((error as { message?: string }).message || "")
-        if (message.toLowerCase().includes("relation") || message.toLowerCase().includes("does not exist")) {
+        const message = String((error as { message?: string; details?: string; code?: string }).message || "")
+        const details = String((error as { details?: string }).details || "")
+        const lowered = `${message} ${details}`.toLowerCase()
+
+        if (
+          lowered.includes("relation") ||
+          lowered.includes("does not exist") ||
+          lowered.includes("schema cache") ||
+          lowered.includes("could not find") ||
+          lowered.includes("bad request")
+        ) {
+          reactionsDisabledRef.current = true
+          setReactionsEnabled(false)
+          setOpenReactionPickerMessageId(null)
+          setReactionPickerPosition(null)
           setMessageReactionsMap({})
           return
         }
+
         throw error
       }
 
-      const rows = (data as MessageReactionRow[]) || []
+      const rows = normalizeReactionRows(((data as Array<Partial<MessageReactionRow> & Record<string, unknown>>) || []))
+
+      if (rows.length > 0) {
+        reactionColumnRef.current = rows.some((row) => typeof row.reaction === "string" && row.reaction.length > 0)
+          ? "reaction"
+          : "emoji"
+      }
+
       const nextMap: Record<string, MessageReactionRow[]> = {}
 
       rows.forEach((row) => {
@@ -988,6 +1137,13 @@ function MessagesPageContent() {
       setMessageReactionsMap(nextMap)
     } catch (err) {
       console.error("Load reactions error:", err)
+      const message = String((err as { message?: string; details?: string }).message || "")
+      const details = String((err as { details?: string }).details || "")
+      const lowered = `${message} ${details}`.toLowerCase()
+      if (lowered.includes("400") || lowered.includes("bad request") || lowered.includes("relation") || lowered.includes("schema cache")) {
+        reactionsDisabledRef.current = true
+        setReactionsEnabled(false)
+      }
       setMessageReactionsMap({})
     }
   }
@@ -1767,6 +1923,25 @@ function MessagesPageContent() {
     return names.join(", ") || "No reactions yet"
   }
 
+  function getReactionSkin(emoji: string) {
+    switch (emoji) {
+      case "👍":
+        return "bg-[#e7f3ff] text-[#1877f2] ring-1 ring-[#cfe2ff]"
+      case "❤️":
+        return "bg-[#fff0f3] text-[#f02849] ring-1 ring-[#ffd6dd]"
+      case "😂":
+        return "bg-[#fff7e8] text-[#f7b928] ring-1 ring-[#ffe2a8]"
+      case "😮":
+        return "bg-[#fff7e8] text-[#f7b928] ring-1 ring-[#ffe2a8]"
+      case "😢":
+        return "bg-[#eef6ff] text-[#1877f2] ring-1 ring-[#dbeafe]"
+      case "😡":
+        return "bg-[#fff1eb] text-[#e4602a] ring-1 ring-[#ffd8c7]"
+      default:
+        return "bg-white text-slate-700 ring-1 ring-slate-200"
+    }
+  }
+
   function triggerReactionBurst(messageId: string, emoji: string) {
     const key = `${messageId}-${emoji}-${Date.now()}`
     setReactionBurst({ messageId, emoji, key })
@@ -1794,7 +1969,11 @@ function MessagesPageContent() {
   }
 
   async function toggleReaction(messageId: string, emoji: string) {
-    if (!userId) return
+    if (!userId || !reactionsEnabled) {
+      setOpenReactionPickerMessageId(null)
+      setReactionPickerPosition(null)
+      return
+    }
 
     const previousMap = messageReactionsMap
 
@@ -1813,6 +1992,7 @@ function MessagesPageContent() {
               message_id: messageId,
               user_id: userId,
               emoji,
+              reaction: reactionColumnRef.current === "reaction" ? emoji : undefined,
             },
           ]
 
@@ -1823,42 +2003,28 @@ function MessagesPageContent() {
 
       triggerReactionBurst(messageId, emoji)
 
-      if (existing?.emoji === emoji) {
-        const { error } = await supabase
-          .from("conversation_message_reactions")
-          .delete()
-          .eq("message_id", messageId)
-          .eq("user_id", userId)
+      const { error: deleteError } = await supabase
+        .from("conversation_message_reactions")
+        .delete()
+        .eq("message_id", messageId)
+        .eq("user_id", userId)
 
-        if (error) throw error
-      } else {
-        const { error: deleteError } = await supabase
-          .from("conversation_message_reactions")
-          .delete()
-          .eq("message_id", messageId)
-          .eq("user_id", userId)
+      if (deleteError) throw deleteError
 
-        if (deleteError) throw deleteError
-
-        const { error: insertError } = await supabase
-          .from("conversation_message_reactions")
-          .insert({
-            message_id: messageId,
-            user_id: userId,
-            emoji,
-          })
-
-        if (insertError) throw insertError
+      if (existing?.emoji !== emoji) {
+        await insertReactionRecord(messageId, userId, emoji)
       }
 
       setOpenReactionPickerMessageId(null)
+      setReactionPickerPosition(null)
       if (selectedConversationId) {
         await loadMessageReactions(selectedConversationId)
       }
     } catch (err) {
       console.error("Toggle reaction error:", err)
       setMessageReactionsMap(previousMap)
-      setError("Message reactions need a conversation_message_reactions table in Supabase.")
+      setOpenReactionPickerMessageId(null)
+      setReactionPickerPosition(null)
     }
   }
 
@@ -1924,22 +2090,71 @@ function MessagesPageContent() {
     messageId: string,
     isMine: boolean
   ) {
-    const rect = event.currentTarget.getBoundingClientRect()
+    setHoveredMessageId(messageId)
+    const triggerRect = event.currentTarget.getBoundingClientRect()
+    const bubbleRect = document.getElementById(`message-wrap-${messageId}`)?.getBoundingClientRect()
+    const anchorRect = bubbleRect || triggerRect
     const menuWidth = window.innerWidth < 640 ? Math.min(208, window.innerWidth - 24) : 192
-    const estimatedMenuHeight = isMine ? 270 : 220
+    const estimatedMenuHeight = isMine ? 310 : 256
     const sidePadding = 12
-    const gap = 8
+    const gap = 6
 
-    let left = isMine ? rect.right - menuWidth : rect.left
+    let left = isMine
+      ? anchorRect.left - menuWidth - gap
+      : anchorRect.right + gap
+
+    if (window.innerWidth < 900) {
+      left = isMine ? anchorRect.left - menuWidth + 20 : anchorRect.right - 20
+    }
+
     left = Math.max(sidePadding, Math.min(left, window.innerWidth - menuWidth - sidePadding))
 
-    const openAbove = rect.bottom + estimatedMenuHeight + 18 > window.innerHeight && rect.top > estimatedMenuHeight
-    const top = openAbove
-      ? Math.max(sidePadding, rect.top - gap)
-      : Math.min(rect.bottom + gap, window.innerHeight - estimatedMenuHeight - sidePadding)
+    let top = anchorRect.top + 4
+    if (top + estimatedMenuHeight > window.innerHeight - sidePadding) {
+      top = window.innerHeight - estimatedMenuHeight - sidePadding
+    }
+    if (top < sidePadding) {
+      top = sidePadding
+    }
 
-    setMenuPosition({ top, left, openAbove })
+    setReactionPickerPosition(null)
+    setMenuPosition({ top, left, openAbove: false })
     setOpenMessageMenuId((prev) => (prev === messageId ? null : messageId))
+  }
+
+  function openReactionPickerForMessage(messageId: string, isMine: boolean) {
+    const bubbleRect = document.getElementById(`message-wrap-${messageId}`)?.getBoundingClientRect()
+
+    if (!bubbleRect) {
+      setOpenReactionPickerMessageId(messageId)
+      setReactionPickerPosition(null)
+      return
+    }
+
+    const pickerWidth = Math.min(320, window.innerWidth - 24)
+    const pickerHeight = 64
+    const sidePadding = 12
+    const verticalGap = 8
+
+    let left = bubbleRect.left + (bubbleRect.width - pickerWidth) / 2
+
+    if (isMine) {
+      left = Math.min(left, bubbleRect.right - pickerWidth + 8)
+    } else {
+      left = Math.max(left, bubbleRect.left - 8)
+    }
+
+    left = Math.max(sidePadding, Math.min(left, window.innerWidth - pickerWidth - sidePadding))
+
+    let top = bubbleRect.top - pickerHeight - verticalGap
+    if (top < sidePadding) {
+      top = bubbleRect.bottom + verticalGap
+    }
+
+    setOpenMessageMenuId(null)
+    setMenuPosition(null)
+    setReactionPickerPosition({ top, left })
+    setOpenReactionPickerMessageId(messageId)
   }
 
   function startLongPressForMessage(messageId: string) {
@@ -2244,18 +2459,18 @@ function MessagesPageContent() {
     <>
       <SiteHeader />
 
-      <main className="min-h-screen bg-[#eef2f7] pt-24 text-slate-900 sm:pt-28">
+      <main className="relative min-h-screen overflow-x-hidden bg-[#eef2f7] pt-24 text-slate-900 sm:pt-28">
         <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(96,165,250,0.12),_transparent_28%),linear-gradient(180deg,_#f7faff_0%,_#eef2f7_100%)]" />
 
         <div className="mx-auto w-full max-w-[1800px] px-4 pb-6 sm:px-6 sm:pb-8 lg:px-8">
           <section className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.12)] sm:rounded-[30px]">
             <div className="grid min-h-[calc(100vh-8rem)] grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]">
               <aside className="hidden border-r border-slate-200 bg-[#f8fafc] lg:flex lg:flex-col">
-                <div className="border-b border-white/10 px-5 py-5">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-sky-300/80">
+                <div className="border-b border-slate-200 px-5 py-5">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#1877f2]">
                     Messenger
                   </div>
-                  <h2 className="mt-2 flex items-center gap-2 text-2xl font-black text-white">
+                  <h2 className="mt-2 flex items-center gap-2 text-2xl font-black text-slate-900">
                     <span>Chats</span>
                     {totalUnreadCount > 0 && (
                       <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-red-500 px-2 text-xs font-bold text-white shadow-lg shadow-red-950/40">
@@ -2263,12 +2478,12 @@ function MessagesPageContent() {
                       </span>
                     )}
                   </h2>
-                  <p className="mt-1 text-sm text-slate-300">
+                  <p className="mt-1 text-sm text-slate-500">
                     Find users and message them directly
                   </p>
                 </div>
 
-                <div className="border-b border-white/10 p-4">
+                <div className="border-b border-slate-200 p-4">
                   <div className="relative">
                     <Search
                       size={16}
@@ -2278,16 +2493,16 @@ function MessagesPageContent() {
                       value={userSearch}
                       onChange={(e) => setUserSearch(e.target.value)}
                       placeholder="Search users to start a chat..."
-                      className="w-full rounded-2xl border border-white/10 bg-white/[0.05] py-3 pl-11 pr-4 text-sm text-white outline-none placeholder:text-slate-400 focus:border-sky-400"
+                      className="w-full rounded-full border border-slate-200 bg-[#eef2f7] py-3 pl-11 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-[#1877f2]"
                     />
                   </div>
 
                   {(userSearch.trim() || searchingUsers || userResults.length > 0) && (
-                    <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.04]">
+                    <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white">
                       {searchingUsers ? (
-                        <div className="px-4 py-3 text-sm text-slate-300">Searching users...</div>
+                        <div className="px-4 py-3 text-sm text-slate-500">Searching users...</div>
                       ) : userResults.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-slate-300">No users found.</div>
+                        <div className="px-4 py-3 text-sm text-slate-500">No users found.</div>
                       ) : (
                         userResults.map((profile) => (
                           <button
@@ -2295,9 +2510,9 @@ function MessagesPageContent() {
                             type="button"
                             onClick={() => void startConversationWithUser(profile.id)}
                             disabled={startingChatUserId === profile.id}
-                            className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left transition hover:bg-white/[0.05] disabled:opacity-60"
+                            className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 disabled:opacity-60"
                           >
-                            <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-slate-200">
+                            <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white">
                               <User size={16} />
                               {isOnline(profile.id) && (
                                 <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#0b1220] bg-emerald-400" />
@@ -2305,7 +2520,7 @@ function MessagesPageContent() {
                             </div>
 
                             <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-bold text-white">
+                              <div className="truncate text-sm font-bold text-slate-900">
                                 {getDisplayName(profile)}
                               </div>
                               <div className="truncate text-xs text-slate-400">
@@ -2313,7 +2528,7 @@ function MessagesPageContent() {
                               </div>
                             </div>
 
-                            <div className="text-xs font-semibold text-sky-300">
+                            <div className="text-xs font-semibold text-[#1877f2]">
                               {startingChatUserId === profile.id ? "Opening..." : "Message"}
                             </div>
                           </button>
@@ -2325,11 +2540,11 @@ function MessagesPageContent() {
 
                 <div className="flex-1 overflow-y-auto p-3">
                   {loading ? (
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 text-sm text-slate-300">
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-500">
                       Loading conversations...
                     </div>
                   ) : filteredConversations.length === 0 ? (
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-5 text-sm text-slate-300">
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
                       No conversations yet. Search a user above to start chatting.
                     </div>
                   ) : (
@@ -2365,8 +2580,8 @@ function MessagesPageContent() {
                             }}
                             className={`flex w-full items-center gap-3 rounded-[20px] border px-3.5 py-3 text-left transition ${
                               active
-                                ? "border-sky-400/20 bg-sky-500/10"
-                                : "border-transparent bg-white/[0.03] hover:border-white/10 hover:bg-white/[0.05]"
+                                ? "border-[#cfe2ff] bg-[#e7f3ff]"
+                                : "border-transparent bg-white hover:border-slate-200 hover:bg-slate-50"
                             }`}
                           >
                             <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white shadow-lg shadow-blue-950/40">
@@ -2378,10 +2593,10 @@ function MessagesPageContent() {
 
                             <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
                               <div className="min-w-0 flex-1">
-                                <div className="truncate text-base font-bold text-white">
+                                <div className="truncate text-base font-bold text-slate-900">
                                   {otherName}
                                 </div>
-                                <div className="mt-1 truncate text-sm text-slate-300">
+                                <div className="mt-1 truncate text-sm text-slate-500">
                                   {subtitle}
                                 </div>
                               </div>
@@ -2400,14 +2615,14 @@ function MessagesPageContent() {
                 </div>
               </aside>
 
-              <section className="flex min-h-[calc(100vh-8rem)] flex-col bg-[#f5f7fb]">
+              <section className="flex min-h-[calc(100vh-8rem)] flex-col overflow-x-hidden bg-[#f5f7fb]">
                 <div className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
                       <button
                         type="button"
                         onClick={() => setMobileChatsOpen(true)}
-                        className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sky-300 transition hover:bg-white/[0.1] lg:hidden"
+                        className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-[#f0f2f5] text-slate-600 transition hover:bg-slate-200 lg:hidden"
                         aria-label="Open chats"
                       >
                         <MessageSquare size={18} />
@@ -2427,12 +2642,12 @@ function MessagesPageContent() {
                       </div>
 
                       <div className="min-w-0">
-                        <h1 className="truncate text-xl font-black text-white sm:text-2xl">
+                        <h1 className="truncate text-xl font-black text-slate-900 sm:text-2xl">
                           {selectedConversation
                             ? getDisplayName(selectedConversation.otherUser)
                             : "Messenger"}
                         </h1>
-                        <p className="truncate text-sm text-emerald-300">
+                        <p className="truncate text-sm text-emerald-500">
                           {selectedConversation?.otherParticipant?.user_id
                             ? getPresenceText(selectedConversation.otherParticipant.user_id)
                             : "Search a user to start a chat"}
@@ -2441,14 +2656,32 @@ function MessagesPageContent() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
+                      {[
+                        { label: "Call", icon: Phone },
+                        { label: "Video", icon: Video },
+                        { label: "Conversation info", icon: Info },
+                      ].map(({ label, icon: Icon }) => (
+                        <button
+                          key={label}
+                          type="button"
+                          disabled={!selectedConversation}
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#e7f3ff] text-[#1877f2] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+                          aria-label={label}
+                          title={label}
+                        >
+                          <Icon size={18} />
+                        </button>
+                      ))}
+
                       <button
                         type="button"
                         onClick={() => setShowSharedMediaPanel(true)}
                         disabled={!selectedConversation}
-                        className="inline-flex h-11 items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-semibold text-slate-200 transition hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#e7f3ff] text-[#1877f2] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label="Shared media"
+                        title="Shared media"
                       >
-                        <Paperclip size={16} />
-                        <span className="hidden sm:inline">Shared media</span>
+                        <Paperclip size={17} />
                       </button>
                     </div>
                   </div>
@@ -2463,13 +2696,13 @@ function MessagesPageContent() {
                         value={userSearch}
                         onChange={(e) => setUserSearch(e.target.value)}
                         placeholder="Search users to start a chat..."
-                        className="w-full rounded-2xl border border-white/10 bg-white/[0.05] py-3 pl-11 pr-14 text-sm text-white outline-none placeholder:text-slate-400 focus:border-sky-400"
+                        className="w-full rounded-full border border-slate-200 bg-[#eef2f7] py-3 pl-11 pr-14 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-[#1877f2]"
                       />
 
                       <button
                         type="button"
                         onClick={() => setMobileChatsOpen(true)}
-                        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sky-300 transition hover:bg-white/[0.1]"
+                        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100"
                         aria-label="Open chats list"
                         title="Open chats list"
                       >
@@ -2478,11 +2711,11 @@ function MessagesPageContent() {
                     </div>
 
                     {(userSearch.trim() || searchingUsers || userResults.length > 0) && (
-                      <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.04]">
+                      <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white">
                         {searchingUsers ? (
-                          <div className="px-4 py-3 text-sm text-slate-300">Searching users...</div>
+                          <div className="px-4 py-3 text-sm text-slate-500">Searching users...</div>
                         ) : userResults.length === 0 ? (
-                          <div className="px-4 py-3 text-sm text-slate-300">No users found.</div>
+                          <div className="px-4 py-3 text-sm text-slate-500">No users found.</div>
                         ) : (
                           userResults.map((profile) => (
                             <button
@@ -2490,9 +2723,9 @@ function MessagesPageContent() {
                               type="button"
                               onClick={() => void startConversationWithUser(profile.id)}
                               disabled={startingChatUserId === profile.id}
-                              className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left transition hover:bg-white/[0.05] disabled:opacity-60"
+                              className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 disabled:opacity-60"
                             >
-                              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-slate-200">
+                              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white">
                                 <User size={16} />
                                 {isOnline(profile.id) && (
                                   <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#0b1220] bg-emerald-400" />
@@ -2500,7 +2733,7 @@ function MessagesPageContent() {
                               </div>
 
                               <div className="min-w-0 flex-1">
-                                <div className="truncate text-sm font-bold text-white">
+                                <div className="truncate text-sm font-bold text-slate-900">
                                   {getDisplayName(profile)}
                                 </div>
                                 <div className="truncate text-xs text-slate-400">
@@ -2508,7 +2741,7 @@ function MessagesPageContent() {
                                 </div>
                               </div>
 
-                              <div className="text-xs font-semibold text-sky-300">
+                              <div className="text-xs font-semibold text-[#1877f2]">
                                 {startingChatUserId === profile.id ? "Opening..." : "Message"}
                               </div>
                             </button>
@@ -2519,35 +2752,35 @@ function MessagesPageContent() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.01)_0%,rgba(255,255,255,0.00)_100%)] px-2 py-3 sm:px-4 sm:py-4">
+                <div ref={messageListRef} onScroll={handleMessageListScroll} className="flex-1 overflow-y-auto overflow-x-hidden bg-[#f5f7fb] px-2 py-3 sm:px-4 sm:py-4">
                   {loading ? (
-                    <div className="mx-auto max-w-3xl rounded-[24px] border border-white/10 bg-white/[0.05] p-4 text-sm text-slate-300 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+                    <div className="mx-auto max-w-3xl rounded-[24px] border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
                       Loading messenger...
                     </div>
                   ) : !selectedConversation ? (
-                    <div className="mx-auto mt-14 max-w-xl rounded-[30px] border border-white/10 bg-white/[0.05] px-6 py-12 text-center shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+                    <div className="mx-auto mt-14 max-w-xl rounded-[30px] border border-slate-200 bg-white px-6 py-12 text-center shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
                       <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-sky-500/10 text-sky-300">
                         <MessageSquare size={34} />
                       </div>
-                      <h3 className="mt-5 text-3xl font-black text-white">Start messaging</h3>
-                      <p className="mx-auto mt-3 max-w-md text-base leading-7 text-slate-300">
+                      <h3 className="mt-5 text-3xl font-black text-slate-900">Start messaging</h3>
+                      <p className="mx-auto mt-3 max-w-md text-base leading-7 text-slate-500">
                         Search a user from the left side and start a real-time conversation.
                       </p>
                     </div>
                   ) : messages.length === 0 ? (
-                    <div className="mx-auto mt-14 max-w-xl rounded-[30px] border border-white/10 bg-white/[0.05] px-6 py-12 text-center shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+                    <div className="mx-auto mt-14 max-w-xl rounded-[30px] border border-slate-200 bg-white px-6 py-12 text-center shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
                       <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-sky-500/10 text-sky-300">
                         <User size={34} />
                       </div>
-                      <h3 className="mt-5 text-3xl font-black text-white">
+                      <h3 className="mt-5 text-3xl font-black text-slate-900">
                         Message {getDisplayName(selectedConversation.otherUser)}
                       </h3>
-                      <p className="mx-auto mt-3 max-w-md text-base leading-7 text-slate-300">
+                      <p className="mx-auto mt-3 max-w-md text-base leading-7 text-slate-500">
                         This conversation is empty. Say hello and start chatting.
                       </p>
                     </div>
                   ) : (
-                    <div className="mx-auto flex w-full max-w-4xl flex-col gap-1.5 sm:gap-2">
+                    <div className="mx-auto flex w-full max-w-4xl flex-col gap-1.5 overflow-x-hidden sm:gap-2">
                       {messages.map((item, index) => {
                         const isMine = item.sender_id === userId
                         const previous = messages[index - 1]
@@ -2568,12 +2801,12 @@ function MessagesPageContent() {
                         return (
                           <div
                             key={item.id}
-                            className={`group flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"} ${previous?.sender_id === item.sender_id ? "mt-0.5" : "mt-3"}`}
+                            className={`group flex max-w-full items-end gap-1.5 ${isMine ? "justify-end" : "justify-start"} ${previous?.sender_id === item.sender_id ? "mt-0.5" : "mt-2"}`}
                           >
                             {!isMine && (
                               <div className="w-8 shrink-0">
                                 {showAvatar ? (
-                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white shadow-md">
+                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white shadow-sm">
                                     <CornerDownLeft size={14} />
                                   </div>
                                 ) : null}
@@ -2581,10 +2814,15 @@ function MessagesPageContent() {
                             )}
 
                             <div
-                              className={`relative max-w-[88%] sm:max-w-[76%] ${isMine ? "order-1" : ""}`}
+                              id={`message-wrap-${item.id}`}
+                              className={`relative max-w-[80%] sm:max-w-[66%] ${isMine ? "order-1" : ""}`}
+                              onMouseEnter={() => setHoveredMessageId(item.id)}
+                              onMouseLeave={() => {
+                                cancelLongPress()
+                                setHoveredMessageId((current) => (current === item.id ? null : current))
+                              }}
                               onMouseDown={() => startLongPressForMessage(item.id)}
                               onMouseUp={cancelLongPress}
-                              onMouseLeave={cancelLongPress}
                               onTouchStart={() => startLongPressForMessage(item.id)}
                               onTouchEnd={cancelLongPress}
                               onTouchCancel={cancelLongPress}
@@ -2595,11 +2833,35 @@ function MessagesPageContent() {
                                 </div>
                               ) : null}
 
-                              <div className={`relative ${isMine ? "pr-10 sm:pr-12" : "pl-10 sm:pl-12"}`}>
+                              <div className={`relative max-w-full ${isMine ? "pr-7 sm:pr-8" : "pl-7 sm:pl-8"}`}>
+                                {reactionsEnabled && (hoveredMessageId === item.id || openReactionPickerMessageId === item.id) && !isMenuOpen && (
+                                  <div
+                                    className={`absolute -top-12 z-20 hidden rounded-full border border-slate-200 bg-white/95 px-1.5 py-1 shadow-[0_14px_34px_rgba(15,23,42,0.14)] backdrop-blur sm:flex ${
+                                      isMine ? "left-0" : "right-0"
+                                    }`}
+                                  >
+                                    {QUICK_REACTIONS.map((emoji) => {
+                                      const activeReaction = getMyReaction(item.id)?.emoji === emoji
+                                      return (
+                                        <button
+                                          key={`hover-${item.id}-${emoji}`}
+                                          type="button"
+                                          onClick={() => void toggleReaction(item.id, emoji)}
+                                                                                    className={`mx-0.5 flex h-9 w-9 items-center justify-center rounded-full text-[20px] transition duration-200 hover:-translate-y-2 hover:scale-[1.24] hover:animate-[fbReactionPop_0.28s_ease-out] ${
+                                            activeReaction ? getReactionSkin(emoji) : "hover:bg-slate-100"
+                                          }`}
+                                        >
+                                          <span className="leading-none transition-transform duration-200 group-hover:scale-[1.16]">{emoji}</span>
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+
                                 <button
                                   type="button"
                                   onClick={(event) => openMessageMenu(event, item.id, isMine)}
-                                  className={`absolute top-3 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-lg transition hover:bg-slate-100 ${
+                                  className={`absolute top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-md transition hover:bg-slate-100 ${
                                     isMine
                                       ? "left-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                                       : "right-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
@@ -2623,33 +2885,36 @@ function MessagesPageContent() {
 
                                     <div
                                       ref={actionMenuRef}
-                                      className="fixed z-[90] w-[min(208px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-slate-200/10 bg-[#111827]/95 shadow-[0_24px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+                                      className="fixed z-[90] w-[min(208px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
                                       style={{
-                                        top: menuPosition.openAbove ? menuPosition.top : undefined,
-                                        bottom: menuPosition.openAbove ? undefined : undefined,
+                                        top: menuPosition.top,
                                         left: menuPosition.left,
-                                        transform: menuPosition.openAbove ? "translateY(-100%)" : "translateY(0)",
                                       }}
                                     >
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setOpenReactionPickerMessageId((current) =>
-                                            current === item.id ? null : item.id
-                                          )
-                                          setOpenMessageMenuId(null)
-                                          setMenuPosition(null)
-                                        }}
-                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
-                                      >
-                                        <Smile size={15} />
-                                        React
-                                      </button>
+                                      {reactionsEnabled && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (openReactionPickerMessageId === item.id) {
+                                              setOpenReactionPickerMessageId(null)
+                                              setReactionPickerPosition(null)
+                                            } else {
+                                              openReactionPickerForMessage(item.id, isMine)
+                                            }
+                                            setOpenMessageMenuId(null)
+                                            setMenuPosition(null)
+                                          }}
+                                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                                        >
+                                          <Smile size={15} />
+                                          React
+                                        </button>
+                                      )}
 
                                       <button
                                         type="button"
                                         onClick={() => startReply(item)}
-                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
+                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
                                       >
                                         <Reply size={15} />
                                         Reply
@@ -2658,7 +2923,7 @@ function MessagesPageContent() {
                                       <button
                                         type="button"
                                         onClick={() => openForwardModal(item)}
-                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
+                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
                                       >
                                         <Forward size={15} />
                                         Forward
@@ -2667,7 +2932,7 @@ function MessagesPageContent() {
                                       <button
                                         type="button"
                                         onClick={() => deleteForMe(item.id)}
-                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
+                                        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
                                       >
                                         <Trash2 size={15} />
                                         Delete for me
@@ -2677,7 +2942,7 @@ function MessagesPageContent() {
                                         <button
                                           type="button"
                                           onClick={() => startEditing(item)}
-                                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
+                                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
                                         >
                                           <Pencil size={15} />
                                           {isEditingThis ? "Editing" : "Edit"}
@@ -2688,7 +2953,7 @@ function MessagesPageContent() {
                                         <button
                                           type="button"
                                           onClick={() => void deleteMyMessage(item.id, item.sender_id)}
-                                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-red-300 transition hover:bg-red-500/10"
+                                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-red-600 transition hover:bg-red-50"
                                         >
                                           <Trash2 size={15} />
                                           Delete
@@ -2701,7 +2966,8 @@ function MessagesPageContent() {
                                 {openReactionPickerMessageId === item.id && (
                                   <div
                                     ref={reactionPickerRef}
-                                    className={`absolute z-30 ${isMine ? "left-0" : "right-0"} -top-14 rounded-full border border-white/10 bg-[#091220]/95 px-2 py-2 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur-md`}
+                                    className="fixed z-[95] rounded-full border border-slate-200 bg-white/98 px-2 py-2 shadow-[0_24px_50px_rgba(15,23,42,0.18)] backdrop-blur animate-[fadeIn_0.16s_ease-out]"
+                                    style={reactionPickerPosition ? { top: reactionPickerPosition.top, left: reactionPickerPosition.left } : undefined}
                                   >
                                     <div className="flex items-center gap-1">
                                       {QUICK_REACTIONS.map((emoji) => {
@@ -2711,9 +2977,8 @@ function MessagesPageContent() {
                                             key={`${item.id}-${emoji}`}
                                             type="button"
                                             onClick={() => void toggleReaction(item.id, emoji)}
-                                            title={getReactionTooltipText(item.id, emoji)}
-                                            className={`flex h-9 w-9 items-center justify-center rounded-full text-lg transition duration-150 hover:-translate-y-1 hover:scale-125 ${
-                                              activeReaction ? "bg-sky-500/20 ring-1 ring-sky-400/40" : "hover:bg-white/[0.08]"
+                                                                                        className={`group relative flex h-10 w-10 items-center justify-center rounded-full text-[22px] transition duration-200 hover:-translate-y-2 hover:scale-[1.24] hover:animate-[fbReactionPop_0.28s_ease-out] ${
+                                              activeReaction ? getReactionSkin(emoji) : "hover:bg-slate-100"
                                             }`}
                                           >
                                             {emoji}
@@ -2728,7 +2993,7 @@ function MessagesPageContent() {
                                   <div className="pointer-events-none absolute inset-x-0 -top-12 z-20 flex justify-center">
                                     <div
                                       key={reactionBurst.key}
-                                      className="select-none text-3xl drop-shadow-[0_10px_24px_rgba(0,0,0,0.35)] animate-[bounce_0.7s_ease-out]"
+                                      className="select-none text-3xl drop-shadow-[0_10px_24px_rgba(0,0,0,0.35)] animate-[fbReactionBurst_0.78s_cubic-bezier(.22,1,.36,1)]"
                                     >
                                       {reactionBurst.emoji}
                                     </div>
@@ -2739,9 +3004,8 @@ function MessagesPageContent() {
                                   className={`rounded-[22px] px-3 py-2.5 text-[14px] leading-5 shadow-[0_6px_18px_rgba(15,23,42,0.10)] transition-all sm:px-3.5 sm:py-2.5 ${
                                     isMine
                                       ? "rounded-br-md bg-[#0084ff] text-white"
-                                      : "rounded-bl-md border border-slate-200 bg-white text-slate-800"
+                                      : "rounded-bl-md bg-[#e4e6eb] text-slate-900"
                                   }`}
-                                  onMouseEnter={() => setOpenReactionPickerMessageId(item.id)}
                                 >
                                   {item.forwarded_from_message_id && (
                                     <div
@@ -2800,7 +3064,7 @@ function MessagesPageContent() {
 
                               {getReactionSummary(item.id).length > 0 && (
                                 <div
-                                  className={`mt-1 flex flex-wrap items-center gap-1 px-2 ${
+                                  className={`-mt-1.5 flex flex-wrap items-center gap-1 px-2 ${
                                     isMine ? "justify-end" : "justify-start"
                                   }`}
                                 >
@@ -2812,15 +3076,13 @@ function MessagesPageContent() {
                                         type="button"
                                         title={getReactionTooltipText(item.id, reaction.emoji)}
                                         onClick={() => void toggleReaction(item.id, reaction.emoji)}
-                                        className={`group relative inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold shadow-sm transition duration-150 hover:-translate-y-0.5 hover:scale-105 hover:brightness-110 ${
-                                          activeReaction
-                                            ? "border-sky-400/40 bg-sky-500/15 text-sky-100"
-                                            : "border-white/10 bg-white/[0.06] text-slate-200"
+                                        className={`group relative inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold shadow-[0_6px_18px_rgba(15,23,42,0.10)] transition duration-200 hover:-translate-y-1 hover:scale-[1.08] hover:animate-[fbReactionPill_0.24s_ease-out] ${
+                                          activeReaction ? getReactionSkin(reaction.emoji) : "border-slate-200 bg-white text-slate-700"
                                         }`}
                                       >
-                                        <span>{reaction.emoji}</span>
+                                        <span className="text-[13px] leading-none">{reaction.emoji}</span>
                                         <span>{reaction.count}</span>
-                                        <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-full border border-white/10 bg-[#08111f]/95 px-2.5 py-1 text-[10px] font-medium text-white shadow-[0_10px_24px_rgba(0,0,0,0.35)] group-hover:block">
+                                        <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-medium text-white shadow-[0_10px_24px_rgba(15,23,42,0.16)] group-hover:block">
                                           {getReactionTooltipText(item.id, reaction.emoji)}
                                         </span>
                                       </button>
@@ -2843,16 +3105,16 @@ function MessagesPageContent() {
                                 {isMine && isMyLatest && isLastOfGroup && (
                                   lastSeenByOther ? (
                                     <span
-                                      className="inline-flex items-center gap-1.5 font-medium text-slate-300"
+                                      className="inline-flex items-center gap-1.5 font-medium text-slate-500"
                                       title={`Seen by ${getDisplayName(selectedConversation?.otherUser || null)}`}
                                     >
-                                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white/15 text-[9px] text-white">
+                                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[9px] text-slate-700">
                                         <User size={9} />
                                       </span>
                                       Seen
                                     </span>
                                   ) : (
-                                    <span className="inline-flex items-center gap-1 font-medium text-slate-400">
+                                    <span className="inline-flex items-center gap-1 font-medium text-slate-500">
                                       <Check size={12} />
                                       Sent
                                     </span>
@@ -2864,7 +3126,7 @@ function MessagesPageContent() {
                             {isMine && (
                               <div className="w-8 shrink-0">
                                 {showAvatar ? (
-                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-slate-200">
+                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-slate-600">
                                     <User size={14} />
                                   </div>
                                 ) : null}
@@ -2882,11 +3144,11 @@ function MessagesPageContent() {
                             </div>
                           </div>
 
-                          <div className="rounded-3xl rounded-bl-lg border border-white/10 bg-white/[0.07] px-4 py-3 text-sm text-slate-100 shadow-[0_10px_30px_rgba(0,0,0,0.18)]">
+                          <div className="rounded-3xl rounded-bl-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
                             <div className="flex items-center gap-1">
-                              <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.3s]" />
-                              <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.15s]" />
-                              <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-slate-300" />
+                              <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.3s]" />
+                              <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.15s]" />
+                              <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-slate-400" />
                             </div>
                           </div>
                         </div>
@@ -2897,28 +3159,22 @@ function MessagesPageContent() {
                   )}
                 </div>
 
-                <div className="sticky bottom-0 border-t border-white/10 bg-[#0b1220]/95 px-2 py-2 backdrop-blur-xl sm:px-4">
+                <div className="sticky bottom-0 border-t border-slate-200 bg-white/95 px-2 py-2 backdrop-blur-xl sm:px-4">
                   <div className="mx-auto max-w-4xl">
-                    {(success || error) && (
-                      <div
-                        className={`mb-3 rounded-2xl border px-4 py-3 text-sm font-medium ${
-                          success
-                            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
-                            : "border-red-500/20 bg-red-500/10 text-red-300"
-                        }`}
-                      >
-                        {success || error}
+                    {success && (
+                      <div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                        {success}
                       </div>
                     )}
 
                     {(replyingTo || editingMessageId) && (
-                      <div className="mb-3 rounded-[24px] border border-sky-400/30 bg-gradient-to-r from-sky-500/12 to-cyan-400/10 px-4 py-3 shadow-[0_0_0_1px_rgba(56,189,248,0.12)]">
+                      <div className="mb-3 rounded-[24px] border border-[#cfe2ff] bg-[#f4f8ff] px-4 py-3 shadow-[0_0_0_1px_rgba(24,119,242,0.08)]">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="text-xs font-bold uppercase tracking-[0.16em] text-sky-300">
+                            <div className="text-xs font-bold uppercase tracking-[0.16em] text-[#1877f2]">
                               {editingMessageId ? "Editing message" : "Replying to message"}
                             </div>
-                            <div className="mt-1 line-clamp-2 text-sm font-medium text-slate-100">
+                            <div className="mt-1 line-clamp-2 text-sm font-medium text-slate-700">
                               {editingMessageId
                                 ? getMessagePreviewText(messageMap.get(editingMessageId) || null)
                                 : getMessagePreviewText(replyingTo)}
@@ -2931,7 +3187,7 @@ function MessagesPageContent() {
                               setReplyingTo(null)
                               cancelEditing()
                             }}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-300 hover:bg-white/[0.08]"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100"
                           >
                             <X size={16} />
                           </button>
@@ -2942,25 +3198,25 @@ function MessagesPageContent() {
                     <form onSubmit={handleSendMessage} className="space-y-2">
                       <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex flex-wrap items-center gap-2">
-                          <div className={`rounded-full border px-3 py-1.5 text-xs font-bold ${coinShake ? "border-red-400/40 bg-red-500/15 text-red-200" : "border-amber-300/20 bg-amber-500/10 text-amber-200"}`}>
+                          <div className={`rounded-full border px-3 py-1.5 text-xs font-bold ${coinShake ? "border-red-200 bg-red-50 text-red-600" : "border-slate-200 bg-white text-slate-700"}`}>
                             Wallet: {myCoins.toLocaleString()} 🪙
                           </div>
                           {!editingMessageId && (
-                            <div className="rounded-full border border-sky-400/20 bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-200">
+                            <div className="rounded-full border border-[#cfe2ff] bg-[#e7f3ff] px-3 py-1.5 text-xs font-bold text-[#1877f2]">
                               Cost: {messageSendCost} 🪙
                             </div>
                           )}
                         </div>
                         {!editingMessageId && (
-                          <div className="text-xs font-semibold text-slate-400">
+                          <div className="text-xs font-semibold text-slate-500">
                             Text message = 5 🪙 • With attachment = 10 🪙
                           </div>
                         )}
                       </div>
 
-                      <div className={`relative rounded-[28px] border bg-[#f8fafc] p-1.5 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition sm:rounded-[30px] ${coinShake ? "border-red-400/40" : "border-slate-200"}`}>
+                      <div className={`relative rounded-[28px] border bg-white p-1.5 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition sm:rounded-[30px] ${coinShake ? "border-red-300" : "border-slate-200"}`}>
                         <div className="flex items-end gap-1.5 sm:gap-2">
-                          <label className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-sky-300 transition hover:bg-white/[0.08] sm:h-11 sm:w-11">
+                          <label className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#1877f2] transition hover:bg-slate-100 sm:h-11 sm:w-11">
                             <Paperclip size={20} />
                             <input
                               id="attachment-input"
@@ -2975,15 +3231,15 @@ function MessagesPageContent() {
                             <button
                               type="button"
                               onClick={() => setShowEmojiPicker((prev) => !prev)}
-                              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#0084ff] transition hover:bg-slate-100 sm:h-11 sm:w-11"
+                              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#1877f2] transition hover:bg-slate-100 sm:h-11 sm:w-11"
                               title="Open emoji picker"
                             >
                               <Smile size={20} />
                             </button>
 
                             {showEmojiPicker && (
-                              <div className="absolute bottom-14 left-0 z-30 w-72 rounded-[24px] border border-white/10 bg-[#091220]/95 p-3 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur-md">
-                                <div className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-sky-300">
+                              <div className="absolute bottom-14 left-0 z-30 w-72 rounded-[24px] border border-slate-200 bg-white p-3 shadow-[0_20px_40px_rgba(15,23,42,0.16)]">
+                                <div className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-[#1877f2]">
                                   Emoticons
                                 </div>
                                 <div className="grid grid-cols-6 gap-2">
@@ -2992,7 +3248,7 @@ function MessagesPageContent() {
                                       key={emoji}
                                       type="button"
                                       onClick={() => appendEmoji(emoji)}
-                                      className="flex h-10 w-10 items-center justify-center rounded-2xl text-xl transition hover:bg-white/[0.08]"
+                                      className="flex h-10 w-10 items-center justify-center rounded-2xl text-xl transition hover:bg-slate-100"
                                     >
                                       {emoji}
                                     </button>
@@ -3016,7 +3272,7 @@ function MessagesPageContent() {
                             }
                             rows={1}
                             disabled={!selectedConversationId}
-                            className="min-h-[42px] max-h-[120px] flex-1 resize-none overflow-y-auto rounded-[24px] bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[44px] sm:max-h-[140px] sm:py-3"
+                            className="min-h-[42px] max-h-[120px] flex-1 resize-none overflow-y-auto rounded-full bg-[#f0f2f5] px-4 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-500 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[44px] sm:max-h-[140px] sm:py-3"
                           />
 
                           <button
@@ -3026,7 +3282,7 @@ function MessagesPageContent() {
                               editingMessageId
                                 ? "bg-emerald-500 hover:bg-emerald-400"
                                 : canAffordCurrentMessage
-                                  ? "bg-[#0084ff] hover:brightness-110"
+                                  ? "bg-[#1877f2] hover:brightness-110"
                                   : "bg-red-500/80"
                             } disabled:cursor-not-allowed disabled:opacity-60`}
                             title={editingMessageId ? "Save edit" : `Send message (${messageSendCost} JB Coins)`}
@@ -3044,12 +3300,12 @@ function MessagesPageContent() {
                         </div>
 
                         {attachment && !editingMessageId && (
-                          <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl bg-white/[0.06] px-3 py-2 text-xs font-medium text-slate-200">
+                          <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl bg-[#f0f2f5] px-3 py-2 text-xs font-medium text-slate-600">
                             <span className="truncate">Attached: {attachment.name}</span>
                             <button
                               type="button"
                               onClick={() => setAttachment(null)}
-                              className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-300 hover:bg-white/[0.08]"
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-500 hover:bg-slate-200"
                               aria-label="Remove attachment"
                             >
                               <X size={14} />
@@ -3085,13 +3341,13 @@ function MessagesPageContent() {
             />
 
             <div className="absolute left-0 top-0 h-full w-[88%] max-w-sm border-r border-white/10 bg-[#020617] shadow-[0_25px_80px_rgba(0,0,0,0.45)]">
-              <div className="border-b border-white/10 px-5 py-5">
+              <div className="border-b border-slate-200 px-5 py-5">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-sky-300/80">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#1877f2]">
                       Messenger
                     </div>
-                    <h2 className="mt-2 flex items-center gap-2 text-2xl font-black text-white">
+                    <h2 className="mt-2 flex items-center gap-2 text-2xl font-black text-slate-900">
                     <span>Chats</span>
                     {totalUnreadCount > 0 && (
                       <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-red-500 px-2 text-xs font-bold text-white shadow-lg shadow-red-950/40">
@@ -3099,7 +3355,7 @@ function MessagesPageContent() {
                       </span>
                     )}
                   </h2>
-                    <p className="mt-1 text-sm text-slate-300">
+                    <p className="mt-1 text-sm text-slate-500">
                       Find users and message them directly
                     </p>
                   </div>
@@ -3114,7 +3370,7 @@ function MessagesPageContent() {
                 </div>
               </div>
 
-              <div className="border-b border-white/10 p-4">
+              <div className="border-b border-slate-200 p-4">
                 <div className="relative">
                   <Search
                     size={16}
@@ -3124,7 +3380,7 @@ function MessagesPageContent() {
                     value={userSearch}
                     onChange={(e) => setUserSearch(e.target.value)}
                     placeholder="Search users..."
-                    className="w-full rounded-2xl border border-white/10 bg-white/[0.05] py-3 pl-11 pr-4 text-sm text-white outline-none placeholder:text-slate-400 focus:border-sky-400"
+                    className="w-full rounded-full border border-slate-200 bg-[#eef2f7] py-3 pl-11 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-[#1877f2]"
                   />
                 </div>
               </div>
@@ -3138,9 +3394,9 @@ function MessagesPageContent() {
                         type="button"
                         onClick={() => void startConversationWithUser(profile.id)}
                         disabled={startingChatUserId === profile.id}
-                        className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left transition hover:bg-white/[0.05] disabled:opacity-60"
+                        className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 disabled:opacity-60"
                       >
-                        <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-slate-200">
+                        <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white">
                           <User size={16} />
                           {isOnline(profile.id) && (
                             <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#020617] bg-emerald-400" />
@@ -3148,7 +3404,7 @@ function MessagesPageContent() {
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-bold text-white">
+                          <div className="truncate text-sm font-bold text-slate-900">
                             {getDisplayName(profile)}
                           </div>
                           <div className="truncate text-xs text-slate-400">
@@ -3156,7 +3412,7 @@ function MessagesPageContent() {
                           </div>
                         </div>
 
-                        <div className="text-xs font-semibold text-sky-300">
+                        <div className="text-xs font-semibold text-[#1877f2]">
                           {startingChatUserId === profile.id ? "Opening..." : "Message"}
                         </div>
                       </button>
@@ -3200,7 +3456,7 @@ function MessagesPageContent() {
                             <div className="truncate text-lg font-bold text-white">
                               {getDisplayName(item.otherUser)}
                             </div>
-                            <div className="mt-1 truncate text-sm text-slate-300">
+                            <div className="mt-1 truncate text-sm text-slate-500">
                               {isTyping ? "Typing..." : item.lastMessage?.body || "Open chat"}
                             </div>
                           </div>
@@ -3223,7 +3479,7 @@ function MessagesPageContent() {
                     Messenger
                   </div>
                   <h3 className="mt-2 text-2xl font-black text-white">Forward message</h3>
-                  <p className="mt-1 text-sm text-slate-300">
+                  <p className="mt-1 text-sm text-slate-500">
                     Choose an existing conversation or search a user to forward this message.
                   </p>
                 </div>
@@ -3238,7 +3494,7 @@ function MessagesPageContent() {
               </div>
 
               <div className="mt-4 rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
-                <div className="text-xs font-bold uppercase tracking-[0.16em] text-sky-300">
+                <div className="text-xs font-bold uppercase tracking-[0.16em] text-[#1877f2]">
                   Message preview
                 </div>
                 <div className="mt-2 text-sm text-slate-200">
@@ -3263,11 +3519,11 @@ function MessagesPageContent() {
                       value={forwardSearch}
                       onChange={(e) => setForwardSearch(e.target.value)}
                       placeholder="Search chats..."
-                      className="w-full rounded-2xl border border-white/10 bg-white/[0.05] py-3 pl-11 pr-4 text-sm text-white outline-none placeholder:text-slate-400 focus:border-sky-400"
+                      className="w-full rounded-full border border-slate-200 bg-[#eef2f7] py-3 pl-11 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-[#1877f2]"
                     />
                   </div>
 
-                  <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.04]">
+                  <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white">
                     {filteredForwardConversations.length === 0 ? (
                       <div className="px-4 py-4 text-sm text-slate-300">
                         No other conversations found.
@@ -3286,7 +3542,7 @@ function MessagesPageContent() {
                           </div>
 
                           <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-bold text-white">
+                            <div className="truncate text-sm font-bold text-slate-900">
                               {getDisplayName(item.otherUser)}
                             </div>
                             <div className="truncate text-xs text-slate-400">
@@ -3294,7 +3550,7 @@ function MessagesPageContent() {
                             </div>
                           </div>
 
-                          <div className="text-xs font-semibold text-sky-300">
+                          <div className="text-xs font-semibold text-[#1877f2]">
                             {forwardingToConversationId === item.conversation.id
                               ? "Forwarding..."
                               : "Send"}
@@ -3316,11 +3572,11 @@ function MessagesPageContent() {
                       value={forwardUserSearch}
                       onChange={(e) => setForwardUserSearch(e.target.value)}
                       placeholder="Search users..."
-                      className="w-full rounded-2xl border border-white/10 bg-white/[0.05] py-3 pl-11 pr-4 text-sm text-white outline-none placeholder:text-slate-400 focus:border-sky-400"
+                      className="w-full rounded-full border border-slate-200 bg-[#eef2f7] py-3 pl-11 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-[#1877f2]"
                     />
                   </div>
 
-                  <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.04]">
+                  <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white">
                     {searchingForwardUsers ? (
                       <div className="px-4 py-4 text-sm text-slate-300">Searching users...</div>
                     ) : forwardUserSearch.trim() && forwardUserResults.length === 0 ? (
@@ -3343,7 +3599,7 @@ function MessagesPageContent() {
                           </div>
 
                           <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-bold text-white">
+                            <div className="truncate text-sm font-bold text-slate-900">
                               {getDisplayName(profile)}
                             </div>
                             <div className="truncate text-xs text-slate-400">
@@ -3351,7 +3607,7 @@ function MessagesPageContent() {
                             </div>
                           </div>
 
-                          <div className="text-xs font-semibold text-sky-300">
+                          <div className="text-xs font-semibold text-[#1877f2]">
                             {forwardingToUserId === profile.id ? "Forwarding..." : "Send"}
                           </div>
                         </button>
@@ -3375,14 +3631,14 @@ function MessagesPageContent() {
 
             <div className="relative z-10 h-full w-full max-w-2xl border-l border-white/10 bg-[#071122] shadow-[-20px_0_60px_rgba(0,0,0,0.35)]">
               <div className="flex h-full flex-col">
-                <div className="border-b border-white/10 px-5 py-5 sm:px-6">
+                <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-sky-300/80">
                         Messenger
                       </div>
                       <h3 className="mt-2 text-2xl font-black text-white">Shared media & files</h3>
-                      <p className="mt-1 text-sm text-slate-300">
+                      <p className="mt-1 text-sm text-slate-500">
                         {selectedConversation
                           ? `Everything shared with ${getDisplayName(selectedConversation.otherUser)}`
                           : "Open a conversation to see shared media."}
@@ -3587,6 +3843,29 @@ function MessagesPageContent() {
           </div>
         )}
       </main>
+
+      <style jsx global>{`
+        @keyframes fbReactionPop {
+          0% { transform: translateY(0) scale(0.72); }
+          45% { transform: translateY(-6px) scale(1.24); }
+          70% { transform: translateY(-2px) scale(0.96); }
+          100% { transform: translateY(-8px) scale(1.18); }
+        }
+
+        @keyframes fbReactionPill {
+          0% { transform: scale(0.92); }
+          55% { transform: scale(1.1); }
+          100% { transform: scale(1.08) translateY(-4px); }
+        }
+
+        @keyframes fbReactionBurst {
+          0% { opacity: 0; transform: translateY(12px) scale(0.6) rotate(-8deg); }
+          18% { opacity: 1; transform: translateY(-4px) scale(1.22) rotate(4deg); }
+          46% { opacity: 1; transform: translateY(-18px) scale(1.04) rotate(-2deg); }
+          78% { opacity: 0.95; transform: translateY(-28px) scale(0.98) rotate(2deg); }
+          100% { opacity: 0; transform: translateY(-38px) scale(0.9) rotate(0deg); }
+        }
+      `}</style>
     </>
   )
 }
@@ -3597,11 +3876,11 @@ export default function MessagesPage() {
       fallback={
         <>
           <SiteHeader />
-          <main className="min-h-screen bg-[#eef2f7] pt-24 text-slate-900 sm:pt-28">
+          <main className="relative min-h-screen overflow-x-hidden bg-[#eef2f7] pt-24 text-slate-900 sm:pt-28">
             <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(96,165,250,0.12),_transparent_28%),linear-gradient(180deg,_#f7faff_0%,_#eef2f7_100%)]" />
             <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-[1800px] items-center justify-center px-4 pb-6 sm:px-6 sm:pb-8 lg:px-8">
               <div className="w-full max-w-xl rounded-[30px] border border-white/10 bg-white/[0.04] px-6 py-14 text-center shadow-[0_25px_80px_rgba(0,0,0,0.35)] backdrop-blur-md">
-                <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-sky-300/80">Messenger</div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#1877f2]">Messenger</div>
                 <h2 className="mt-3 text-2xl font-black text-white">Loading messages...</h2>
                 <p className="mt-2 text-sm text-slate-300">Please wait while we open your conversations.</p>
               </div>
