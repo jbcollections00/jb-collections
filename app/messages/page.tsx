@@ -194,7 +194,7 @@ function MessagesPageContent() {
   const [forwardingToUserId, setForwardingToUserId] = useState<string | null>(null)
 
   const [openMessageMenuId, setOpenMessageMenuId] = useState<string | null>(null)
-  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; openAbove: boolean } | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [openReactionPickerMessageId, setOpenReactionPickerMessageId] = useState<string | null>(null)
   const [messageReactionsMap, setMessageReactionsMap] = useState<Record<string, MessageReactionRow[]>>({})
@@ -1925,21 +1925,20 @@ function MessagesPageContent() {
     isMine: boolean
   ) {
     const rect = event.currentTarget.getBoundingClientRect()
-    const menuWidth = 180
-    const gap = 6
+    const menuWidth = window.innerWidth < 640 ? Math.min(208, window.innerWidth - 24) : 192
+    const estimatedMenuHeight = isMine ? 270 : 220
+    const sidePadding = 12
+    const gap = 8
 
     let left = isMine ? rect.right - menuWidth : rect.left
+    left = Math.max(sidePadding, Math.min(left, window.innerWidth - menuWidth - sidePadding))
 
-    if (left + menuWidth > window.innerWidth) {
-      left = window.innerWidth - menuWidth - 10
-    }
-    if (left < 10) {
-      left = 10
-    }
+    const openAbove = rect.bottom + estimatedMenuHeight + 18 > window.innerHeight && rect.top > estimatedMenuHeight
+    const top = openAbove
+      ? Math.max(sidePadding, rect.top - gap)
+      : Math.min(rect.bottom + gap, window.innerHeight - estimatedMenuHeight - sidePadding)
 
-    const top = rect.bottom + gap
-
-    setMenuPosition({ top, left })
+    setMenuPosition({ top, left, openAbove })
     setOpenMessageMenuId((prev) => (prev === messageId ? null : messageId))
   }
 
@@ -2245,13 +2244,13 @@ function MessagesPageContent() {
     <>
       <SiteHeader />
 
-      <main className="min-h-screen bg-[#020617] pt-24 text-white sm:pt-28">
-        <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(99,102,241,0.18),_transparent_30%),linear-gradient(180deg,_#030712_0%,_#020617_45%,_#061229_100%)]" />
+      <main className="min-h-screen bg-[#eef2f7] pt-24 text-slate-900 sm:pt-28">
+        <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(96,165,250,0.12),_transparent_28%),linear-gradient(180deg,_#f7faff_0%,_#eef2f7_100%)]" />
 
         <div className="mx-auto w-full max-w-[1800px] px-4 pb-6 sm:px-6 sm:pb-8 lg:px-8">
-          <section className="overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.04] shadow-[0_25px_80px_rgba(0,0,0,0.35)] backdrop-blur-md sm:rounded-[30px]">
+          <section className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.12)] sm:rounded-[30px]">
             <div className="grid min-h-[calc(100vh-8rem)] grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]">
-              <aside className="hidden border-r border-white/10 bg-[#0b1220]/80 lg:flex lg:flex-col">
+              <aside className="hidden border-r border-slate-200 bg-[#f8fafc] lg:flex lg:flex-col">
                 <div className="border-b border-white/10 px-5 py-5">
                   <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-sky-300/80">
                     Messenger
@@ -2401,8 +2400,8 @@ function MessagesPageContent() {
                 </div>
               </aside>
 
-              <section className="flex min-h-[calc(100vh-8rem)] flex-col">
-                <div className="border-b border-white/10 bg-[#0b1220]/70 px-4 py-4 sm:px-6">
+              <section className="flex min-h-[calc(100vh-8rem)] flex-col bg-[#f5f7fb]">
+                <div className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
                       <button
@@ -2582,7 +2581,7 @@ function MessagesPageContent() {
                             )}
 
                             <div
-                              className={`relative max-w-[84%] sm:max-w-[72%] ${isMine ? "order-1" : ""}`}
+                              className={`relative max-w-[88%] sm:max-w-[76%] ${isMine ? "order-1" : ""}`}
                               onMouseDown={() => startLongPressForMessage(item.id)}
                               onMouseUp={cancelLongPress}
                               onMouseLeave={cancelLongPress}
@@ -2600,7 +2599,7 @@ function MessagesPageContent() {
                                 <button
                                   type="button"
                                   onClick={(event) => openMessageMenu(event, item.id, isMine)}
-                                  className={`absolute top-3 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-[#091220]/90 text-slate-200 shadow-lg transition hover:bg-[#10203b] ${
+                                  className={`absolute top-3 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-lg transition hover:bg-slate-100 ${
                                     isMine
                                       ? "left-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                                       : "right-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
@@ -2624,10 +2623,12 @@ function MessagesPageContent() {
 
                                     <div
                                       ref={actionMenuRef}
-                                      className="fixed z-[90] w-44 overflow-hidden rounded-2xl border border-white/10 bg-[#091220]/95 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
+                                      className="fixed z-[90] w-[min(208px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-slate-200/10 bg-[#111827]/95 shadow-[0_24px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl"
                                       style={{
-                                        top: Math.min(menuPosition.top, window.innerHeight - 220),
+                                        top: menuPosition.openAbove ? menuPosition.top : undefined,
+                                        bottom: menuPosition.openAbove ? undefined : undefined,
                                         left: menuPosition.left,
+                                        transform: menuPosition.openAbove ? "translateY(-100%)" : "translateY(0)",
                                       }}
                                     >
                                       <button
@@ -2735,10 +2736,10 @@ function MessagesPageContent() {
                                 )}
 
                                 <div
-                                  className={`rounded-[22px] px-3.5 py-2.5 text-[14px] leading-5 shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-all sm:px-4 sm:py-3 ${
+                                  className={`rounded-[22px] px-3 py-2.5 text-[14px] leading-5 shadow-[0_6px_18px_rgba(15,23,42,0.10)] transition-all sm:px-3.5 sm:py-2.5 ${
                                     isMine
-                                      ? "rounded-br-md bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white"
-                                      : "rounded-bl-md border border-white/10 bg-[#111b2e] text-slate-100"
+                                      ? "rounded-br-md bg-[#0084ff] text-white"
+                                      : "rounded-bl-md border border-slate-200 bg-white text-slate-800"
                                   }`}
                                   onMouseEnter={() => setOpenReactionPickerMessageId(item.id)}
                                 >
@@ -2799,7 +2800,7 @@ function MessagesPageContent() {
 
                               {getReactionSummary(item.id).length > 0 && (
                                 <div
-                                  className={`mt-1.5 flex flex-wrap items-center gap-1.5 px-2 ${
+                                  className={`mt-1 flex flex-wrap items-center gap-1 px-2 ${
                                     isMine ? "justify-end" : "justify-start"
                                   }`}
                                 >
@@ -2957,7 +2958,7 @@ function MessagesPageContent() {
                         )}
                       </div>
 
-                      <div className={`relative rounded-[28px] border bg-[#0f172a]/95 p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.25)] transition sm:rounded-[30px] ${coinShake ? "border-red-400/40" : "border-white/10"}`}>
+                      <div className={`relative rounded-[28px] border bg-[#f8fafc] p-1.5 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition sm:rounded-[30px] ${coinShake ? "border-red-400/40" : "border-slate-200"}`}>
                         <div className="flex items-end gap-1.5 sm:gap-2">
                           <label className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-sky-300 transition hover:bg-white/[0.08] sm:h-11 sm:w-11">
                             <Paperclip size={20} />
@@ -2974,7 +2975,7 @@ function MessagesPageContent() {
                             <button
                               type="button"
                               onClick={() => setShowEmojiPicker((prev) => !prev)}
-                              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sky-300 transition hover:bg-white/[0.08] sm:h-11 sm:w-11"
+                              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#0084ff] transition hover:bg-slate-100 sm:h-11 sm:w-11"
                               title="Open emoji picker"
                             >
                               <Smile size={20} />
@@ -3015,7 +3016,7 @@ function MessagesPageContent() {
                             }
                             rows={1}
                             disabled={!selectedConversationId}
-                            className="min-h-[42px] max-h-[120px] flex-1 resize-none overflow-y-auto rounded-[24px] bg-transparent px-2 py-2.5 text-sm text-white outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[44px] sm:max-h-[140px] sm:py-3"
+                            className="min-h-[42px] max-h-[120px] flex-1 resize-none overflow-y-auto rounded-[24px] bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[44px] sm:max-h-[140px] sm:py-3"
                           />
 
                           <button
@@ -3025,7 +3026,7 @@ function MessagesPageContent() {
                               editingMessageId
                                 ? "bg-emerald-500 hover:bg-emerald-400"
                                 : canAffordCurrentMessage
-                                  ? "bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 hover:brightness-110"
+                                  ? "bg-[#0084ff] hover:brightness-110"
                                   : "bg-red-500/80"
                             } disabled:cursor-not-allowed disabled:opacity-60`}
                             title={editingMessageId ? "Save edit" : `Send message (${messageSendCost} JB Coins)`}
@@ -3596,8 +3597,8 @@ export default function MessagesPage() {
       fallback={
         <>
           <SiteHeader />
-          <main className="min-h-screen bg-[#020617] pt-24 text-white sm:pt-28">
-            <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(99,102,241,0.18),_transparent_30%),linear-gradient(180deg,_#030712_0%,_#020617_45%,_#061229_100%)]" />
+          <main className="min-h-screen bg-[#eef2f7] pt-24 text-slate-900 sm:pt-28">
+            <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(96,165,250,0.12),_transparent_28%),linear-gradient(180deg,_#f7faff_0%,_#eef2f7_100%)]" />
             <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-[1800px] items-center justify-center px-4 pb-6 sm:px-6 sm:pb-8 lg:px-8">
               <div className="w-full max-w-xl rounded-[30px] border border-white/10 bg-white/[0.04] px-6 py-14 text-center shadow-[0_25px_80px_rgba(0,0,0,0.35)] backdrop-blur-md">
                 <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-sky-300/80">Messenger</div>
