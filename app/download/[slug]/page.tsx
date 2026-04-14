@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import DownloadPageClient from "./DownloadPageClient"
-import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase-server"
 
 type PageProps = {
   params: Promise<{
@@ -68,9 +68,7 @@ function getDescription(file: FileRow | null) {
 
 async function getFileBySlug(slug: string): Promise<FileRow | null> {
   try {
-    const supabase = await createClient()
-
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("files")
       .select(
         "id, title, description, slug, thumbnail_url, cover_url, preview_url, mime_type, file_type, visibility, downloads_count, created_at, updated_at, status"
@@ -131,7 +129,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 }
 
-export default async function DownloadPage({ params }: PageProps) {
-  await params
+export default async function DownloadPage() {
   return <DownloadPageClient />
 }
