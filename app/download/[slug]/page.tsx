@@ -3,26 +3,18 @@ import DownloadPageClient from "./DownloadPageClient"
 import { createClient } from "@/lib/supabase-server"
 
 type PageProps = {
-  params: Promise<{
+  params: {
     slug: string
-  }>
+  }
 }
 
 type FileRow = {
-  id: string
+  id?: string
   title?: string | null
   description?: string | null
   slug?: string | null
   thumbnail_url?: string | null
   cover_url?: string | null
-  preview_url?: string | null
-  mime_type?: string | null
-  file_type?: string | null
-  visibility?: string | null
-  downloads_count?: number | null
-  created_at?: string | null
-  updated_at?: string | null
-  status?: string | null
 }
 
 function getSiteUrl() {
@@ -33,38 +25,44 @@ function getSiteUrl() {
   ).replace(/\/+$/, "")
 }
 
-function absoluteUrl(url?: string | null) {
-  if (!url) return null
-  if (/^https?:\/\//i.test(url)) return url
+function getSupabaseUrl() {
+  return (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "")
+}
+
+function toAbsoluteUrl(value?: string | null) {
+  if (!value) return null
+
+  const trimmed = value.trim()
+  if (!trimmed) return null
 
   const siteUrl = getSiteUrl()
-  return `${siteUrl}${url.startsWith("/") ? url : `/${url}`}`
+  const supabaseUrl = getSupabaseUrl()
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed
+  }
+
+  if (trimmed.startsWith("/storage/v1/object/public/")) {
+    return supabaseUrl ? `${supabaseUrl}${trimmed}` : null
+  }
+
+  if (trimmed.startsWith("storage/v1/object/public/")) {
+    return supabaseUrl ? `${supabaseUrl}/${trimmed}` : null
+  }
+
+  if (trimmed.startsWith("/")) {
+    return `${siteUrl}${trimmed}`
+  }
+
+  return `${siteUrl}/${trimmed}`
 }
 
-function getPreviewImage(file: FileRow | null) {
-  if (!file) return `${getSiteUrl()}/og-default.jpg`
-
+function pickOgImage(file: FileRow | null) {
   return (
-    absoluteUrl(file.cover_url) ||
-    absoluteUrl(file.preview_url) ||
-    absoluteUrl(file.thumbnail_url) ||
+    toAbsoluteUrl(file?.cover_url) ||
+    toAbsoluteUrl(file?.thumbnail_url) ||
     `${getSiteUrl()}/og-default.jpg`
   )
-}
-
-function getTitle(file: FileRow | null) {
-  const raw = file?.title?.trim()
-  return raw ? `${raw} | JB Collections` : "JB Collections"
-}
-
-function getDescription(file: FileRow | null) {
-  const raw = file?.description?.trim()
-  if (raw) return raw
-
-  const visibility = (file?.visibility || "free").toLowerCase()
-  if (visibility === "platinum") return "Platinum-ready file download from JB Collections."
-  if (visibility === "premium") return "Premium-ready file download from JB Collections."
-  return "Premium-ready file download platform."
 }
 
 async function getFileBySlug(slug: string): Promise<FileRow | null> {
@@ -73,36 +71,36 @@ async function getFileBySlug(slug: string): Promise<FileRow | null> {
 
     const { data, error } = await supabase
       .from("files")
-      .select(
-        "id, title, description, slug, thumbnail_url, cover_url, preview_url, mime_type, file_type, visibility, downloads_count, created_at, updated_at, status"
-      )
-      .eq("status", "published")
+      .select("id, title, description, slug, thumbnail_url, cover_url")
       .eq("slug", slug)
+      .eq("status", "published")
       .maybeSingle()
 
     if (error) {
-      console.error("generateMetadata file lookup error:", error.message)
+      console.error("OG metadata file lookup error:", error.message)
       return null
     }
 
     return (data as FileRow | null) ?? null
   } catch (error) {
-    console.error("generateMetadata unexpected error:", error)
+    console.error("OG metadata unexpected error:", error)
     return null
   }
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { slug } = await params
+  const slug = params.slug
   const file = await getFileBySlug(slug)
 
   const siteUrl = getSiteUrl()
   const pageUrl = `${siteUrl}/download/${slug}`
-  const imageUrl = getPreviewImage(file)
-  const title = getTitle(file)
-  const description = getDescription(file)
+  const imageUrl = pickOgImage(file)
+  const title = file?.title?.trim() || "JB Collections"
+  const description =
+    file?.description?.trim() || "Premium-ready file download platform."
 
   return {
+    metadataBase: new URL(siteUrl),
     title,
     description,
     alternates: {
@@ -119,7 +117,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
           url: imageUrl,
           width: 1200,
           height: 630,
-          alt: file?.title || "JB Collections preview",
+          alt: title,
         },
       ],
     },
@@ -132,6 +130,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 }
 
-export default async function DownloadPage() {
-  return <DownloadPageClient />
+export default function DownloadPage({ params }: PageProps) {
+  return <DownloadPageClient params={params} />
 }
