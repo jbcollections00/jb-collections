@@ -21,7 +21,6 @@ type FileRow = {
   category_id?: string | null
   thumbnail_url?: string | null
   cover_url?: string | null
-  thumbnail_url?: string | null
   file_url?: string | null
   slug?: string | null
   downloads_count?: number | null
