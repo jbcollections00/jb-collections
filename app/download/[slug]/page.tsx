@@ -15,6 +15,8 @@ type FileRow = {
   slug?: string | null
   thumbnail_url?: string | null
   cover_url?: string | null
+  visibility?: string | null
+  category_name?: string | null
 }
 
 function getSiteUrl() {
@@ -65,13 +67,50 @@ function pickOgImage(file: FileRow | null) {
   )
 }
 
+function buildOgTitle(file: FileRow | null) {
+  const title = file?.title?.trim()
+  if (!title) return "JB Collections"
+  return `${title} | JB Collections`
+}
+
+function buildOgDescription(file: FileRow | null) {
+  const description = file?.description?.trim()
+  if (description) return description
+
+  const category = file?.category_name?.trim()
+  const visibility = file?.visibility?.trim()
+
+  if (category && visibility) {
+    return `${category} • ${visibility} file download on JB Collections.`
+  }
+
+  if (category) {
+    return `${category} file download on JB Collections.`
+  }
+
+  if (visibility) {
+    return `${visibility} file download on JB Collections.`
+  }
+
+  return "Premium-ready file download platform."
+}
+
 async function getFileBySlug(slug: string): Promise<FileRow | null> {
   try {
     const supabase = await createClient()
 
     const { data, error } = await supabase
       .from("files")
-      .select("id, title, description, slug, thumbnail_url, cover_url")
+      .select(`
+        id,
+        title,
+        description,
+        slug,
+        thumbnail_url,
+        cover_url,
+        visibility,
+        category:categories(name)
+      `)
       .eq("slug", slug)
       .eq("status", "published")
       .maybeSingle()
@@ -81,7 +120,22 @@ async function getFileBySlug(slug: string): Promise<FileRow | null> {
       return null
     }
 
-    return (data as FileRow | null) ?? null
+    if (!data) return null
+
+    const rawCategory = Array.isArray((data as any).category)
+      ? (data as any).category[0]
+      : (data as any).category
+
+    return {
+      id: data.id,
+      title: data.title,
+      description: data.description,
+      slug: data.slug,
+      thumbnail_url: data.thumbnail_url,
+      cover_url: data.cover_url,
+      visibility: data.visibility,
+      category_name: rawCategory?.name ?? null,
+    }
   } catch (error) {
     console.error("OG metadata unexpected error:", error)
     return null
@@ -94,10 +148,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   const siteUrl = getSiteUrl()
   const pageUrl = `${siteUrl}/download/${slug}`
+
+  const title = buildOgTitle(file)
+  const description = buildOgDescription(file)
   const imageUrl = pickOgImage(file)
-  const title = file?.title?.trim() || "JB Collections"
-  const description =
-    file?.description?.trim() || "Premium-ready file download platform."
 
   return {
     metadataBase: new URL(siteUrl),
@@ -117,7 +171,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
           url: imageUrl,
           width: 1200,
           height: 630,
-          alt: title,
+          alt: file?.title?.trim() || "JB Collections preview",
         },
       ],
     },
