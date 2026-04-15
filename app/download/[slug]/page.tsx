@@ -130,7 +130,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 }
 
-export default async function DownloadPage({ params }: PageProps) {
-  const resolvedParams = await params
-  return <DownloadPageClient params={resolvedParams} />
+export default async function DownloadPage() {
+  return <DownloadPageClient />
 }
