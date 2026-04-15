@@ -3,9 +3,9 @@ import DownloadPageClient from "./DownloadPageClient"
 import { createClient } from "@/lib/supabase-server"
 
 type PageProps = {
-  params: {
+  params: Promise<{
     slug: string
-  }
+  }>
 }
 
 type FileRow = {
@@ -89,7 +89,7 @@ async function getFileBySlug(slug: string): Promise<FileRow | null> {
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const slug = params.slug
+  const { slug } = await params
   const file = await getFileBySlug(slug)
 
   const siteUrl = getSiteUrl()
@@ -130,6 +130,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 }
 
-export default function DownloadPage({ params }: PageProps) {
-  return <DownloadPageClient params={params} />
+export default async function DownloadPage({ params }: PageProps) {
+  const resolvedParams = await params
+  return <DownloadPageClient params={resolvedParams} />
 }
