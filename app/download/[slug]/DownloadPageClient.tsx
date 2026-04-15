@@ -21,7 +21,6 @@ type FileRow = {
   category_id?: string | null
   thumbnail_url?: string | null
   cover_url?: string | null
-  thumbnail_url?: string | null
   file_url?: string | null
   slug?: string | null
   downloads_count?: number | null
@@ -52,7 +51,7 @@ function getDisplayName(file: FileRow | null) {
 
 function getPreviewAsset(file: FileRow | null) {
   if (!file) return null
-  return file.cover_url || file.thumbnail_url || file.thumbnail_url || null
+  return file.cover_url || file.thumbnail_url || null
 }
 
 function isUuid(value: string) {
@@ -106,7 +105,7 @@ function inferExtension(file: FileRow | null) {
     file.title,
     file.file_url,
     file.thumbnail_url,
-    file.thumbnail_url,
+    file.cover_url,
   ]
     .filter(Boolean)
     .join(" ")
@@ -380,7 +379,7 @@ export default function DownloadPageClient() {
       const baseQuery = supabase
         .from("files")
         .select(
-          "id, title, description, visibility, shrinkme_url, linkvertise_url, monetization_enabled, status, category_id, thumbnail_url, cover_url, thumbnail_url, file_url, slug, downloads_count, created_at, updated_at, file_type, mime_type, file_size, size_bytes"
+          "id, title, description, visibility, shrinkme_url, linkvertise_url, monetization_enabled, status, category_id, thumbnail_url, cover_url, file_url, slug, downloads_count, created_at, updated_at, file_type, mime_type, file_size, size_bytes"
         )
         .eq("status", "published")
 
@@ -893,9 +892,7 @@ export default function DownloadPageClient() {
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                       Ready to get it?
                     </p>
-                    <h2 className="mt-1 text-3xl font-black text-slate-900">
-                      Download now
-                    </h2>
+                    <h2 className="mt-1 text-3xl font-black text-slate-900">Download now</h2>
                   </div>
                   <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
                     Trusted
@@ -946,9 +943,7 @@ export default function DownloadPageClient() {
                   ) : !downloadReady ? (
                     <div className="mt-5">
                       <div className="rounded-3xl bg-white p-5 text-center shadow-sm ring-1 ring-slate-100">
-                        <p className="text-sm font-semibold text-slate-500">
-                          Your download unlocks in
-                        </p>
+                        <p className="text-sm font-semibold text-slate-500">Your download unlocks in</p>
                         <p className="mt-2 text-5xl font-black tracking-tight text-slate-900">
                           {countdown}s
                         </p>
