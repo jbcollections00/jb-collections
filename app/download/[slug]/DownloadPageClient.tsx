@@ -665,7 +665,7 @@ export default function DownloadPageClient() {
 
               <div className="p-6 sm:p-8">
                 <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-                  <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
+                  <div className="relative mx-auto aspect-[4/5] max-w-md w-full overflow-hidden rounded-[28px] bg-slate-100">
                     {previewAsset ? (
                       previewKind === "video" ? (
                         <video
@@ -783,7 +783,7 @@ export default function DownloadPageClient() {
                 </div>
 
                 {related.length > 0 ? (
-                  <div className="mt-8 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mt-8 rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
                     <div className="mb-4 flex items-center justify-between gap-3">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-500">
@@ -796,25 +796,25 @@ export default function DownloadPageClient() {
 
                       <Link
                         href="/categories"
-                        className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                        className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
                       >
                         Browse More
                       </Link>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
                       {related.map((item) => (
                         <Link
                           key={item.id}
                           href={`/download/${item.slug || item.id}`}
-                          className="group overflow-hidden rounded-[24px] border border-slate-200 bg-slate-50 transition hover:-translate-y-0.5 hover:shadow-md"
+                          className="group overflow-hidden rounded-[26px] border border-slate-200 bg-white transition duration-300 hover:-translate-y-1 hover:border-sky-200 hover:shadow-[0_20px_50px_rgba(14,165,233,0.16)]"
                         >
-                          <div className="relative aspect-[16/10] overflow-hidden bg-slate-200">
+                          <div className="relative aspect-[4/5] overflow-hidden bg-slate-200">
                             {item.thumbnail_url ? (
                               <img
                                 src={item.thumbnail_url}
                                 alt={item.title || "Related file"}
-                                className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                                className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.06]"
                               />
                             ) : (
                               <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-slate-400">
@@ -833,7 +833,7 @@ export default function DownloadPageClient() {
                           </div>
 
                           <div className="p-4">
-                            <div className="mb-2 inline-flex rounded-full bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                            <div className="mb-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
                               {formatCount(item.downloads_count)}+ downloads
                             </div>
                             <p className="line-clamp-2 text-base font-bold text-slate-800 transition group-hover:text-blue-600">
