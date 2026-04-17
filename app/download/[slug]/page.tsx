@@ -18,6 +18,7 @@ type FileRow = {
   description?: string | null
   slug?: string | null
   thumbnail_url?: string | null
+  thumbnail_storage_key?: string | null
   cover_url?: string | null
   image_url?: string | null
   visibility?: string | null
@@ -31,6 +32,10 @@ function getSiteUrl() {
     process.env.NEXT_PUBLIC_APP_URL ||
     "https://jb-collections.com"
   ).replace(/\/+$/, "")
+}
+
+function getR2PublicBaseUrl() {
+  return (process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL || "").replace(/\/+$/, "")
 }
 
 function isUuid(value: string) {
@@ -77,7 +82,7 @@ function buildOgDescription(file: FileRow | null) {
   return "Premium file preview on JB Collections."
 }
 
-function normalizeImageUrl(url?: string | null) {
+function normalizeAbsoluteUrl(url?: string | null) {
   const value = cleanText(url)
   if (!value) return null
 
@@ -94,29 +99,28 @@ function normalizeImageUrl(url?: string | null) {
   return `${siteUrl}/${value}`
 }
 
+function buildR2Url(path?: string | null) {
+  const base = getR2PublicBaseUrl()
+  const value = cleanText(path)
+
+  if (!base || !value) return null
+  if (value.startsWith("http://") || value.startsWith("https://")) return value
+
+  return `${base}/${value.replace(/^\/+/, "")}`
+}
+
 function buildPreviewImage(file: FileRow | null) {
-  const base = process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL
+  const thumbnailUrl = normalizeAbsoluteUrl(file?.thumbnail_url)
+  if (thumbnailUrl) return thumbnailUrl
 
-  if (file?.thumbnail_url) {
-    if (file.thumbnail_url.startsWith("http")) {
-      return file.thumbnail_url
-    }
-    return `${base}/${file.thumbnail_url}`
-  }
+  const thumbnailFromKey = buildR2Url(file?.thumbnail_storage_key)
+  if (thumbnailFromKey) return thumbnailFromKey
 
-  if (file?.cover_url) {
-    if (file.cover_url.startsWith("http")) {
-      return file.cover_url
-    }
-    return `${base}/${file.cover_url}`
-  }
+  const coverUrl = normalizeAbsoluteUrl(file?.cover_url)
+  if (coverUrl) return coverUrl
 
-  if (file?.image_url) {
-    if (file.image_url.startsWith("http")) {
-      return file.image_url
-    }
-    return `${base}/${file.image_url}`
-  }
+  const imageUrl = normalizeAbsoluteUrl(file?.image_url)
+  if (imageUrl) return imageUrl
 
   return `${getSiteUrl()}/default-preview.jpg`
 }
@@ -134,6 +138,7 @@ async function getFile(slugOrId: string): Promise<FileRow | null> {
         description,
         slug,
         thumbnail_url,
+        thumbnail_storage_key,
         cover_url,
         image_url,
         visibility,
@@ -154,17 +159,21 @@ async function getFile(slugOrId: string): Promise<FileRow | null> {
 
     if (!data) return null
 
-    const rawCategory = Array.isArray((data as { category?: CategoryRelation[] }).category)
-      ? (data as { category?: CategoryRelation[] }).category?.[0]
-      : (data as { category?: CategoryRelation | null }).category
+    const rawCategory = Array.isArray(
+      (data as { category?: CategoryRelation[] | CategoryRelation | null }).category
+    )
+      ? ((data as { category?: CategoryRelation[] }).category?.[0] ?? null)
+      : ((data as { category?: CategoryRelation | null }).category ?? null)
 
     return {
       id: data.id,
       title: data.title,
       description: data.description,
       slug: data.slug,
-      thumbnail_url: data.thumbnail_url,
-      cover_url: data.cover_url,
+      thumbnail_url: (data as { thumbnail_url?: string | null }).thumbnail_url,
+      thumbnail_storage_key: (data as { thumbnail_storage_key?: string | null })
+        .thumbnail_storage_key,
+      cover_url: (data as { cover_url?: string | null }).cover_url,
       image_url: (data as { image_url?: string | null }).image_url,
       visibility: data.visibility,
       updated_at: data.updated_at,
@@ -188,7 +197,7 @@ export async function generateMetadata({
 
   const title = buildOgTitle(file)
   const description = buildOgDescription(file)
-  const imageUrl = buildPreviewImage(file) // ✅ FINAL FIX (NO Date.now)
+  const imageUrl = buildPreviewImage(file)
 
   return {
     metadataBase: new URL(siteUrl),
