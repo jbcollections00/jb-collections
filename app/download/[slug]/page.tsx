@@ -84,10 +84,15 @@ function buildImageVersion(file: FileRow | null) {
 }
 
 function pickOgImage(file: FileRow | null) {
+  const siteUrl = getSiteUrl()
+
+  const thumbnail = toAbsoluteUrl(file?.thumbnail_url)
+  const cover = toAbsoluteUrl(file?.cover_url)
+
   const baseImage =
-    toAbsoluteUrl(file?.thumbnail_url) ||
-    toAbsoluteUrl(file?.cover_url) ||
-    `${getSiteUrl()}/default-preview.png`
+    cover ||
+    thumbnail ||
+    `${siteUrl}/default-preview.png`
 
   return withCacheBust(baseImage, buildImageVersion(file))
 }
