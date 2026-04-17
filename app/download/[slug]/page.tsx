@@ -27,49 +27,9 @@ function getSiteUrl() {
   ).replace(/\/+$/, "")
 }
 
-function getSupabaseUrl() {
-  return (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "")
-}
-
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value
-  )
-}
-
-function toAbsoluteUrl(value?: string | null) {
-  if (!value) return null
-
-  const trimmed = value.trim()
-  if (!trimmed) return null
-
-  const siteUrl = getSiteUrl()
-  const supabaseUrl = getSupabaseUrl()
-
-  if (/^https?:\/\//i.test(trimmed)) {
-    return trimmed
-  }
-
-  if (trimmed.startsWith("/storage/v1/object/public/")) {
-    return supabaseUrl ? `${supabaseUrl}${trimmed}` : null
-  }
-
-  if (trimmed.startsWith("storage/v1/object/public/")) {
-    return supabaseUrl ? `${supabaseUrl}/${trimmed}` : null
-  }
-
-  if (trimmed.startsWith("/")) {
-    return `${siteUrl}${trimmed}`
-  }
-
-  return `${siteUrl}/${trimmed}`
-}
-
-function pickOgImage(file: FileRow | null) {
-  return (
-    toAbsoluteUrl(file?.cover_url) ||
-    toAbsoluteUrl(file?.thumbnail_url) ||
-    `${getSiteUrl()}/default-preview.jpg`
   )
 }
 
@@ -156,10 +116,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   const siteUrl = getSiteUrl()
   const pageUrl = `${siteUrl}/download/${slug}`
+  const ogImageUrl = `${siteUrl}/download/${slug}/opengraph-image`
 
   const title = buildOgTitle(file)
   const description = buildOgDescription(file)
-  const imageUrl = pickOgImage(file)
 
   return {
     metadataBase: new URL(siteUrl),
@@ -176,7 +136,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       type: "website",
       images: [
         {
-          url: imageUrl,
+          url: ogImageUrl,
           width: 1200,
           height: 630,
           alt: file?.title?.trim() || "JB Collections preview",
@@ -187,7 +147,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       card: "summary_large_image",
       title,
       description,
-      images: [imageUrl],
+      images: [ogImageUrl],
     },
   }
 }
