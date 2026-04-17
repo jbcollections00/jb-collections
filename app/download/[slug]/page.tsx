@@ -181,8 +181,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const file = await getFile(slug)
 
   const siteUrl = getSiteUrl()
-  const pageUrl = `${siteUrl}/download/${slug}`
-  const imageUrl = pickOgImage(file)
+  const pageUrl = `${siteUrl}/download/${slug}?t=${buildImageVersion(file)}`
+  const imageUrl = `${pickOgImage(file)}&force=1`
 
   const title = buildOgTitle(file)
   const description = buildOgDescription(file)
