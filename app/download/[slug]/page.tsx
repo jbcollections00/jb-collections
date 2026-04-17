@@ -95,12 +95,30 @@ function normalizeImageUrl(url?: string | null) {
 }
 
 function buildPreviewImage(file: FileRow | null) {
-  return (
-    normalizeImageUrl(file?.thumbnail_url) ||
-    normalizeImageUrl(file?.cover_url) ||
-    normalizeImageUrl(file?.image_url) ||
-    `${getSiteUrl()}/default-preview.jpg`
-  )
+  const base = process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL
+
+  if (file?.thumbnail_url) {
+    if (file.thumbnail_url.startsWith("http")) {
+      return file.thumbnail_url
+    }
+    return `${base}/${file.thumbnail_url}`
+  }
+
+  if (file?.cover_url) {
+    if (file.cover_url.startsWith("http")) {
+      return file.cover_url
+    }
+    return `${base}/${file.cover_url}`
+  }
+
+  if (file?.image_url) {
+    if (file.image_url.startsWith("http")) {
+      return file.image_url
+    }
+    return `${base}/${file.image_url}`
+  }
+
+  return `${getSiteUrl()}/default-preview.jpg`
 }
 
 async function getFile(slugOrId: string): Promise<FileRow | null> {
