@@ -2,9 +2,42 @@ import "./globals.css"
 import type { Metadata } from "next"
 import LayoutShell from "./components/LayoutShell"
 
+function getSiteUrl() {
+  return (
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "https://jb-collections.com"
+  ).replace(/\/+$/, "")
+}
+
+const siteUrl = getSiteUrl()
+const defaultPreview = `${siteUrl}/default-preview.jpg`
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "JB Collections",
   description: "Premium-ready file download platform",
+  openGraph: {
+    title: "JB Collections",
+    description: "Premium-ready file download platform",
+    url: siteUrl,
+    siteName: "JB Collections",
+    type: "website",
+    images: [
+      {
+        url: defaultPreview,
+        width: 1200,
+        height: 630,
+        alt: "JB Collections",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "JB Collections",
+    description: "Premium-ready file download platform",
+    images: [defaultPreview],
+  },
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon-32x32.png",

@@ -31,6 +31,12 @@ function getSupabaseUrl() {
   return (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "")
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  )
+}
+
 function toAbsoluteUrl(value?: string | null) {
   if (!value) return null
 
@@ -63,7 +69,7 @@ function pickOgImage(file: FileRow | null) {
   return (
     toAbsoluteUrl(file?.cover_url) ||
     toAbsoluteUrl(file?.thumbnail_url) ||
-    `${getSiteUrl()}/og-default.jpg`
+    `${getSiteUrl()}/default-preview.jpg`
   )
 }
 
@@ -95,11 +101,11 @@ function buildOgDescription(file: FileRow | null) {
   return "Premium-ready file download platform."
 }
 
-async function getFileBySlug(slug: string): Promise<FileRow | null> {
+async function getFile(slugOrId: string): Promise<FileRow | null> {
   try {
     const supabase = await createClient()
 
-    const { data, error } = await supabase
+    const baseQuery = supabase
       .from("files")
       .select(`
         id,
@@ -111,9 +117,11 @@ async function getFileBySlug(slug: string): Promise<FileRow | null> {
         visibility,
         category:categories(name)
       `)
-      .eq("slug", slug)
       .eq("status", "published")
-      .maybeSingle()
+
+    const { data, error } = isUuid(slugOrId)
+      ? await baseQuery.eq("id", slugOrId).maybeSingle()
+      : await baseQuery.eq("slug", slugOrId).maybeSingle()
 
     if (error) {
       console.error("OG metadata file lookup error:", error.message)
@@ -144,7 +152,7 @@ async function getFileBySlug(slug: string): Promise<FileRow | null> {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params
-  const file = await getFileBySlug(slug)
+  const file = await getFile(slug)
 
   const siteUrl = getSiteUrl()
   const pageUrl = `${siteUrl}/download/${slug}`
