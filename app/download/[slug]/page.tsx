@@ -209,7 +209,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       card: "summary_large_image",
       title,
       description,
-      images: [`${imageUrl}?v=${Date.now()}`],
+      images: [imageUrl],
     },
   }
 }
