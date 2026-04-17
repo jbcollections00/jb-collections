@@ -28,48 +28,10 @@ function getSiteUrl() {
   ).replace(/\/+$/, "")
 }
 
-function getSupabaseUrl() {
-  return (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "")
-}
-
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value
   )
-}
-
-function toAbsoluteUrl(value?: string | null) {
-  if (!value) return null
-
-  const trimmed = value.trim()
-  if (!trimmed) return null
-
-  const siteUrl = getSiteUrl()
-  const supabaseUrl = getSupabaseUrl()
-
-  if (/^https?:\/\//i.test(trimmed)) {
-    return trimmed
-  }
-
-  if (trimmed.startsWith("/storage/v1/object/public/")) {
-    return supabaseUrl ? `${supabaseUrl}${trimmed}` : null
-  }
-
-  if (trimmed.startsWith("storage/v1/object/public/")) {
-    return supabaseUrl ? `${supabaseUrl}/${trimmed}` : null
-  }
-
-  if (trimmed.startsWith("/")) {
-    return `${siteUrl}${trimmed}`
-  }
-
-  return `${siteUrl}/${trimmed}`
-}
-
-function withCacheBust(url: string, seed?: string | null) {
-  if (!seed) return url
-  const safeSeed = encodeURIComponent(seed)
-  return url.includes("?") ? `${url}&v=${safeSeed}` : `${url}?v=${safeSeed}`
 }
 
 function buildImageVersion(file: FileRow | null) {
@@ -81,20 +43,6 @@ function buildImageVersion(file: FileRow | null) {
   }
 
   return file.id || file.slug || "default"
-}
-
-function pickOgImage(file: FileRow | null) {
-  const siteUrl = getSiteUrl()
-
-  const thumbnail = toAbsoluteUrl(file?.thumbnail_url)
-  const cover = toAbsoluteUrl(file?.cover_url)
-
-  const baseImage =
-    cover ||
-    thumbnail ||
-    `${siteUrl}/default-preview.png`
-
-  return withCacheBust(baseImage, buildImageVersion(file))
 }
 
 function buildOgTitle(file: FileRow | null) {
@@ -181,8 +129,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const file = await getFile(slug)
 
   const siteUrl = getSiteUrl()
-  const pageUrl = `${siteUrl}/download/${slug}?t=${buildImageVersion(file)}`
-  const imageUrl = `${pickOgImage(file)}&force=1`
+  const version = buildImageVersion(file)
+  const pageUrl = `${siteUrl}/download/${slug}?v=${encodeURIComponent(version)}`
+  const imageUrl = `${siteUrl}/download/${slug}/og-image?v=${encodeURIComponent(version)}`
 
   const title = buildOgTitle(file)
   const description = buildOgDescription(file)
@@ -192,7 +141,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title,
     description,
     alternates: {
-      canonical: pageUrl,
+      canonical: `${siteUrl}/download/${slug}`,
     },
     openGraph: {
       title,
