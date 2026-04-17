@@ -27,8 +27,6 @@ type FileRow = {
   created_at?: string | null
   updated_at?: string | null
   file_type?: string | null
-  file_size?: number | null
-  size_bytes?: number | null
 }
 
 type RelatedFileRow = {
@@ -50,7 +48,7 @@ function getDisplayName(file: FileRow | null) {
 
 function getPreviewAsset(file: FileRow | null) {
   if (!file) return null
-  return file.cover_url || file.thumbnail_url || file.thumbnail_url || null
+  return file.cover_url || file.thumbnail_url || null
 }
 
 function isUuid(value: string) {
@@ -77,40 +75,15 @@ function formatDate(value?: string | null) {
   }).format(date)
 }
 
-function formatFileSize(bytes?: number | null) {
-  const size = Number(bytes || 0)
-  if (!Number.isFinite(size) || size <= 0) return "Instant access"
-  const units = ["B", "KB", "MB", "GB", "TB"]
-  let value = size
-  let unitIndex = 0
-
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024
-    unitIndex += 1
-  }
-
-  const rounded =
-    value >= 100 ? value.toFixed(0) : value >= 10 ? value.toFixed(1) : value.toFixed(2)
-
-  return `${rounded.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1")} ${units[unitIndex]}`
-}
-
 function inferExtension(file: FileRow | null) {
   if (!file) return "FILE"
 
-  const possibleValues = [
-    file.file_type,
-    file.title,
-    file.file_url,
-    file.thumbnail_url,
-    file.thumbnail_url,
-  ]
+  const possibleValues = [file.file_type, file.title, file.file_url, file.thumbnail_url]
     .filter(Boolean)
     .join(" ")
 
   const match = possibleValues.match(/\.([a-z0-9]{2,5})(?:[\s?/#]|$)/i)
   if (match?.[1]) return match[1].toUpperCase()
-
 
   return "FILE"
 }
@@ -156,7 +129,10 @@ export default function DownloadPageClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
-  const idOrSlug = (params?.slug as string) || ""
+
+  const idOrSlug =
+    (params?.slug as string) || (params?.id as string) || (params?.fileId as string) || ""
+
   const unlockedFromQuery = searchParams?.get("unlocked") === "1"
 
   const [checking, setChecking] = useState(true)
@@ -186,10 +162,6 @@ export default function DownloadPageClient() {
   const previewAsset = useMemo(() => getPreviewAsset(file), [file])
   const previewKind = useMemo(() => inferPreviewKind(file), [file])
   const fileTypeLabel = useMemo(() => inferExtension(file), [file])
-  const fileSizeLabel = useMemo(
-    () => formatFileSize(file?.file_size ?? file?.size_bytes ?? null),
-    [file]
-  )
   const downloadsLabel = useMemo(() => formatCount(file?.downloads_count), [file])
   const addedDateLabel = useMemo(
     () => formatDate(file?.updated_at || file?.created_at || null),
@@ -353,7 +325,6 @@ export default function DownloadPageClient() {
       setIsPremiumUser(false)
       setIsPlatinumUser(false)
       setShowPreviewModal(false)
-
       setStep("waiting")
       setCountdown(3)
       setDownloadReady(false)
@@ -373,7 +344,7 @@ export default function DownloadPageClient() {
       const baseQuery = supabase
         .from("files")
         .select(
-          "id, title, description, visibility, shrinkme_url, linkvertise_url, monetization_enabled, status, category_id, thumbnail_url, cover_url, thumbnail_url, file_url, slug, downloads_count, created_at, updated_at, file_type, file_size, size_bytes"
+          "id, title, description, visibility, shrinkme_url, linkvertise_url, monetization_enabled, status, category_id, thumbnail_url, cover_url, file_url, slug, downloads_count, created_at, updated_at, file_type"
         )
         .eq("status", "published")
 
@@ -386,7 +357,7 @@ export default function DownloadPageClient() {
         cache: "no-store",
       })
 
-      const refreshData = await refreshRes.json()
+      const refreshData = await refreshRes.json().catch(() => null)
 
       if (!refreshRes.ok) {
         setError(refreshData?.error || "Failed to refresh membership.")
@@ -518,10 +489,14 @@ export default function DownloadPageClient() {
         },
       })
 
-      const data = await res.json()
+      const data = await res.json().catch(() => null)
 
       if (!res.ok) {
         throw new Error(data?.error || "Failed to start download")
+      }
+
+      if (!data?.downloadUrl) {
+        throw new Error("Missing download URL from API")
       }
 
       if (data?.rewarded) {
@@ -671,18 +646,12 @@ export default function DownloadPageClient() {
                     {getShortDescription(file)}
                   </p>
 
-                  <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                  <div className="mt-6 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-md">
                       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">
                         File type
                       </p>
                       <p className="mt-2 text-base font-black">{fileTypeLabel}</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-md">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">
-                        File size
-                      </p>
-                      <p className="mt-2 text-base font-black">{fileSizeLabel}</p>
                     </div>
                     <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-md">
                       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">
@@ -886,9 +855,7 @@ export default function DownloadPageClient() {
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                       Ready to get it?
                     </p>
-                    <h2 className="mt-1 text-3xl font-black text-slate-900">
-                      Download now
-                    </h2>
+                    <h2 className="mt-1 text-3xl font-black text-slate-900">Download now</h2>
                   </div>
                   <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
                     Trusted
@@ -939,9 +906,7 @@ export default function DownloadPageClient() {
                   ) : !downloadReady ? (
                     <div className="mt-5">
                       <div className="rounded-3xl bg-white p-5 text-center shadow-sm ring-1 ring-slate-100">
-                        <p className="text-sm font-semibold text-slate-500">
-                          Your download unlocks in
-                        </p>
+                        <p className="text-sm font-semibold text-slate-500">Your download unlocks in</p>
                         <p className="mt-2 text-5xl font-black tracking-tight text-slate-900">
                           {countdown}s
                         </p>
