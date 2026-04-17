@@ -22,23 +22,21 @@ export function middleware(request: NextRequest) {
     pathname === "/contact" ||
     pathname.startsWith("/contact/") ||
     pathname === "/categories" ||
-    pathname.startsWith("/categories/") ||
-    pathname === "/download" ||
-    pathname.startsWith("/download/")
+    pathname.startsWith("/categories/")
 
-  // ✅ FIX: detect ANY Supabase auth cookie
   const hasAuthCookie = request.cookies
     .getAll()
-    .some((cookie) => cookie.name.startsWith("sb-") && cookie.name.includes("auth-token"))
+    .some(
+      (cookie) =>
+        cookie.name.startsWith("sb-") && cookie.name.includes("auth-token")
+    )
 
-  // 🔒 ADMIN PROTECTION
   if (isProtectedAdminRoute && !hasAuthCookie) {
     const adminLoginUrl = new URL(ADMIN_LOGIN_PATH, request.url)
     adminLoginUrl.searchParams.set("next", `${pathname}${search}`)
     return NextResponse.redirect(adminLoginUrl)
   }
 
-  // 🔒 USER PROTECTION
   if (isProtectedUserRoute && !hasAuthCookie) {
     const loginUrl = new URL(LOGIN_PATH, request.url)
     loginUrl.searchParams.set("next", `${pathname}${search}`)
@@ -56,7 +54,6 @@ export const config = {
     "/upgrade/:path*",
     "/contact/:path*",
     "/categories/:path*",
-    "/download/:path*",
     "/admin/:path*",
   ],
 }

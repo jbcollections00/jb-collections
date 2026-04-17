@@ -8,6 +8,10 @@ type PageProps = {
   }>
 }
 
+type CategoryRelation = {
+  name?: string | null
+}
+
 type FileRow = {
   id?: string
   title?: string | null
@@ -15,6 +19,7 @@ type FileRow = {
   slug?: string | null
   thumbnail_url?: string | null
   cover_url?: string | null
+  image_url?: string | null
   visibility?: string | null
   category_name?: string | null
   updated_at?: string | null
@@ -34,43 +39,68 @@ function isUuid(value: string) {
   )
 }
 
-function buildImageVersion(file: FileRow | null) {
-  if (!file) return "default"
+function cleanText(value?: string | null) {
+  return value?.replace(/\s+/g, " ").trim() || ""
+}
 
-  if (file.updated_at) {
-    const time = new Date(file.updated_at).getTime()
-    if (Number.isFinite(time) && time > 0) return String(time)
-  }
-
-  return file.id || file.slug || "default"
+function truncate(value: string, max = 180) {
+  if (value.length <= max) return value
+  return `${value.slice(0, max - 1).trim()}…`
 }
 
 function buildOgTitle(file: FileRow | null) {
-  const title = file?.title?.trim()
+  const title = cleanText(file?.title)
   if (!title) return "JB Collections"
-  return `${title} | JB Collections`
+  return `${truncate(title, 70)} | JB Collections`
 }
 
 function buildOgDescription(file: FileRow | null) {
-  const description = file?.description?.trim()
-  if (description) return description
+  const description = cleanText(file?.description)
+  const category = cleanText(file?.category_name)
+  const visibility = cleanText(file?.visibility)
 
-  const category = file?.category_name?.trim()
-  const visibility = file?.visibility?.trim()
-
-  if (category && visibility) {
-    return `${category} • ${visibility} file download on JB Collections.`
+  if (description) {
+    return truncate(description, 200)
   }
 
-  if (category) {
-    return `${category} file download on JB Collections.`
-  }
+  const parts: string[] = []
 
+  if (category) parts.push(category)
   if (visibility) {
-    return `${visibility} file download on JB Collections.`
+    parts.push(visibility.charAt(0).toUpperCase() + visibility.slice(1))
   }
 
-  return "Premium-ready file download platform."
+  if (parts.length > 0) {
+    return `${parts.join(" • ")} • Premium file preview on JB Collections.`
+  }
+
+  return "Premium file preview on JB Collections."
+}
+
+function normalizeImageUrl(url?: string | null) {
+  const value = cleanText(url)
+  if (!value) return null
+
+  if (value.startsWith("http://") || value.startsWith("https://")) {
+    return value
+  }
+
+  const siteUrl = getSiteUrl()
+
+  if (value.startsWith("/")) {
+    return `${siteUrl}${value}`
+  }
+
+  return `${siteUrl}/${value}`
+}
+
+function buildPreviewImage(file: FileRow | null) {
+  return (
+    normalizeImageUrl(file?.thumbnail_url) ||
+    normalizeImageUrl(file?.cover_url) ||
+    normalizeImageUrl(file?.image_url) ||
+    `${getSiteUrl()}/default-preview.jpg`
+  )
 }
 
 async function getFile(slugOrId: string): Promise<FileRow | null> {
@@ -79,17 +109,20 @@ async function getFile(slugOrId: string): Promise<FileRow | null> {
 
     const baseQuery = supabase
       .from("files")
-      .select(`
+      .select(
+        `
         id,
         title,
         description,
         slug,
         thumbnail_url,
         cover_url,
+        image_url,
         visibility,
         updated_at,
         category:categories(name)
-      `)
+      `
+      )
       .eq("status", "published")
 
     const { data, error } = isUuid(slugOrId)
@@ -97,15 +130,15 @@ async function getFile(slugOrId: string): Promise<FileRow | null> {
       : await baseQuery.eq("slug", slugOrId).maybeSingle()
 
     if (error) {
-      console.error("OG metadata file lookup error:", error.message)
+      console.error("Download metadata file lookup error:", error.message)
       return null
     }
 
     if (!data) return null
 
-    const rawCategory = Array.isArray((data as any).category)
-      ? (data as any).category[0]
-      : (data as any).category
+    const rawCategory = Array.isArray((data as { category?: CategoryRelation[] }).category)
+      ? (data as { category?: CategoryRelation[] }).category?.[0]
+      : (data as { category?: CategoryRelation | null }).category
 
     return {
       id: data.id,
@@ -114,34 +147,37 @@ async function getFile(slugOrId: string): Promise<FileRow | null> {
       slug: data.slug,
       thumbnail_url: data.thumbnail_url,
       cover_url: data.cover_url,
+      image_url: (data as { image_url?: string | null }).image_url,
       visibility: data.visibility,
       updated_at: data.updated_at,
       category_name: rawCategory?.name ?? null,
     }
   } catch (error) {
-    console.error("OG metadata unexpected error:", error)
+    console.error("Download metadata unexpected error:", error)
     return null
   }
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
   const { slug } = await params
   const file = await getFile(slug)
 
   const siteUrl = getSiteUrl()
-  const version = buildImageVersion(file)
-  const pageUrl = `${siteUrl}/download/${slug}?v=${encodeURIComponent(version)}`
-  const imageUrl = `${siteUrl}/download/${slug}/og-image?v=${encodeURIComponent(version)}`
+  const resolvedSlug = cleanText(file?.slug) || slug
+  const pageUrl = `${siteUrl}/download/${resolvedSlug}`
 
   const title = buildOgTitle(file)
   const description = buildOgDescription(file)
+  const imageUrl = buildPreviewImage(file)
 
   return {
     metadataBase: new URL(siteUrl),
     title,
     description,
     alternates: {
-      canonical: `${siteUrl}/download/${slug}`,
+      canonical: pageUrl,
     },
     openGraph: {
       title,
@@ -155,7 +191,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
           secureUrl: imageUrl,
           width: 1200,
           height: 630,
-          alt: file?.title?.trim() || "JB Collections preview",
+          alt: cleanText(file?.title) || "JB Collections file preview",
         },
       ],
     },
@@ -164,6 +200,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       title,
       description,
       images: [imageUrl],
+    },
+    other: {
+      "telegram:channel": "@jbcollections",
     },
   }
 }
