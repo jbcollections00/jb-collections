@@ -170,7 +170,7 @@ export async function generateMetadata({
 
   const title = buildOgTitle(file)
   const description = buildOgDescription(file)
-  const imageUrl = buildPreviewImage(file)
+  const imageUrl = buildPreviewImage(file) // ✅ FINAL FIX (NO Date.now)
 
   return {
     metadataBase: new URL(siteUrl),
@@ -200,9 +200,6 @@ export async function generateMetadata({
       title,
       description,
       images: [imageUrl],
-    },
-    other: {
-      "telegram:channel": "@jbcollections",
     },
   }
 }
