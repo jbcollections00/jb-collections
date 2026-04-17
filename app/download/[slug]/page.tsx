@@ -17,6 +17,7 @@ type FileRow = {
   cover_url?: string | null
   visibility?: string | null
   category_name?: string | null
+  updated_at?: string | null
 }
 
 function getSiteUrl() {
@@ -65,12 +66,30 @@ function toAbsoluteUrl(value?: string | null) {
   return `${siteUrl}/${trimmed}`
 }
 
+function withCacheBust(url: string, seed?: string | null) {
+  if (!seed) return url
+  const safeSeed = encodeURIComponent(seed)
+  return url.includes("?") ? `${url}&v=${safeSeed}` : `${url}?v=${safeSeed}`
+}
+
+function buildImageVersion(file: FileRow | null) {
+  if (!file) return "default"
+
+  if (file.updated_at) {
+    const time = new Date(file.updated_at).getTime()
+    if (Number.isFinite(time) && time > 0) return String(time)
+  }
+
+  return file.id || file.slug || "default"
+}
+
 function pickOgImage(file: FileRow | null) {
-  return (
+  const baseImage =
     toAbsoluteUrl(file?.thumbnail_url) ||
     toAbsoluteUrl(file?.cover_url) ||
     `${getSiteUrl()}/default-preview.png`
-  )
+
+  return withCacheBust(baseImage, buildImageVersion(file))
 }
 
 function buildOgTitle(file: FileRow | null) {
@@ -115,6 +134,7 @@ async function getFile(slugOrId: string): Promise<FileRow | null> {
         thumbnail_url,
         cover_url,
         visibility,
+        updated_at,
         category:categories(name)
       `)
       .eq("status", "published")
@@ -142,6 +162,7 @@ async function getFile(slugOrId: string): Promise<FileRow | null> {
       thumbnail_url: data.thumbnail_url,
       cover_url: data.cover_url,
       visibility: data.visibility,
+      updated_at: data.updated_at,
       category_name: rawCategory?.name ?? null,
     }
   } catch (error) {
@@ -177,6 +198,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       images: [
         {
           url: imageUrl,
+          secureUrl: imageUrl,
           width: 1200,
           height: 630,
           alt: file?.title?.trim() || "JB Collections preview",
