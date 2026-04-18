@@ -1576,13 +1576,6 @@ export default function ProfilePageClient() {
                         </div>
                       </div>
                     </div>
-
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-right">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/70">
-                        Ledger Source
-                      </p>
-                      <p className="mt-1 text-xs font-semibold text-white/90">coin_history</p>
-                    </div>
                   </div>
 
                   <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -2189,21 +2182,8 @@ export default function ProfilePageClient() {
                   >
                     {passwordLoading ? "Updating..." : "Update Password"}
                   </button>
-                </div>
-              </SectionCard>
-
-              <SectionCard title="Account Notes" subtitle="Small reminders to keep the page safe and smooth.">
-                <div className="grid w-full gap-3">
-                  {[
-                    "Profile data autosaves while the edit section is open.",
-                    "Username checks for availability before saving.",
-                    "Avatar upload uses your Supabase avatars bucket.",
-                    "Real-time coin updates listen to coin_history changes.",
-                  ].map((item) => (
-                    <div key={item} className="rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm font-semibold text-slate-200">
-                      {item}
-                    </div>
-                  ))}
+               
+                 
                 </div>
               </SectionCard>
             </div>

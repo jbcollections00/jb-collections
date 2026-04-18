@@ -272,10 +272,6 @@ function StorePageContent() {
                   </span>
                 </h1>
 
-                <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
-                  Make users want to upgrade with stronger value, premium identity, secure checkout, and clearer plan differences between Free, Premium, and Platinum.
-                </p>
-
                 <div className="mt-6 grid gap-3 sm:grid-cols-2">
                   {trustItems.map(({ icon: Icon, label }) => (
                     <div
@@ -363,9 +359,7 @@ function StorePageContent() {
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.24em] text-amber-200">Membership Comparison</p>
                 <h2 className="mt-2 text-2xl font-black text-white sm:text-3xl">Make upgrading feel worth it.</h2>
-                <p className="mt-2 max-w-2xl text-sm text-slate-300">
-                  Show users exactly why Free, Premium, and Platinum are different.
-                </p>
+                
               </div>
 
               <div className="inline-flex w-fit items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.22em] text-amber-200 shadow-[0_0_25px_rgba(251,191,36,0.16)]">
@@ -620,38 +614,7 @@ function StorePageContent() {
             </div>
           </section>
 
-          <section className="mt-8 overflow-hidden rounded-[32px] border border-white/10 bg-[linear-gradient(135deg,rgba(251,191,36,0.12),rgba(168,85,247,0.12),rgba(15,23,42,0.8))] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.28)] backdrop-blur sm:p-8">
-            <div className="flex flex-col items-center text-center">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-white">
-                <Flame size={13} className="text-orange-300" /> Final Upgrade Push
-              </div>
-              <h3 className="mt-4 text-2xl font-black text-white sm:text-3xl">
-                Users should feel they’re missing out by staying free.
-              </h3>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-200 sm:text-base">
-                This page now sells status, value, trust, and premium identity together. That is what turns a normal store page into a real upgrade page.
-              </p>
-
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleBuyClick("php1000")}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-fuchsia-500 via-purple-500 to-indigo-500 px-6 py-3 text-sm font-black text-white shadow-[0_12px_40px_rgba(168,85,247,0.30)] transition duration-300 hover:scale-[1.03]"
-                >
-                  <Diamond size={16} />
-                  Go Premium Now
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleBuyClick("php500")}
-                  className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/10 px-6 py-3 text-sm font-black text-white transition duration-300 hover:scale-[1.03] hover:bg-white/15"
-                >
-                  Start with a Strong Value Pack
-                </button>
-              </div>
-            </div>
-          </section>
+         
         </div>
       </div>
 
