@@ -657,12 +657,12 @@ export default function AdminCoinPurchasesPage() {
       </div>
 
       <AdminToast
-        open={toast.open}
-        title={toast.title}
-        description={toast.message}
-        variant={toast.variant}
-        onClose={closeToast}
-      />
+  open={toast.open}
+  title={toast.title}
+  message={toast.message || ""}
+  type={toast.variant}
+  onClose={closeToast}
+/>
     </div>
   )
 }
