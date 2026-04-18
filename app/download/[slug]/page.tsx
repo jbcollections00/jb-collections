@@ -20,7 +20,7 @@ type FileRow = {
   thumbnail_url?: string | null
   thumbnail_storage_key?: string | null
   cover_url?: string | null
-  image_url?: string | null
+  preview_url?: string | null
   visibility?: string | null
   category_name?: string | null
   updated_at?: string | null
@@ -119,8 +119,8 @@ function buildPreviewImage(file: FileRow | null) {
   const coverUrl = normalizeAbsoluteUrl(file?.cover_url)
   if (coverUrl) return coverUrl
 
-  const imageUrl = normalizeAbsoluteUrl(file?.image_url)
-  if (imageUrl) return imageUrl
+  const previewUrl = normalizeAbsoluteUrl(file?.preview_url)
+  if (previewUrl) return previewUrl
 
   return `${getSiteUrl()}/default-preview.jpg`
 }
@@ -140,7 +140,7 @@ async function getFile(slugOrId: string): Promise<FileRow | null> {
         thumbnail_url,
         thumbnail_storage_key,
         cover_url,
-        image_url,
+        preview_url,
         visibility,
         updated_at,
         category:categories(name)
@@ -174,7 +174,7 @@ async function getFile(slugOrId: string): Promise<FileRow | null> {
       thumbnail_storage_key: (data as { thumbnail_storage_key?: string | null })
         .thumbnail_storage_key,
       cover_url: (data as { cover_url?: string | null }).cover_url,
-      image_url: (data as { image_url?: string | null }).image_url,
+      preview_url: (data as { preview_url?: string | null }).preview_url,
       visibility: data.visibility,
       updated_at: data.updated_at,
       category_name: rawCategory?.name ?? null,
