@@ -945,9 +945,19 @@ export default function ProfilePageClient() {
   }
 
   async function handleRedeem(plan: RedeemPlan) {
-    const cost = plan === "premium" ? 2000 : 2600
+    const cost = plan === "premium" ? 2500 : 3500
     if (jbPoints < cost) {
       triggerInsufficientCoins(`Not enough JB Coins. You need ${cost.toLocaleString()} coins.`)
+      return
+    }
+
+    if (plan === "premium" && !canRedeemPremium) {
+      setSaveError("Premium redemption is not available for your current membership.")
+      return
+    }
+
+    if (plan === "platinum" && !canRedeemPlatinum) {
+      setSaveError("Platinum redemption is not available for your current membership.")
       return
     }
 
@@ -955,7 +965,6 @@ export default function ProfilePageClient() {
       setRedeemingPlan(plan)
       setSaveError("")
       setSaveMessage("")
-      addCoinToast(-cost, plan === "premium" ? "Premium unlock" : "Platinum unlock")
 
       const response = await fetch("/api/redeem-membership", {
         method: "POST",
@@ -975,6 +984,7 @@ export default function ProfilePageClient() {
         throw new Error(data.error || "Redeem failed.")
       }
 
+      addCoinToast(-cost, plan === "premium" ? "Premium unlock" : "Platinum unlock")
       setSaveMessage(
         data.message ||
           (plan === "premium" ? "Premium redeemed successfully." : "Platinum redeemed successfully.")
@@ -1149,10 +1159,13 @@ export default function ProfilePageClient() {
     membershipLevel !== "admin" &&
     membershipLevel !== "premium" &&
     membershipLevel !== "platinum" &&
-    jbPoints >= 2000
+    jbPoints >= 2500
 
   const canRedeemPlatinum =
-    membershipLevel !== "admin" && membershipLevel !== "platinum" && jbPoints >= 2600
+    membershipLevel !== "admin" && membershipLevel !== "platinum" && jbPoints >= 3500
+
+  const premiumCoinsNeeded = Math.max(0, 2500 - jbPoints)
+  const platinumCoinsNeeded = Math.max(0, 3500 - jbPoints)
 
   const reactionTotal = socialReactions.reduce((sum, item) => sum + item.count, 0)
 
@@ -1999,6 +2012,109 @@ export default function ProfilePageClient() {
               </div>
 
               <div className="space-y-6">
+                <SectionCard
+                  title="Account Redemption"
+                  subtitle="Users can upgrade directly here using real JB Coins from their wallet."
+                >
+                  <div className="grid gap-4">
+                    <div className="rounded-[24px] border border-emerald-400/20 bg-[linear-gradient(135deg,rgba(16,185,129,0.16),rgba(15,23,42,0.96))] p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-emerald-200">Premium Redemption</p>
+                          <h3 className="mt-2 text-3xl font-black text-white">2,000 JB Coins</h3>
+                          <p className="mt-2 text-sm text-emerald-100/80">
+                            Unlock Premium account access directly from the profile page.
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-right">
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-100/70">Status</p>
+                          <p className="mt-1 text-xs font-bold text-white">
+                            {membershipLevel === "premium" || membershipLevel === "platinum" || membershipLevel === "admin"
+                              ? "Already unlocked"
+                              : canRedeemPremium
+                                ? "Ready to redeem"
+                                : `${premiumCoinsNeeded.toLocaleString()} more needed`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-xs uppercase tracking-wide text-slate-400">Current Wallet</p>
+                          <p className="mt-2 text-xl font-black text-amber-300">{jbPoints.toLocaleString()} JB Coins</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-xs uppercase tracking-wide text-slate-400">Plan Access</p>
+                          <p className="mt-2 text-xl font-black text-white">Premium</p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleRedeem("premium")}
+                        disabled={redeemingPlan !== null || !canRedeemPremium}
+                        className="mt-5 w-full rounded-2xl bg-emerald-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {redeemingPlan === "premium"
+                          ? "Redeeming Premium..."
+                          : membershipLevel === "premium" || membershipLevel === "platinum" || membershipLevel === "admin"
+                            ? "Premium already active"
+                            : canRedeemPremium
+                              ? "Redeem Premium Now"
+                              : `Need ${premiumCoinsNeeded.toLocaleString()} more coins`}
+                      </button>
+                    </div>
+
+                    <div className="rounded-[24px] border border-fuchsia-400/20 bg-[linear-gradient(135deg,rgba(217,70,239,0.16),rgba(15,23,42,0.96))] p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-fuchsia-200">Platinum Redemption</p>
+                          <h3 className="mt-2 text-3xl font-black text-white">2,600 JB Coins</h3>
+                          <p className="mt-2 text-sm text-fuchsia-100/80">
+                            Upgrade further to Platinum when your coin balance is high enough.
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-right">
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-fuchsia-100/70">Status</p>
+                          <p className="mt-1 text-xs font-bold text-white">
+                            {membershipLevel === "platinum" || membershipLevel === "admin"
+                              ? "Already unlocked"
+                              : canRedeemPlatinum
+                                ? "Ready to redeem"
+                                : `${platinumCoinsNeeded.toLocaleString()} more needed`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-xs uppercase tracking-wide text-slate-400">Current Wallet</p>
+                          <p className="mt-2 text-xl font-black text-amber-300">{jbPoints.toLocaleString()} JB Coins</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-xs uppercase tracking-wide text-slate-400">Plan Access</p>
+                          <p className="mt-2 text-xl font-black text-white">Platinum</p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleRedeem("platinum")}
+                        disabled={redeemingPlan !== null || !canRedeemPlatinum}
+                        className="mt-5 w-full rounded-2xl bg-fuchsia-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {redeemingPlan === "platinum"
+                          ? "Redeeming Platinum..."
+                          : membershipLevel === "platinum" || membershipLevel === "admin"
+                            ? "Platinum already active"
+                            : canRedeemPlatinum
+                              ? "Redeem Platinum Now"
+                              : `Need ${platinumCoinsNeeded.toLocaleString()} more coins`}
+                      </button>
+                    </div>
+                  </div>
+                </SectionCard>
+
                 <SectionCard title="Activity Feed" subtitle="A social-style timeline gives the profile more life.">
                   {activityFeed.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950 p-6 text-sm font-semibold text-slate-400">
