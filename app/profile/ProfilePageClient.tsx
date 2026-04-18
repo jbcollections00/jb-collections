@@ -116,6 +116,16 @@ type DownloadHistoryItem = {
   source_label?: string
 }
 
+type DownloadPreviewFileRow = {
+  id: string
+  title?: string | null
+  slug?: string | null
+  thumbnail_url?: string | null
+  cover_url?: string | null
+  preview_url?: string | null
+  created_at?: string | null
+}
+
 type ActivityFeedItem = {
   id: string
   icon: string
@@ -249,6 +259,17 @@ function parseDownloadedFileTitle(description?: string | null, fallbackIndex = 0
 
   if (!cleaned) return `Downloaded file ${fallbackIndex + 1}`
   return cleaned
+}
+
+function normalizeFileTitleForMatch(value?: string | null) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\[[^\]]*\]/g, " ")
+    .replace(/latest/gi, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 function SectionCard({
@@ -609,19 +630,61 @@ export default function ProfilePageClient() {
         return
       }
 
+      const historyRows = Array.isArray(data) ? data : []
+      const parsedHistory = historyRows.map((item, index) => ({
+        id: item.id,
+        title: parseDownloadedFileTitle(item.description, index),
+        downloaded_at: item.created_at || new Date().toISOString(),
+      }))
+
+      const uniqueTitles = Array.from(new Set(parsedHistory.map((item) => item.title).filter(Boolean)))
+
+      let filesRows: DownloadPreviewFileRow[] = []
+
+      if (uniqueTitles.length > 0) {
+        const { data: filesData, error: filesError } = await supabase
+          .from("files")
+          .select("id, title, slug, thumbnail_url, cover_url, preview_url, created_at")
+          .order("created_at", { ascending: false })
+          .limit(500)
+
+        if (filesError) {
+          console.error("Download history files lookup error:", filesError)
+        } else {
+          filesRows = (Array.isArray(filesData) ? filesData : []) as DownloadPreviewFileRow[]
+        }
+      }
+
+      const exactFilesIndex = new Map<string, DownloadPreviewFileRow>()
+      for (const file of filesRows) {
+        const key = normalizeFileTitleForMatch(file.title)
+        if (key && !exactFilesIndex.has(key)) exactFilesIndex.set(key, file)
+      }
+
       const seen = new Set<string>()
       const items: DownloadHistoryItem[] = []
 
-      for (const [index, item] of (Array.isArray(data) ? data : []).entries()) {
-        const title = parseDownloadedFileTitle(item.description, index)
-        const dedupeKey = `${title.toLowerCase()}__${item.created_at || ""}`
+      for (const item of parsedHistory) {
+        const normalizedTitle = normalizeFileTitleForMatch(item.title)
+        const matchedFile =
+          exactFilesIndex.get(normalizedTitle) ||
+          filesRows.find((file) => {
+            const fileKey = normalizeFileTitleForMatch(file.title)
+            return fileKey && normalizedTitle && (fileKey.includes(normalizedTitle) || normalizedTitle.includes(fileKey))
+          })
+
+        const preview = matchedFile?.thumbnail_url || matchedFile?.cover_url || matchedFile?.preview_url || undefined
+
+        const dedupeKey = `${String(matchedFile?.id || item.id).toLowerCase()}__${item.downloaded_at}`
         if (seen.has(dedupeKey)) continue
         seen.add(dedupeKey)
 
         items.push({
-          id: item.id,
-          title,
-          downloaded_at: item.created_at || new Date().toISOString(),
+          id: matchedFile?.id || item.id,
+          title: matchedFile?.title?.trim() || item.title,
+          downloaded_at: item.downloaded_at,
+          preview,
+          href: matchedFile?.slug ? `/download/${matchedFile.slug}` : undefined,
           type_label: "Downloaded",
           size_label: "Saved in history",
           source_label: "From wallet download reward",
@@ -1202,7 +1265,7 @@ export default function ProfilePageClient() {
   }, [derivedReactions])
 
   const visibleDownloadsHistory = useMemo(
-    () => (showAllDownloads ? downloadsHistory : downloadsHistory.slice(0, 6)),
+    () => (showAllDownloads ? downloadsHistory : downloadsHistory.slice(0, 5)),
     [downloadsHistory, showAllDownloads]
   )
 
@@ -1282,7 +1345,7 @@ export default function ProfilePageClient() {
           ? "Premium Hunter"
           : "Rising Collector"
 
-  const hasMoreDownloads = downloadsHistory.length > 6
+  const hasMoreDownloads = downloadsHistory.length > 5
   const walletEntryCount = coinHistory.length
 
   const achievementCards = [
@@ -1906,15 +1969,14 @@ export default function ProfilePageClient() {
 
                 <SectionCard
                   title="Downloads History"
-                  subtitle="This shows the real items this user has downloaded based on their download reward history."
-                  action={
+                   action={
                     hasMoreDownloads ? (
                       <button
                         type="button"
                         onClick={() => setShowAllDownloads((prev) => !prev)}
                         className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-white transition hover:bg-white/10"
                       >
-                        {showAllDownloads ? "Show less" : `View all (${downloadsHistory.length})`}
+                        {showAllDownloads ? "Show less" : `Show more (${downloadsHistory.length - 5})`}
                       </button>
                     ) : null
                   }
@@ -1931,75 +1993,49 @@ export default function ProfilePageClient() {
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-                      {visibleDownloadsHistory.map((item) => (
-                        <div
-                          key={item.id}
-                          className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.22)]"
-                        >
-                          <div className="relative aspect-[3/4] border-b border-white/10 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.20),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.65),rgba(2,6,23,0.98))]">
-                            {item.preview ? (
-                              <img
-                                src={item.preview}
-                                alt={item.title}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
-                                <div className="flex h-16 w-16 items-center justify-center rounded-[20px] border border-cyan-400/20 bg-cyan-500/10 text-3xl shadow-[0_0_30px_rgba(34,211,238,0.18)]">
-                                  ⬇️
+                      {visibleDownloadsHistory.map((item) => {
+                        const cardContent = (
+                          <>
+                            <div className="relative aspect-[3/4] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.20),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.65),rgba(2,6,23,0.98))]">
+                              {item.preview ? (
+                                <img
+                                  src={item.preview}
+                                  alt={item.title}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-4 text-center">
+                                  <div className="flex h-16 w-16 items-center justify-center rounded-[20px] border border-cyan-400/20 bg-cyan-500/10 text-3xl shadow-[0_0_30px_rgba(34,211,238,0.18)]">
+                                    ⬇️
+                                  </div>
+                                  <p className="line-clamp-3 text-sm font-black text-white">{item.title}</p>
                                 </div>
-                                <div className="px-3">
-                                  <p className="line-clamp-2 text-sm font-black text-white">{item.title}</p>
-                                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200/80">
-                                    Portrait Preview
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-
-                            <div className="absolute left-3 top-3 rounded-full border border-white/10 bg-black/40 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white backdrop-blur">
-                              {item.type_label || "Download"}
+                              )}
                             </div>
-                          </div>
 
-                          <div className="space-y-3 p-4">
-                            <div>
+                            <div className="border-t border-white/10 px-4 py-3">
                               <p className="line-clamp-2 text-sm font-black text-white">{item.title}</p>
-                              <p className="mt-1 text-xs text-slate-400">{formatShortDate(item.downloaded_at)}</p>
                             </div>
+                          </>
+                        )
 
-                            <div className="grid gap-2">
-                              <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">File Size</p>
-                                <p className="mt-1 text-xs font-black text-white">{item.size_label || "Unknown size"}</p>
-                              </div>
-
-                              <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">File Type</p>
-                                <p className="mt-1 text-xs font-black text-white">{item.type_label || "Saved item"}</p>
-                              </div>
-
-                              <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Source</p>
-                                <p className="mt-1 text-xs font-black text-white">{item.source_label || "Download history"}</p>
-                              </div>
-                            </div>
-
-                            {item.href ? (
-                              <Link
-                                href={item.href}
-                                className="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-white transition hover:bg-white/10"
-                              >
-                                Open
-                              </Link>
-                            ) : (
-                              <div className="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-slate-300">
-                                Download saved
-                              </div>
-                            )}
+                        return item.href ? (
+                          <Link
+                            key={item.id}
+                            href={item.href}
+                            className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.22)]"
+                          >
+                            {cardContent}
+                          </Link>
+                        ) : (
+                          <div
+                            key={item.id}
+                            className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.22)]"
+                          >
+                            {cardContent}
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </SectionCard>
