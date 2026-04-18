@@ -6,28 +6,22 @@ import crypto from "crypto"
 
 export const runtime = "nodejs"
 
-type UpgradeInsertRow = {
-  sender_id: string
-  name: string
-  email: string
-  plan: string
-  subject: string
-  body: string
-  status: string
-  payment_note: string
-  payment_proof_url: string | null
-  receipt_url: string | null
-  receipt_path: string | null
-  payment_name: string
-  payment_method: "gcash" | "maya"
-  reference_number: string
-  amount: number
+type CoinPurchaseOrderRow = {
+  id: string
+  user_id: string
+  amount_php: number
   coins: number
-  label: string
-  package_label: string
-  bonus_coins: number
-  base_coins: number
-  coins_credited: boolean
+  label: string | null
+  payment_method: "gcash" | "maya"
+  payment_reference: string | null
+  proof_url: string | null
+  status: "pending" | "approved" | "rejected"
+  admin_note: string | null
+  approved_by: string | null
+  approved_at: string | null
+  rejected_at: string | null
+  created_at: string
+  updated_at: string
 }
 
 function requireEnv(name: string) {
@@ -132,7 +126,7 @@ export async function POST(request: Request) {
     const base = toNumber(formData.get("base"))
     const label = toText(formData.get("label")) || "JB Coin Package"
     const methodRaw = toText(formData.get("method")).toLowerCase()
-    const method = methodRaw === "gcash" ? "gcash" : "maya"
+    const method: "gcash" | "maya" = methodRaw === "gcash" ? "gcash" : "maya"
     const payerName = toText(formData.get("payer_name"))
     const referenceNumber = toText(formData.get("reference_number"))
     const normalizedReference = referenceNumber.replace(/\s+/g, "").toUpperCase()
@@ -176,22 +170,10 @@ export async function POST(request: Request) {
 
     const adminDb = createSupabaseAdminClient()
 
-    const { data: profile } = await adminDb
-      .from("profiles")
-      .select("full_name, name, username")
-      .eq("id", user.id)
-      .maybeSingle()
-
-    const displayName =
-      String(profile?.full_name || "").trim() ||
-      String(profile?.name || "").trim() ||
-      String(profile?.username || "").trim() ||
-      payerName
-
     const { data: existingReference, error: existingReferenceError } = await adminDb
-      .from("upgrades")
-      .select("id, status, sender_id")
-      .eq("reference_number", normalizedReference)
+      .from("coin_purchase_orders")
+      .select("id, status, user_id")
+      .eq("payment_reference", normalizedReference)
       .limit(1)
       .maybeSingle()
 
@@ -219,9 +201,9 @@ export async function POST(request: Request) {
     const shortHash = fileHash.slice(0, 24)
 
     const { data: existingReceiptHash, error: existingReceiptHashError } = await adminDb
-      .from("upgrades")
-      .select("id, status, receipt_path")
-      .like("receipt_path", `%${shortHash}%`)
+      .from("coin_purchase_orders")
+      .select("id, status, proof_url")
+      .like("proof_url", `%${shortHash}%`)
       .limit(1)
       .maybeSingle()
 
@@ -259,7 +241,7 @@ export async function POST(request: Request) {
     const extension =
       receipt.name.includes(".") ? receipt.name.split(".").pop() || "jpg" : "jpg"
     const safeFileName = sanitizeFilename(receipt.name || `receipt.${extension}`)
-    const filePath = `upgrades/${user.id}/${shortHash}-${Date.now()}-${safeFileName}`
+    const filePath = `coin-purchase-orders/${user.id}/${shortHash}-${Date.now()}-${safeFileName}`
 
     const { error: uploadError } = await adminDb.storage
       .from(bucketName)
@@ -282,73 +264,59 @@ export async function POST(request: Request) {
 
     const receiptUrl = publicUrlData?.publicUrl || null
 
-    const insertPayload: UpgradeInsertRow = {
-      sender_id: user.id,
-      name: displayName,
-      email: user.email || "",
-      plan: "coin_topup",
-      subject: `${label} payment proof`,
-      body: `Payment proof submitted for ${label}.`,
-      status: "pending",
-      payment_note: notes,
-      payment_proof_url: receiptUrl,
-      receipt_url: receiptUrl,
-      receipt_path: `${bucketName}/${filePath}`,
-      payment_name: payerName,
-      payment_method: method,
-      reference_number: normalizedReference,
-      amount,
-      coins,
-      label,
-      package_label: label,
-      bonus_coins: bonus,
-      base_coins: base,
-      coins_credited: false,
-    }
-
     const { data: inserted, error: insertError } = await adminDb
-      .from("upgrades")
-      .insert(insertPayload)
+      .from("coin_purchase_orders")
+      .insert({
+        user_id: user.id,
+        amount_php: amount,
+        coins,
+        label,
+        payment_method: method,
+        payment_reference: normalizedReference,
+        proof_url: receiptUrl,
+        status: "pending",
+        admin_note: notes || null,
+      })
       .select(
-        "id, label, amount, coins, bonus_coins, base_coins, payment_method, payment_name, reference_number, payment_note, status, created_at, receipt_path, receipt_url, payment_proof_url"
+        "id, user_id, amount_php, coins, label, payment_method, payment_reference, proof_url, status, admin_note, approved_by, approved_at, rejected_at, created_at, updated_at"
       )
       .single()
 
-    if (insertError) {
-      console.error("Upgrade insert error:", insertError)
+    if (insertError || !inserted) {
+      console.error("Coin purchase order insert error:", insertError)
       return NextResponse.json(
         { ok: false, error: "Failed to save payment request." },
         { status: 500 }
       )
     }
 
+    const order = inserted as CoinPurchaseOrderRow
+
     return NextResponse.json(
       {
         ok: true,
-        transaction_id: inserted.id,
+        transaction_id: order.id,
         transaction: {
-          id: inserted.id,
-          label: inserted.label || label,
-          amount: Number(inserted.amount || amount),
-          coins: Number(inserted.coins || coins),
-          bonus: Number(inserted.bonus_coins || bonus),
-          base: Number(inserted.base_coins || base),
-          method: inserted.payment_method || method,
-          payerName: inserted.payment_name || payerName,
-          referenceNumber: inserted.reference_number || normalizedReference,
-          notes: inserted.payment_note || notes,
-          status: inserted.status || "pending",
-          createdAt: inserted.created_at || new Date().toISOString(),
+          id: order.id,
+          label: order.label || label,
+          amount: Number(order.amount_php || amount),
+          coins: Number(order.coins || coins),
+          bonus,
+          base,
+          method: order.payment_method || method,
+          payerName,
+          referenceNumber: order.payment_reference || normalizedReference,
+          notes: order.admin_note || notes,
+          status: order.status || "pending",
+          createdAt: order.created_at || new Date().toISOString(),
           receiptName: receipt.name,
-          receiptPath: inserted.receipt_path || `${bucketName}/${filePath}`,
-          receiptUrl:
-            inserted.receipt_url || inserted.payment_proof_url || receiptUrl,
+          receiptUrl: order.proof_url || receiptUrl,
         },
       },
       { status: 201 }
     )
   } catch (error) {
-    console.error("Upgrade request POST route error:", error)
+    console.error("Coin purchase request POST route error:", error)
 
     return NextResponse.json(
       {
