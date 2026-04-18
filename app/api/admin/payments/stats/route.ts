@@ -5,12 +5,13 @@ import { createClient as createSupabaseAdmin } from "@supabase/supabase-js"
 
 export const runtime = "nodejs"
 
-type UpgradeStatsRow = {
-  amount: number | string | null
+type CoinPurchaseStatsRow = {
+  amount_php: number | string | null
   coins: number | string | null
   status: string | null
-  coins_credited: boolean | null
   created_at: string | null
+  approved_at: string | null
+  rejected_at: string | null
 }
 
 function requireEnv(name: string) {
@@ -58,7 +59,6 @@ function toNumber(value: unknown) {
 function normalizeStatus(value: unknown) {
   const status = String(value || "pending").trim().toLowerCase()
   if (status === "approved") return "approved"
-  if (status === "credited") return "credited"
   if (status === "rejected") return "rejected"
   return "pending"
 }
@@ -67,10 +67,7 @@ function isSameMonth(dateString: string | null, now: Date) {
   if (!dateString) return false
   const date = new Date(dateString)
   if (Number.isNaN(date.getTime())) return false
-  return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth()
-  )
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth()
 }
 
 function isToday(dateString: string | null, now: Date) {
@@ -94,10 +91,7 @@ export async function GET() {
     } = await supabase.auth.getUser()
 
     if (userError || !user) {
-      return NextResponse.json(
-        { ok: false, error: "Unauthorized" },
-        { status: 401 }
-      )
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
     }
 
     const adminDb = createSupabaseAdminClient()
@@ -109,7 +103,6 @@ export async function GET() {
       .maybeSingle()
 
     if (adminProfileError) {
-      console.error("Admin profile lookup error:", adminProfileError)
       return NextResponse.json(
         { ok: false, error: "Failed to verify admin access." },
         { status: 500 }
@@ -124,19 +117,18 @@ export async function GET() {
     }
 
     const { data, error } = await adminDb
-      .from("upgrades")
-      .select("amount, coins, status, coins_credited, created_at")
+      .from("coin_purchase_orders")
+      .select("amount_php, coins, status, created_at, approved_at, rejected_at")
       .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("Upgrade stats query error:", error)
       return NextResponse.json(
         { ok: false, error: "Failed to load payment analytics." },
         { status: 500 }
       )
     }
 
-    const rows = ((data || []) as UpgradeStatsRow[])
+    const rows = (data || []) as CoinPurchaseStatsRow[]
     const now = new Date()
 
     let totalRequests = 0
@@ -157,10 +149,10 @@ export async function GET() {
     for (const row of rows) {
       totalRequests += 1
 
-      const amount = toNumber(row.amount)
+      const amount = toNumber(row.amount_php)
       const coins = toNumber(row.coins)
       const status = normalizeStatus(row.status)
-      const credited = Boolean(row.coins_credited)
+      const credited = status === "approved"
 
       totalRevenue += amount
       totalCoinsRequested += coins
@@ -170,35 +162,30 @@ export async function GET() {
         pendingRevenue += amount
       } else if (status === "approved") {
         approvedRequests += 1
-      } else if (status === "credited") {
         creditedRequests += 1
       } else if (status === "rejected") {
         rejectedRequests += 1
       }
 
-      if (credited || status === "credited") {
+      if (credited) {
         creditedRevenue += amount
         totalCoinsCredited += coins
       }
 
-      if ((credited || status === "credited") && isToday(row.created_at, now)) {
+      if (credited && isToday(row.created_at, now)) {
         todayRevenue += amount
       }
 
-      if ((credited || status === "credited") && isSameMonth(row.created_at, now)) {
+      if (credited && isSameMonth(row.created_at, now)) {
         monthRevenue += amount
       }
     }
 
     const approvalRate =
-      totalRequests > 0
-        ? Math.round(((approvedRequests + creditedRequests) / totalRequests) * 100)
-        : 0
+      totalRequests > 0 ? Math.round((approvedRequests / totalRequests) * 100) : 0
 
     const creditRate =
-      totalRequests > 0
-        ? Math.round((creditedRequests / totalRequests) * 100)
-        : 0
+      totalRequests > 0 ? Math.round((creditedRequests / totalRequests) * 100) : 0
 
     return NextResponse.json({
       ok: true,
@@ -220,15 +207,11 @@ export async function GET() {
       },
     })
   } catch (error) {
-    console.error("Admin payment stats GET error:", error)
-
     return NextResponse.json(
       {
         ok: false,
         error:
-          error instanceof Error
-            ? error.message
-            : "Failed to load payment analytics.",
+          error instanceof Error ? error.message : "Failed to load payment analytics.",
       },
       { status: 500 }
     )

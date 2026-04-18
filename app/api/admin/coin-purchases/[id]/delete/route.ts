@@ -25,57 +25,47 @@ function createSupabaseAdmin() {
 
 export async function POST(
   _request: NextRequest,
-  context: { params: Promise<{ id: string }> },
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await context.params
     const supabase = createSupabaseAdmin()
 
-    const { data: order, error: orderError } = await supabase
+    const { data: order, error: findError } = await supabase
       .from("coin_purchase_orders")
       .select("id,status")
       .eq("id", id)
       .single()
 
-    if (orderError || !order) {
+    if (findError || !order) {
       return NextResponse.json(
         { error: "Coin purchase order not found." },
-        { status: 404 },
-      )
-    }
-
-    if (order.status === "credited" || order.status === "approved") {
-      return NextResponse.json(
-        { error: "Processed orders cannot be rejected anymore." },
-        { status: 400 },
+        { status: 404 }
       )
     }
 
     const { error } = await supabase
       .from("coin_purchase_orders")
-      .update({
-        status: "rejected",
-        updated_at: new Date().toISOString(),
-      })
+      .delete()
       .eq("id", id)
 
     if (error) {
       return NextResponse.json(
         { error: error.message },
-        { status: 500 },
+        { status: 500 }
       )
     }
 
     return NextResponse.json({
       ok: true,
-      message: "Order rejected successfully.",
+      message: "Order deleted successfully.",
     })
   } catch (error) {
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Failed to reject order.",
+        error: error instanceof Error ? error.message : "Failed to delete order.",
       },
-      { status: 500 },
+      { status: 500 }
     )
   }
 }

@@ -427,7 +427,7 @@ function PaymentPageContent() {
       formData.append("notes", notes)
       formData.append("receipt", receiptFile)
 
-      const res = await fetch("/api/upgrades/request", {
+      const res = await fetch("/api/coin-purchases/create", {
         method: "POST",
         body: formData,
       })
@@ -453,7 +453,7 @@ function PaymentPageContent() {
           referenceNumber: referenceNumber.trim(),
           notes: notes.trim(),
           status: "pending",
-          createdAt: new Date().toISOString(),
+          createdAt: String(data?.transaction?.createdAt || ""),
           receiptName: receiptFile.name,
         }
 
@@ -896,7 +896,9 @@ function PaymentPageContent() {
                                     Submitted
                                   </div>
                                   <div className="mt-1 text-sm font-black text-white">
-                                    {formatDateTime(new Date(item.createdAt))}
+                                    {item.createdAt
+                                      ? formatDateTime(new Date(item.createdAt))
+                                      : "—"}
                                   </div>
                                 </div>
                               </div>
@@ -1320,7 +1322,9 @@ function PaymentPageContent() {
                   <div className="mt-3 flex items-center justify-between gap-3">
                     <span className="text-sm text-slate-300">Submitted</span>
                     <span className="text-sm font-black text-white">
-                      {formatDateTime(new Date(latestTransaction.createdAt))}
+                      {latestTransaction.createdAt
+                        ? formatDateTime(new Date(latestTransaction.createdAt))
+                        : "—"}
                     </span>
                   </div>
                 </div>

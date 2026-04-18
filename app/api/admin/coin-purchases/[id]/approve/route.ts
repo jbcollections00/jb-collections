@@ -1,122 +1,207 @@
-import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase-server"
-import { createClient as createSupabaseAdmin } from "@supabase/supabase-js"
+import { NextRequest, NextResponse } from "next/server"
+import { createClient } from "@supabase/supabase-js"
 
 export const runtime = "nodejs"
 
-type ProfileRow = {
-  id: string
-  role?: string | null
-  membership?: string | null
+function requireEnv(name: string) {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`)
+  }
+  return value
+}
+
+function createSupabaseAdmin() {
+  const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL")
+  const supabaseServiceRole = requireEnv("SUPABASE_SERVICE_ROLE_KEY")
+
+  return createClient(supabaseUrl, supabaseServiceRole, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  })
+}
+
+async function getProfileBalanceMode(supabase: ReturnType<typeof createSupabaseAdmin>, userId: string) {
+  const tryCoins = await supabase
+    .from("profiles")
+    .select("coins")
+    .eq("id", userId)
+    .single()
+
+  if (!tryCoins.error) {
+    return {
+      mode: "coins" as const,
+      current: Number(tryCoins.data?.coins ?? 0),
+    }
+  }
+
+  const tryPoints = await supabase
+    .from("profiles")
+    .select("jb_points")
+    .eq("id", userId)
+    .single()
+
+  if (!tryPoints.error) {
+    return {
+      mode: "jb_points" as const,
+      current: Number(tryPoints.data?.jb_points ?? 0),
+    }
+  }
+
+  throw new Error("Could not detect a wallet balance column on profiles. Add either coins or jb_points.")
+}
+
+async function writeTransactionLog(
+  supabase: ReturnType<typeof createSupabaseAdmin>,
+  order: Record<string, any>,
+) {
+  const creditDate = new Date().toISOString()
+
+  const logAttempts = [
+    () =>
+      supabase.from("coin_history").insert({
+        user_id: order.user_id,
+        type: "credit",
+        source: "coin_purchase_order",
+        label: order.label || "JB Coin Purchase",
+        coins: Number(order.coins ?? 0),
+        amount: Number(order.amount ?? 0),
+        status: "credited",
+        reference_id: order.id,
+        reference_number: order.reference_number,
+        payment_method: order.payment_method,
+        created_at: creditDate,
+      }),
+    () =>
+      supabase.from("jb_points_log").insert({
+        user_id: order.user_id,
+        action_type: "coin_purchase_credit",
+        points: Number(order.coins ?? 0),
+        reference_id: order.id,
+        created_at: creditDate,
+      }),
+    () =>
+      supabase.from("coin_transactions").insert({
+        user_id: order.user_id,
+        transaction_type: "credit",
+        coins: Number(order.coins ?? 0),
+        label: order.label || "JB Coin Purchase",
+        reference_id: order.id,
+        created_at: creditDate,
+      }),
+  ]
+
+  for (const attempt of logAttempts) {
+    const { error } = await attempt()
+    if (!error) {
+      return
+    }
+  }
 }
 
 export async function POST(
-  _req: Request,
-  context: { params: Promise<{ id: string }> }
+  _request: NextRequest,
+  context: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await context.params
-    if (!id) {
-      return NextResponse.json({ error: "Missing order id." }, { status: 400 })
-    }
+    const supabase = createSupabaseAdmin()
 
-    const supabase = await createClient()
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const { data: adminProfile, error: adminProfileError } = await supabase
-      .from("profiles")
-      .select("id, role, membership")
-      .eq("id", user.id)
-      .maybeSingle()
-
-    if (adminProfileError) {
-      return NextResponse.json({ error: adminProfileError.message || "Failed to verify admin." }, { status: 500 })
-    }
-
-    const profile = adminProfile as ProfileRow | null
-    const isAdmin = String(profile?.role || "").trim().toLowerCase() === "admin"
-
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Admin access required." }, { status: 403 })
-    }
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json({ error: "Missing Supabase service role configuration." }, { status: 500 })
-    }
-
-    const adminDb = createSupabaseAdmin(supabaseUrl, serviceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
-
-    const { data: order, error: orderError } = await adminDb
+    const { data: order, error: orderError } = await supabase
       .from("coin_purchase_orders")
       .select("*")
       .eq("id", id)
-      .maybeSingle()
+      .single()
 
-    if (orderError) {
-      return NextResponse.json({ error: orderError.message || "Failed to load order." }, { status: 500 })
+    if (orderError || !order) {
+      return NextResponse.json(
+        { error: "Coin purchase order not found." },
+        { status: 404 },
+      )
     }
 
-    if (!order) {
-      return NextResponse.json({ error: "Order not found." }, { status: 404 })
-    }
-
-    if (order.status === "approved") {
-      return NextResponse.json({ error: "Order is already approved." }, { status: 400 })
+    if (order.status === "credited" || order.status === "approved") {
+      return NextResponse.json(
+        { error: "This order was already processed." },
+        { status: 400 },
+      )
     }
 
     if (order.status === "rejected") {
-      return NextResponse.json({ error: "Rejected orders cannot be approved." }, { status: 400 })
+      return NextResponse.json(
+        { error: "Rejected orders cannot be approved." },
+        { status: 400 },
+      )
     }
 
-    const { error: coinChangeError } = await adminDb.rpc("handle_coin_change", {
-      p_user_id: order.user_id,
-      p_amount: Number(order.coins || 0),
-      p_type: "coin_purchase",
-      p_description: `Approved coin purchase ${order.label || order.id}`,
-    })
+    const balanceInfo = await getProfileBalanceMode(supabase, order.user_id)
+    const creditAmount = Number(order.coins ?? 0)
 
-    if (coinChangeError) {
-      return NextResponse.json({ error: coinChangeError.message || "Failed to credit coins." }, { status: 500 })
+    if (!Number.isFinite(creditAmount) || creditAmount <= 0) {
+      return NextResponse.json(
+        { error: "This order has an invalid coin amount." },
+        { status: 400 },
+      )
     }
 
-    const { error: updateError } = await adminDb
+    const updatedBalance = balanceInfo.current + creditAmount
+
+    const profileUpdate =
+      balanceInfo.mode === "coins"
+        ? await supabase
+            .from("profiles")
+            .update({
+              coins: updatedBalance,
+              last_seen: new Date().toISOString(),
+            })
+            .eq("id", order.user_id)
+        : await supabase
+            .from("profiles")
+            .update({
+              jb_points: updatedBalance,
+              last_seen: new Date().toISOString(),
+            })
+            .eq("id", order.user_id)
+
+    if (profileUpdate.error) {
+      return NextResponse.json(
+        { error: profileUpdate.error.message },
+        { status: 500 },
+      )
+    }
+
+    const { error: statusError } = await supabase
       .from("coin_purchase_orders")
       .update({
-        status: "approved",
-        approved_by: user.id,
-        approved_at: new Date().toISOString(),
+        status: "credited",
+        updated_at: new Date().toISOString(),
       })
-      .eq("id", id)
+      .eq("id", order.id)
 
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message || "Failed to mark order approved." }, { status: 500 })
+    if (statusError) {
+      return NextResponse.json(
+        { error: statusError.message },
+        { status: 500 },
+      )
     }
 
+    await writeTransactionLog(supabase, order)
+
     return NextResponse.json({
-      success: true,
-      message: "Order approved and coins credited successfully.",
+      ok: true,
+      message: `${creditAmount} coins credited successfully.`,
+      credited: creditAmount,
+      balance: updatedBalance,
+      balanceMode: balanceInfo.mode,
     })
   } catch (error) {
-    console.error("Approve coin purchase order error:", error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Something went wrong." },
-      { status: 500 }
+      {
+        error: error instanceof Error ? error.message : "Failed to approve order.",
+      },
+      { status: 500 },
     )
   }
 }
