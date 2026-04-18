@@ -108,11 +108,12 @@ type SocialReaction = {
 type DownloadHistoryItem = {
   id: string
   title: string
-  href: string
+  href?: string
   downloaded_at: string
   size_label?: string
   type_label?: string
   preview?: string
+  source_label?: string
 }
 
 type ActivityFeedItem = {
@@ -236,6 +237,20 @@ function formatShortDate(value?: string | null) {
   }).format(date)
 }
 
+function parseDownloadedFileTitle(description?: string | null, fallbackIndex = 0) {
+  const raw = String(description || "").trim()
+  if (!raw) return `Downloaded file ${fallbackIndex + 1}`
+
+  const cleaned = raw
+    .replace(/^download(?:ed)?\s*(reward)?\s*[:\-–|]?\s*/i, "")
+    .replace(/^earned\s*\+?\d+\s*jb\s*coins\s*for\s*/i, "")
+    .replace(/^reward\s*for\s*/i, "")
+    .trim()
+
+  if (!cleaned) return `Downloaded file ${fallbackIndex + 1}`
+  return cleaned
+}
+
 function SectionCard({
   title,
   subtitle,
@@ -293,12 +308,6 @@ function DetailCard({ label, children }: { label: string; children: ReactNode })
   )
 }
 
-function getReactionStyles(emoji: string) {
-  if (emoji === "❤️") return "border-pink-400/20 bg-pink-500/10 text-pink-200"
-  if (emoji === "🔥") return "border-orange-400/20 bg-orange-500/10 text-orange-200"
-  if (emoji === "👑") return "border-amber-400/20 bg-amber-500/10 text-amber-200"
-  return "border-cyan-400/20 bg-cyan-500/10 text-cyan-200"
-}
 
 export default function ProfilePageClient() {
   const supabase = useMemo(() => createClient(), [])
@@ -314,6 +323,9 @@ export default function ProfilePageClient() {
   const [leaderboardLoading, setLeaderboardLoading] = useState(false)
   const [viewStatsLoading, setViewStatsLoading] = useState(false)
   const [downloadsLoading, setDownloadsLoading] = useState(false)
+  const [showAllDownloads, setShowAllDownloads] = useState(false)
+  const [showAllCoinActivity, setShowAllCoinActivity] = useState(false)
+  const [showAllActivityFeed, setShowAllActivityFeed] = useState(false)
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [authEmail, setAuthEmail] = useState("")
@@ -349,11 +361,10 @@ export default function ProfilePageClient() {
   const [passwordLoading, setPasswordLoading] = useState(false)
 
   const [socialReactions, setSocialReactions] = useState<SocialReaction[]>([
-    { emoji: "❤️", label: "Likes", count: 0 },
-    { emoji: "🔥", label: "Hype", count: 0 },
-    { emoji: "👑", label: "Premium Love", count: 0 },
+    { emoji: "👁", label: "Profile Views", count: 0 },
+    { emoji: "🌐", label: "Unique Visitors", count: 0 },
+    { emoji: "⬇️", label: "Downloads Recorded", count: 0 },
   ])
-  const [selectedReaction, setSelectedReaction] = useState("❤️")
   const [downloadsHistory, setDownloadsHistory] = useState<DownloadHistoryItem[]>([])
 
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -586,11 +597,11 @@ export default function ProfilePageClient() {
 
       const { data, error } = await supabase
         .from("coin_history")
-        .select("id, description, created_at")
+        .select("id, description, created_at, type")
         .eq("user_id", profile.id)
-        .in("type", ["download_reward"])
+        .eq("type", "download_reward")
         .order("created_at", { ascending: false })
-        .limit(6)
+        .limit(24)
 
       if (error) {
         console.error("Download history load error:", error)
@@ -598,14 +609,24 @@ export default function ProfilePageClient() {
         return
       }
 
-      const items: DownloadHistoryItem[] = (Array.isArray(data) ? data : []).map((item: { id: string; description?: string | null; created_at?: string | null }, index: number) => ({
-        id: item.id,
-        title: item.description?.trim() || `Downloaded file ${index + 1}`,
-        href: "/downloads",
-        downloaded_at: item.created_at || new Date().toISOString(),
-        type_label: "Download",
-        size_label: "Saved item",
-      }))
+      const seen = new Set<string>()
+      const items: DownloadHistoryItem[] = []
+
+      for (const [index, item] of (Array.isArray(data) ? data : []).entries()) {
+        const title = parseDownloadedFileTitle(item.description, index)
+        const dedupeKey = `${title.toLowerCase()}__${item.created_at || ""}`
+        if (seen.has(dedupeKey)) continue
+        seen.add(dedupeKey)
+
+        items.push({
+          id: item.id,
+          title,
+          downloaded_at: item.created_at || new Date().toISOString(),
+          type_label: "Downloaded",
+          size_label: "Saved in history",
+          source_label: "From wallet download reward",
+        })
+      }
 
       setDownloadsHistory(items)
     } catch (err) {
@@ -945,7 +966,7 @@ export default function ProfilePageClient() {
   }
 
   async function handleRedeem(plan: RedeemPlan) {
-    const cost = plan === "premium" ? 2500 : 3500
+    const cost = plan === "premium" ? 3000 : 4000
     if (jbPoints < cost) {
       triggerInsufficientCoins(`Not enough JB Coins. You need ${cost.toLocaleString()} coins.`)
       return
@@ -1085,23 +1106,6 @@ export default function ProfilePageClient() {
     }
   }
 
-  function handleReactionClick(emoji: string) {
-    setSelectedReaction(emoji)
-    setSocialReactions((prev) =>
-      prev.map((item) =>
-        item.emoji === emoji
-          ? {
-              ...item,
-              count: item.count + 1,
-            }
-          : item
-      )
-    )
-    setSaveMessage(`You reacted with ${emoji}`)
-    window.setTimeout(() => {
-      setSaveMessage((prev) => (prev === `You reacted with ${emoji}` ? "" : prev))
-    }, 1600)
-  }
 
   const successParam = searchParams?.get("success") ?? ""
   const errorParam = searchParams?.get("error") ?? ""
@@ -1159,27 +1163,27 @@ export default function ProfilePageClient() {
     membershipLevel !== "admin" &&
     membershipLevel !== "premium" &&
     membershipLevel !== "platinum" &&
-    jbPoints >= 2500
+    jbPoints >= 3000
 
   const canRedeemPlatinum =
-    membershipLevel !== "admin" && membershipLevel !== "platinum" && jbPoints >= 3500
+    membershipLevel !== "admin" && membershipLevel !== "platinum" && jbPoints >= 4000
 
-  const premiumCoinsNeeded = Math.max(0, 2500 - jbPoints)
-  const platinumCoinsNeeded = Math.max(0, 3500 - jbPoints)
+  const premiumCoinsNeeded = Math.max(0, 3000 - jbPoints)
+  const platinumCoinsNeeded = Math.max(0, 4000 - jbPoints)
 
-  const reactionTotal = socialReactions.reduce((sum, item) => sum + item.count, 0)
+  const reactionTotal = profileViewStats.views + profileViewStats.visitors + downloadsHistory.length
 
   const derivedReactions = useMemo<SocialReaction[]>(
     () => [
-      { emoji: "❤️", label: "Likes", count: Math.max(Math.floor(profileViewStats.views * 0.18), 12) },
-      { emoji: "🔥", label: "Hype", count: Math.max(Math.floor(profileViewStats.visitors * 0.12), 6) },
+      { emoji: "👁", label: "Profile Views", count: Number(profileViewStats.views || 0) },
+      { emoji: "🌐", label: "Unique Visitors", count: Number(profileViewStats.visitors || 0) },
       {
-        emoji: "👑",
-        label: "Premium Love",
-        count: membershipLevel === "standard" ? 3 : membershipLevel === "premium" ? 12 : 24,
+        emoji: "⬇️",
+        label: "Downloads Recorded",
+        count: Number(downloadsHistory.length || 0),
       },
     ],
-    [membershipLevel, profileViewStats.views, profileViewStats.visitors]
+    [downloadsHistory.length, profileViewStats.views, profileViewStats.visitors]
   )
 
   useEffect(() => {
@@ -1189,12 +1193,23 @@ export default function ProfilePageClient() {
         return match
           ? {
               ...item,
-              count: Math.max(item.count, match.count),
+              label: match.label,
+              count: match.count,
             }
           : item
       })
     )
   }, [derivedReactions])
+
+  const visibleDownloadsHistory = useMemo(
+    () => (showAllDownloads ? downloadsHistory : downloadsHistory.slice(0, 6)),
+    [downloadsHistory, showAllDownloads]
+  )
+
+  const visibleCoinHistory = useMemo(
+    () => (showAllCoinActivity ? coinHistory : coinHistory.slice(0, 5)),
+    [coinHistory, showAllCoinActivity]
+  )
 
   const activityFeed = useMemo<ActivityFeedItem[]>(() => {
     const coinItems = coinHistory.slice(0, 4).map((item) => {
@@ -1223,6 +1238,11 @@ export default function ProfilePageClient() {
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 7)
   }, [coinHistory, downloadsHistory])
+
+  const visibleActivityFeed = useMemo(
+    () => (showAllActivityFeed ? activityFeed : activityFeed.slice(0, 5)),
+    [activityFeed, showAllActivityFeed]
+  )
 
   const walletLedgerItems = useMemo(
     () =>
@@ -1261,6 +1281,9 @@ export default function ProfilePageClient() {
         : membershipLevel === "premium"
           ? "Premium Hunter"
           : "Rising Collector"
+
+  const hasMoreDownloads = downloadsHistory.length > 6
+  const walletEntryCount = coinHistory.length
 
   const achievementCards = [
     {
@@ -1562,52 +1585,20 @@ export default function ProfilePageClient() {
                     </div>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/70">
-                        Recent Credits
-                      </p>
-                      <p className="mt-1 text-lg font-black text-emerald-200">
-                        +{walletLedgerTotals.credits.toLocaleString()} 🪙
-                      </p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/70">Recent Credits</p>
+                      <p className="mt-1 text-lg font-black text-emerald-200">+{walletLedgerTotals.credits.toLocaleString()} 🪙</p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/70">
-                        Recent Debits
-                      </p>
-                      <p className="mt-1 text-lg font-black text-red-300">
-                        -{walletLedgerTotals.debits.toLocaleString()} 🪙
-                      </p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/70">Recent Debits</p>
+                      <p className="mt-1 text-lg font-black text-red-300">-{walletLedgerTotals.debits.toLocaleString()} 🪙</p>
                     </div>
                   </div>
 
-                  <div className="mt-4">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-100/70">
-                        Latest Real Wallet Entries
-                      </p>
-                      <p className="text-[11px] font-semibold text-amber-100/70">
-                        Showing newest {Math.min(walletLedgerItems.length, 3)} entries
-                      </p>
-                    </div>
-
-                    <div className="grid gap-2 text-sm text-amber-50/90">
-                      {walletLedgerItems.length > 0 ? (
-                        walletLedgerItems.map((item) => (
-                          <div
-                            key={item.id}
-                            className="flex flex-col items-start gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-                          >
-                            <span className="w-full break-words text-sm leading-6 sm:w-auto">{item.label}</span>
-                            <span className={`font-black sm:shrink-0 ${item.amountClass}`}>{item.amountLabel}</span>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 px-3 py-3 text-sm text-amber-100/70">
-                          No wallet entries yet.
-                        </div>
-                      )}
-                    </div>
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/70">Wallet Activity</p>
+                    <p className="mt-1 text-sm font-semibold text-white/90">{walletEntryCount.toLocaleString()} real wallet entr{walletEntryCount === 1 ? "y" : "ies"} recorded.</p>
                   </div>
                 </div>
               </div>
@@ -1661,7 +1652,7 @@ export default function ProfilePageClient() {
               hint="Different people who visited"
               icon="🌐"
             />
-            <StatCard label="Reactions" value={reactionTotal.toLocaleString()} hint="Love from your profile" icon="❤️" />
+            <StatCard label="Activity Total" value={reactionTotal.toLocaleString()} hint="Views, visitors, and downloads" icon="📦" />
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-3 sm:flex sm:flex-wrap">
@@ -1772,50 +1763,28 @@ export default function ProfilePageClient() {
               <div className="space-y-6">
                 <SectionCard
                   title="Profile Identity"
-                  subtitle="This is the social layer that makes the page feel more like a real premium profile."
+                  subtitle="A simpler identity block with the important profile details only."
                 >
-                  <div className="grid gap-4 lg:grid-cols-[1.1fr,0.9fr]">
-                    <div className="rounded-[24px] border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(15,23,42,0.95))] p-5">
-                      <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">Bio Highlight</p>
-                      <p className="mt-3 text-lg font-bold leading-relaxed text-white">
-                        {profile?.bio?.trim()
-                          ? profile.bio
-                          : "Collector profile powered by JB Coins, daily streaks, downloads, and premium progression."}
-                      </p>
+                  <div className="rounded-[24px] border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(15,23,42,0.95))] p-5">
+                    <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">Bio Highlight</p>
+                    <p className="mt-3 text-lg font-bold leading-relaxed text-white">
+                      {profile?.bio?.trim()
+                        ? profile.bio
+                        : "Collector profile powered by JB Coins, daily streaks, downloads, and premium progression."}
+                    </p>
 
-                      <div className="mt-5 grid grid-cols-2 gap-3">
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <p className="text-xs uppercase tracking-wide text-slate-400">Profile Type</p>
-                          <p className="mt-2 text-base font-black text-white">{gamerTitle}</p>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <p className="text-xs uppercase tracking-wide text-slate-400">Membership</p>
-                          <p className="mt-2 text-base font-black text-white">{displayMembership}</p>
-                        </div>
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Profile Type</p>
+                        <p className="mt-2 text-base font-black text-white">{gamerTitle}</p>
                       </div>
-                    </div>
-
-                    <div className="rounded-[24px] border border-fuchsia-400/20 bg-[linear-gradient(135deg,rgba(217,70,239,0.12),rgba(15,23,42,0.95))] p-5">
-                      <p className="text-xs uppercase tracking-[0.16em] text-fuchsia-200">Reactions</p>
-                      <h3 className="mt-2 text-3xl font-black text-white">{reactionTotal.toLocaleString()}</h3>
-                      <p className="mt-1 text-sm text-slate-300">People can feel the energy around this profile.</p>
-
-                      <div className="mt-4 grid gap-3">
-                        {socialReactions.map((item) => (
-                          <button
-                            key={item.emoji}
-                            type="button"
-                            onClick={() => handleReactionClick(item.emoji)}
-                            className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left transition hover:scale-[1.01] ${getReactionStyles(
-                              item.emoji
-                            )} ${selectedReaction === item.emoji ? "ring-1 ring-white/20" : ""}`}
-                          >
-                            <span className="font-black">
-                              {item.emoji} {item.label}
-                            </span>
-                            <span className="text-sm font-black">{item.count.toLocaleString()}</span>
-                          </button>
-                        ))}
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Membership</p>
+                        <p className="mt-2 text-base font-black text-white">{displayMembership}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Downloads</p>
+                        <p className="mt-2 text-base font-black text-white">{downloadsHistory.length.toLocaleString()} recorded</p>
                       </div>
                     </div>
                   </div>
@@ -1825,30 +1794,85 @@ export default function ProfilePageClient() {
                   title="JB Coins Engine"
                   subtitle="Make the economy obvious. Spending, earning, and value are shown clearly here."
                 >
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="rounded-[24px] border border-amber-400/20 bg-[linear-gradient(135deg,rgba(251,191,36,0.18),rgba(15,23,42,0.92))] p-5">
-                      <p className="text-xs uppercase tracking-[0.16em] text-amber-200">Daily Reward</p>
-                      <h3 className="mt-2 text-3xl font-black text-white">+{todayRewardCoins.toLocaleString()} JB Coins</h3>
-                      <p className="mt-2 text-sm text-amber-100/80">
-                        Base reward: +{baseCoins.toLocaleString()} • Streak bonus: +{streakBonus.toLocaleString()}
-                      </p>
+                  <div className="grid gap-4 lg:grid-cols-[1.05fr,0.95fr]">
+                    <div className="space-y-4">
+                      <div className="rounded-[24px] border border-amber-400/20 bg-[linear-gradient(135deg,rgba(251,191,36,0.18),rgba(15,23,42,0.92))] p-5">
+                        <p className="text-xs uppercase tracking-[0.16em] text-amber-200">Daily Reward</p>
+                        <h3 className="mt-2 text-3xl font-black text-white">+{todayRewardCoins.toLocaleString()} JB Coins</h3>
+                        <p className="mt-2 text-sm text-amber-100/80">
+                          Base reward: +{baseCoins.toLocaleString()} • Streak bonus: +{streakBonus.toLocaleString()}
+                        </p>
 
-                      <button
-                        type="button"
-                        onClick={() => void handleClaimDailyReward()}
-                        disabled={Boolean(dailyRewardStatus?.claimed || dailyRewardStatus?.alreadyClaimed || streakLoading)}
-                        className="mt-5 w-full rounded-2xl bg-amber-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {streakLoading
-                          ? "Loading..."
-                          : dailyRewardStatus?.claimed || dailyRewardStatus?.alreadyClaimed
-                            ? "Already claimed today"
-                            : `Claim +${todayRewardCoins.toLocaleString()} JB Coins`}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleClaimDailyReward()}
+                          disabled={Boolean(dailyRewardStatus?.claimed || dailyRewardStatus?.alreadyClaimed || streakLoading)}
+                          className="mt-5 w-full rounded-2xl bg-amber-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {streakLoading
+                            ? "Loading..."
+                            : dailyRewardStatus?.claimed || dailyRewardStatus?.alreadyClaimed
+                              ? "Already claimed today"
+                              : `Claim +${todayRewardCoins.toLocaleString()} JB Coins`}
+                        </button>
 
-                      {dailyRewardStatus?.nextClaimDate ? (
-                        <p className="mt-3 text-xs text-slate-300">Next claim: {dailyRewardStatus.nextClaimDate}</p>
-                      ) : null}
+                        {dailyRewardStatus?.nextClaimDate ? (
+                          <p className="mt-3 text-xs text-slate-300">Next claim: {dailyRewardStatus.nextClaimDate}</p>
+                        ) : null}
+                      </div>
+
+                      <div className="rounded-[24px] border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(15,23,42,0.95))] p-5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">Account Redemption</p>
+                            <h3 className="mt-2 text-2xl font-black text-white">Upgrade with JB Coins</h3>
+                            <p className="mt-2 text-sm text-slate-300">Premium costs 3,000 coins. Platinum costs 4,000 coins.</p>
+                          </div>
+                          <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-black text-white">{jbPoints.toLocaleString()} 🪙</span>
+                        </div>
+
+                        <div className="mt-4 grid gap-3">
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-black text-white">Premium</p>
+                                <p className="mt-1 text-xs text-slate-300">3,000 coins</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => void handleRedeem("premium")}
+                                disabled={redeemingPlan !== null || !canRedeemPremium}
+                                className="rounded-2xl bg-cyan-400 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {redeemingPlan === "premium" ? "Redeeming..." : canRedeemPremium ? "Redeem" : "Locked"}
+                              </button>
+                            </div>
+                            {!canRedeemPremium ? (
+                              <p className="mt-2 text-xs text-slate-400">Need {premiumCoinsNeeded.toLocaleString()} more coins.</p>
+                            ) : null}
+                          </div>
+
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-black text-white">Platinum</p>
+                                <p className="mt-1 text-xs text-slate-300">4,000 coins</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => void handleRedeem("platinum")}
+                                disabled={redeemingPlan !== null || !canRedeemPlatinum}
+                                className="rounded-2xl bg-white px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {redeemingPlan === "platinum" ? "Redeeming..." : canRedeemPlatinum ? "Redeem" : "Locked"}
+                              </button>
+                            </div>
+                            {!canRedeemPlatinum ? (
+                              <p className="mt-2 text-xs text-slate-400">Need {platinumCoinsNeeded.toLocaleString()} more coins.</p>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="rounded-[24px] border border-orange-400/20 bg-[linear-gradient(135deg,rgba(251,146,60,0.14),rgba(239,68,68,0.08),rgba(15,23,42,0.9))] p-5">
@@ -1889,14 +1913,17 @@ export default function ProfilePageClient() {
 
                 <SectionCard
                   title="Downloads History"
-                  subtitle="This makes the page feel like a real user profile instead of just a settings screen."
+                  subtitle="This shows the real items this user has downloaded based on their download reward history."
                   action={
-                    <Link
-                      href="/downloads"
-                      className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-white transition hover:bg-white/10"
-                    >
-                      View all
-                    </Link>
+                    hasMoreDownloads ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllDownloads((prev) => !prev)}
+                        className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-white transition hover:bg-white/10"
+                      >
+                        {showAllDownloads ? "Show less" : `View all (${downloadsHistory.length})`}
+                      </button>
+                    ) : null
                   }
                 >
                   {downloadsLoading ? (
@@ -1911,7 +1938,7 @@ export default function ProfilePageClient() {
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-                      {downloadsHistory.map((item) => (
+                      {visibleDownloadsHistory.map((item) => (
                         <div
                           key={item.id}
                           className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.22)]"
@@ -1958,14 +1985,25 @@ export default function ProfilePageClient() {
                                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">File Type</p>
                                 <p className="mt-1 text-xs font-black text-white">{item.type_label || "Saved item"}</p>
                               </div>
+
+                              <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Source</p>
+                                <p className="mt-1 text-xs font-black text-white">{item.source_label || "Download history"}</p>
+                              </div>
                             </div>
 
-                            <Link
-                              href={item.href}
-                              className="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-white transition hover:bg-white/10"
-                            >
-                              Open
-                            </Link>
+                            {item.href ? (
+                              <Link
+                                href={item.href}
+                                className="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-white transition hover:bg-white/10"
+                              >
+                                Open
+                              </Link>
+                            ) : (
+                              <div className="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-slate-300">
+                                Download saved
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1973,7 +2011,21 @@ export default function ProfilePageClient() {
                   )}
                 </SectionCard>
 
-                <SectionCard title="Recent Coin Activity" subtitle="Users feel the economy more when history is visible.">
+                <SectionCard
+                  title="Recent Coin Activity"
+                  subtitle="Users feel the economy more when history is visible."
+                  action={
+                    coinHistory.length > 5 ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllCoinActivity((prev) => !prev)}
+                        className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-white transition hover:bg-white/10"
+                      >
+                        {showAllCoinActivity ? "Show less" : "Show more"}
+                      </button>
+                    ) : null
+                  }
+                >
                   {historyLoading ? (
                     <div className="space-y-3">
                       {Array.from({ length: 4 }).map((_, index) => (
@@ -1986,7 +2038,7 @@ export default function ProfilePageClient() {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {coinHistory.map((item) => {
+                      {visibleCoinHistory.map((item) => {
                         const amount = Number(item.amount || 0)
                         return (
                           <div
@@ -2012,117 +2064,29 @@ export default function ProfilePageClient() {
               </div>
 
               <div className="space-y-6">
+
                 <SectionCard
-                  title="Account Redemption"
-                  subtitle="Users can upgrade directly here using real JB Coins from their wallet."
+                  title="Activity Feed"
+                  subtitle="A social-style timeline gives the profile more life."
+                  action={
+                    activityFeed.length > 5 ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllActivityFeed((prev) => !prev)}
+                        className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-white transition hover:bg-white/10"
+                      >
+                        {showAllActivityFeed ? "Show less" : "Show more"}
+                      </button>
+                    ) : null
+                  }
                 >
-                  <div className="grid gap-4">
-                    <div className="rounded-[24px] border border-emerald-400/20 bg-[linear-gradient(135deg,rgba(16,185,129,0.16),rgba(15,23,42,0.96))] p-5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.16em] text-emerald-200">Premium Redemption</p>
-                          <h3 className="mt-2 text-3xl font-black text-white">2,000 JB Coins</h3>
-                          <p className="mt-2 text-sm text-emerald-100/80">
-                            Unlock Premium account access directly from the profile page.
-                          </p>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-right">
-                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-100/70">Status</p>
-                          <p className="mt-1 text-xs font-bold text-white">
-                            {membershipLevel === "premium" || membershipLevel === "platinum" || membershipLevel === "admin"
-                              ? "Already unlocked"
-                              : canRedeemPremium
-                                ? "Ready to redeem"
-                                : `${premiumCoinsNeeded.toLocaleString()} more needed`}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <p className="text-xs uppercase tracking-wide text-slate-400">Current Wallet</p>
-                          <p className="mt-2 text-xl font-black text-amber-300">{jbPoints.toLocaleString()} JB Coins</p>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <p className="text-xs uppercase tracking-wide text-slate-400">Plan Access</p>
-                          <p className="mt-2 text-xl font-black text-white">Premium</p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => void handleRedeem("premium")}
-                        disabled={redeemingPlan !== null || !canRedeemPremium}
-                        className="mt-5 w-full rounded-2xl bg-emerald-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {redeemingPlan === "premium"
-                          ? "Redeeming Premium..."
-                          : membershipLevel === "premium" || membershipLevel === "platinum" || membershipLevel === "admin"
-                            ? "Premium already active"
-                            : canRedeemPremium
-                              ? "Redeem Premium Now"
-                              : `Need ${premiumCoinsNeeded.toLocaleString()} more coins`}
-                      </button>
-                    </div>
-
-                    <div className="rounded-[24px] border border-fuchsia-400/20 bg-[linear-gradient(135deg,rgba(217,70,239,0.16),rgba(15,23,42,0.96))] p-5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.16em] text-fuchsia-200">Platinum Redemption</p>
-                          <h3 className="mt-2 text-3xl font-black text-white">2,600 JB Coins</h3>
-                          <p className="mt-2 text-sm text-fuchsia-100/80">
-                            Upgrade further to Platinum when your coin balance is high enough.
-                          </p>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-right">
-                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-fuchsia-100/70">Status</p>
-                          <p className="mt-1 text-xs font-bold text-white">
-                            {membershipLevel === "platinum" || membershipLevel === "admin"
-                              ? "Already unlocked"
-                              : canRedeemPlatinum
-                                ? "Ready to redeem"
-                                : `${platinumCoinsNeeded.toLocaleString()} more needed`}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <p className="text-xs uppercase tracking-wide text-slate-400">Current Wallet</p>
-                          <p className="mt-2 text-xl font-black text-amber-300">{jbPoints.toLocaleString()} JB Coins</p>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <p className="text-xs uppercase tracking-wide text-slate-400">Plan Access</p>
-                          <p className="mt-2 text-xl font-black text-white">Platinum</p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => void handleRedeem("platinum")}
-                        disabled={redeemingPlan !== null || !canRedeemPlatinum}
-                        className="mt-5 w-full rounded-2xl bg-fuchsia-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {redeemingPlan === "platinum"
-                          ? "Redeeming Platinum..."
-                          : membershipLevel === "platinum" || membershipLevel === "admin"
-                            ? "Platinum already active"
-                            : canRedeemPlatinum
-                              ? "Redeem Platinum Now"
-                              : `Need ${platinumCoinsNeeded.toLocaleString()} more coins`}
-                      </button>
-                    </div>
-                  </div>
-                </SectionCard>
-
-                <SectionCard title="Activity Feed" subtitle="A social-style timeline gives the profile more life.">
                   {activityFeed.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950 p-6 text-sm font-semibold text-slate-400">
                       Activity will appear here after coins, rewards, or downloads are recorded.
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {activityFeed.map((item) => (
+                      {visibleActivityFeed.map((item) => (
                         <div key={item.id} className="rounded-[24px] border border-white/10 bg-slate-950 p-4">
                           <div className="flex items-start gap-3">
                             <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg">
@@ -2140,73 +2104,6 @@ export default function ProfilePageClient() {
                   )}
                 </SectionCard>
 
-                <SectionCard title="Leaderboard" subtitle="Make coins social so the value feels bigger.">
-                  {leaderboardLoading ? (
-                    <div className="space-y-3">
-                      {Array.from({ length: 5 }).map((_, index) => (
-                        <div key={index} className="h-14 animate-pulse rounded-2xl border border-white/10 bg-slate-950" />
-                      ))}
-                    </div>
-                  ) : leaderboard.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950 p-6 text-sm font-semibold text-slate-400">
-                      No leaderboard data yet.
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {leaderboard.map((entry) => (
-                        <div
-                          key={entry.id}
-                          className={`flex flex-col items-start gap-3 rounded-2xl border p-3 sm:flex-row sm:items-center sm:justify-between ${
-                            entry.is_current_user
-                              ? "border-amber-400/25 bg-amber-400/10"
-                              : "border-white/10 bg-slate-950"
-                          }`}
-                        >
-                          <div className="flex min-w-0 items-center gap-3">
-                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-sm font-black text-white">
-                              {entry.avatar_url ? (
-                                <img src={entry.avatar_url} alt={entry.display_name} className="h-11 w-11 rounded-2xl object-cover" />
-                              ) : (
-                                entry.initials || getInitials(entry.display_name)
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="break-words text-sm font-black leading-6 text-white">
-                                #{entry.rank} {entry.display_name}
-                              </p>
-                              <p className="break-words text-xs leading-5 text-slate-400">
-                                {entry.membership_label || entry.membership || "User"}
-                                {entry.username ? ` • @${entry.username}` : ""}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="w-full text-left sm:w-auto sm:text-right">
-                            <p className="text-base font-black text-amber-300">{Number(entry.coins || 0).toLocaleString()}</p>
-                            <p className="text-xs text-slate-400">JB Coins</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {myLeaderboardRank ? (
-                    <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-                      <p className="text-xs uppercase tracking-wide text-cyan-200">Your Rank</p>
-                      <p className="mt-2 text-xl font-black text-white">#{myLeaderboardRank.rank}</p>
-                      <p className="mt-1 text-sm text-cyan-100">{Number(myLeaderboardRank.coins || 0).toLocaleString()} JB Coins</p>
-                    </div>
-                  ) : null}
-                </SectionCard>
-
-                <SectionCard title="Profile Details" subtitle="Useful links and identity details.">
-                  <div className="grid w-full gap-3">
-                    <DetailCard label="Public Profile">{publicProfileText}</DetailCard>
-                    <DetailCard label="Referral Code">{referralCode || "No referral code yet"}</DetailCard>
-                    <DetailCard label="Referral Link">{referralLink}</DetailCard>
-                    <DetailCard label="Membership">{displayMembership}</DetailCard>
-                    <DetailCard label="Status">{displayStatus}</DetailCard>
-                  </div>
-                </SectionCard>
               </div>
             </div>
           ) : null}
@@ -2232,6 +2129,27 @@ export default function ProfilePageClient() {
                       {item.icon} {item.label}: {item.value}
                     </div>
                   ))}
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Profile Details" subtitle="Useful identity links and account details.">
+                <div className="grid w-full gap-3">
+                  <DetailCard label="Public Profile">{publicProfileText}</DetailCard>
+                  <DetailCard label="Referral Code">{referralCode || "No referral code yet"}</DetailCard>
+                  <DetailCard label="Referral Link">{referralLink}</DetailCard>
+                  <DetailCard label="Membership">{displayMembership}</DetailCard>
+                  <DetailCard label="Status">{displayStatus}</DetailCard>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="More Pages" subtitle="Open dedicated pages for profile extras.">
+                <div className="grid gap-3">
+                  <Link
+                    href="/leaderboard"
+                    className="rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm font-black text-white transition hover:border-cyan-400/40 hover:bg-slate-900"
+                  >
+                    🏆 Open Leaderboard Page
+                  </Link>
                 </div>
               </SectionCard>
             </div>

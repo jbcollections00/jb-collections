@@ -1194,7 +1194,7 @@ function DashboardPageContent() {
                 <SectionHeader
                   title="🎯 Recommended For You"
                   subtitle="Handpicked content based on your dashboard activity and top platform picks."
-                  count={recommendedFiles.length}
+                  count={Math.min(recommendedFiles.length, 5)}
                   badge="Personal"
                 />
 
@@ -1220,7 +1220,7 @@ function DashboardPageContent() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
-                    {recommendedFiles.map((file) => (
+                    {recommendedFiles.slice(0, 5).map((file) => (
                       <HomeFileCard key={file.id} file={file} />
                     ))}
                   </div>
@@ -1390,7 +1390,7 @@ function DashboardPageContent() {
               <FileSection
                 title="🔥 Trending Now"
                 subtitle="Most viewed and downloaded items on your website."
-                files={trendingFiles}
+                files={trendingFiles.slice(0, 5)}
                 loading={sectionsLoading}
                 emptyMessage="🔥 No trending items yet. Add more activity and featured files to spark this section."
                 badge="Hot"
@@ -1400,7 +1400,7 @@ function DashboardPageContent() {
               <FileSection
                 title="⭐ Top Picks"
                 subtitle="Highlighted files worth checking first."
-                files={topFiles}
+                files={topFiles.slice(0, 5)}
                 loading={sectionsLoading}
                 emptyMessage="⭐ No top picks yet. Choose a few strong featured files to fill this row."
                 badge="Curated"

@@ -5,14 +5,14 @@ import { cookies } from "next/headers"
 
 export const runtime = "nodejs"
 
-type CoinHistoryRow = {
-  amount: number | string | null
+type ProfileRow = {
+  coins?: number | string | null
 }
 
 type UpgradeRow = {
-  coins: number | string | null
-  status: string | null
-  coins_credited: boolean | null
+  coins?: number | string | null
+  status?: string | null
+  coins_credited?: boolean | null
 }
 
 function requireEnv(name: string) {
@@ -75,20 +75,21 @@ export async function GET() {
 
     const adminDb = createSupabaseAdminClient()
 
-    const [{ data: coinHistory, error: coinHistoryError }, { data: upgrades, error: upgradesError }] =
+    const [{ data: profile, error: profileError }, { data: upgrades, error: upgradesError }] =
       await Promise.all([
         adminDb
-          .from("coin_history")
-          .select("amount")
-          .eq("user_id", user.id),
+          .from("profiles")
+          .select("coins")
+          .eq("id", user.id)
+          .maybeSingle(),
         adminDb
           .from("upgrades")
           .select("coins, status, coins_credited")
           .eq("sender_id", user.id),
       ])
 
-    if (coinHistoryError) {
-      console.error("Wallet summary coin_history error:", coinHistoryError)
+    if (profileError) {
+      console.error("Wallet summary profile error:", profileError)
       return NextResponse.json(
         { ok: false, error: "Failed to load wallet balance." },
         { status: 500 }
@@ -103,19 +104,17 @@ export async function GET() {
       )
     }
 
-    const historyRows = (Array.isArray(coinHistory) ? coinHistory : []) as CoinHistoryRow[]
+    const profileRow = (profile || {}) as ProfileRow
     const upgradeRows = (Array.isArray(upgrades) ? upgrades : []) as UpgradeRow[]
 
-    const balance = historyRows.reduce((total, row) => {
-      return total + toNumber(row.amount)
-    }, 0)
+    const balance = toNumber(profileRow.coins)
 
     const pendingCoins = upgradeRows.reduce((total, row) => {
       const status = String(row.status || "").trim().toLowerCase()
       const credited = Boolean(row.coins_credited)
       const coins = toNumber(row.coins)
 
-      if (!credited && (status === "pending" || status === "approved")) {
+      if (!credited && status === "pending") {
         return total + coins
       }
 

@@ -6,9 +6,10 @@ export const runtime = "nodejs"
 
 type RedeemPlan = "premium" | "platinum"
 
+// ✅ UPDATED COSTS (FINAL)
 const PLAN_COST: Record<RedeemPlan, number> = {
-  premium: 1000,
-  platinum: 1500,
+  premium: 3000,
+  platinum: 4000,
 }
 
 function normalizeMembership(profile: {
@@ -107,7 +108,7 @@ export async function POST(req: Request) {
       },
     })
 
-    // ✅ 1. Deduct coins using central system
+    // ✅ deduct coins
     const { error: deductError } = await adminDb.rpc("handle_coin_change", {
       p_user_id: user.id,
       p_amount: -requiredCoins,
@@ -123,7 +124,7 @@ export async function POST(req: Request) {
       )
     }
 
-    // ✅ 2. Update membership
+    // ✅ update membership
     const nextMembership = plan
     const nextIsPremium = plan === "premium" || plan === "platinum"
 
