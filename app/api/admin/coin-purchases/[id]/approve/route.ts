@@ -25,7 +25,29 @@ type PurchaseOrderRow = {
   created_at?: string | null
 }
 
-async function getAuthenticatedUser() {
+type AuthResult = {
+  supabase: Awaited<ReturnType<typeof createClient>>
+  user: Awaited<ReturnType<typeof createClient>> extends infer _T ? any : never
+  error: "Unauthorized" | null
+}
+
+type AdminCheckResult =
+  | { ok: true; profile: ProfileRow }
+  | { ok: false; error: string }
+
+type OrderResult =
+  | { ok: true; order: PurchaseOrderRow }
+  | { ok: false; error: string }
+
+type TargetProfileResult =
+  | { ok: true; profile: ProfileRow & Record<string, unknown> }
+  | { ok: false; error: string }
+
+type StatusUpdateResult =
+  | { ok: true; status: string }
+  | { ok: false; error: string }
+
+async function getAuthenticatedUser(): Promise<AuthResult> {
   const supabase = await createClient()
 
   const {
@@ -34,16 +56,16 @@ async function getAuthenticatedUser() {
   } = await supabase.auth.getUser()
 
   if (error || !user) {
-    return { supabase, user: null, error: "Unauthorized" as const }
+    return { supabase, user: null, error: "Unauthorized" }
   }
 
-  return { supabase, user, error: null as const }
+  return { supabase, user, error: null }
 }
 
 async function requireAdmin(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string
-) {
+): Promise<AdminCheckResult> {
   const { data, error } = await supabase
     .from("profiles")
     .select("*")
@@ -51,21 +73,21 @@ async function requireAdmin(
     .single()
 
   if (error || !data) {
-    return { ok: false as const, error: "Admin profile not found." }
+    return { ok: false, error: "Admin profile not found." }
   }
 
   const role = String((data as Record<string, unknown>).role || "").toLowerCase()
   if (role !== "admin") {
-    return { ok: false as const, error: "Forbidden" }
+    return { ok: false, error: "Forbidden" }
   }
 
-  return { ok: true as const, profile: data as ProfileRow }
+  return { ok: true, profile: data as ProfileRow }
 }
 
 async function readOrder(
   supabase: Awaited<ReturnType<typeof createClient>>,
   orderId: string
-) {
+): Promise<OrderResult> {
   const { data, error } = await supabase
     .from("coin_purchase_orders")
     .select("*")
@@ -73,16 +95,16 @@ async function readOrder(
     .single()
 
   if (error || !data) {
-    return { ok: false as const, error: "Coin purchase order not found." }
+    return { ok: false, error: "Coin purchase order not found." }
   }
 
-  return { ok: true as const, order: data as PurchaseOrderRow }
+  return { ok: true, order: data as PurchaseOrderRow }
 }
 
 async function readTargetProfile(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string
-) {
+): Promise<TargetProfileResult> {
   const { data, error } = await supabase
     .from("profiles")
     .select("*")
@@ -90,10 +112,10 @@ async function readTargetProfile(
     .single()
 
   if (error || !data) {
-    return { ok: false as const, error: "User profile not found." }
+    return { ok: false, error: "User profile not found." }
   }
 
-  return { ok: true as const, profile: data as ProfileRow & Record<string, unknown> }
+  return { ok: true, profile: data as ProfileRow & Record<string, unknown> }
 }
 
 async function bestEffortInsertHistory(
@@ -211,7 +233,7 @@ async function tryUpdateOrderStatus(
   supabase: Awaited<ReturnType<typeof createClient>>,
   orderId: string,
   nextStatus: string
-) {
+): Promise<StatusUpdateResult> {
   try {
     const { error } = await supabase
       .from("coin_purchase_orders")
@@ -220,15 +242,15 @@ async function tryUpdateOrderStatus(
 
     if (error) {
       return {
-        ok: false as const,
+        ok: false,
         error: error.message || `Failed to update order status to ${nextStatus}.`,
       }
     }
 
-    return { ok: true as const, status: nextStatus }
+    return { ok: true, status: nextStatus }
   } catch (error) {
     return {
-      ok: false as const,
+      ok: false,
       error:
         error instanceof Error
           ? error.message
@@ -240,7 +262,7 @@ async function tryUpdateOrderStatus(
 async function reserveFinalStatus(
   supabase: Awaited<ReturnType<typeof createClient>>,
   order: PurchaseOrderRow
-) {
+): Promise<StatusUpdateResult> {
   const statusCandidates = ["credited", "approved"]
 
   for (const candidate of statusCandidates) {
@@ -251,7 +273,7 @@ async function reserveFinalStatus(
   }
 
   return {
-    ok: false as const,
+    ok: false,
     error:
       "Failed to mark this order as credited/approved. Check your coin_purchase_orders status constraint.",
   }
