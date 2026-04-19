@@ -5,7 +5,6 @@ import { createClient as createAdminClient } from "@supabase/supabase-js"
 
 export const runtime = "nodejs"
 
-// ✅ VALID PACKAGES
 const VALID_PACKAGES = [
   { amount: 50, coins: 690 },
   { amount: 100, coins: 1400 },
@@ -15,24 +14,24 @@ const VALID_PACKAGES = [
   { amount: 20, coins: 260 },
 ]
 
-// 🔐 USER CLIENT (AUTH)
 async function createUserClient() {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get: (name: string) => cookieStore.get(name)?.value,
-        set: () => {},
-        remove: () => {},
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set() {},
+        remove() {},
       },
     }
   )
 }
 
-// 🔥 ADMIN CLIENT (BYPASS RLS)
 function createAdmin() {
   return createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -45,12 +44,12 @@ export async function POST(req: Request) {
     const supabase = await createUserClient()
     const admin = createAdmin()
 
-    // 🔐 AUTH
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser()
 
-    if (!user) {
+    if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -63,7 +62,9 @@ export async function POST(req: Request) {
 
     const paymentMethod = String(
       formData.get("method") || formData.get("paymentMethod") || "maya"
-    ).toLowerCase()
+    )
+      .trim()
+      .toLowerCase()
 
     const paymentReference = String(
       formData.get("referenceNumber") || formData.get("paymentReference") || ""
@@ -71,26 +72,51 @@ export async function POST(req: Request) {
 
     const proof = formData.get("receipt") || formData.get("proof")
 
-    // ✅ VALIDATE
     const isValidPackage = VALID_PACKAGES.some(
-      (p) => p.amount === amountPhp && p.coins === coins
+      (pkg) => pkg.amount === amountPhp && pkg.coins === coins
     )
 
     if (!isValidPackage) {
-      return NextResponse.json({ error: "Invalid package." }, { status: 400 })
+      return NextResponse.json(
+        { error: "Invalid package configuration." },
+        { status: 400 }
+      )
     }
 
     if (!paymentReference) {
-      return NextResponse.json({ error: "Reference required." }, { status: 400 })
+      return NextResponse.json(
+        { error: "Payment reference is required." },
+        { status: 400 }
+      )
     }
 
     if (!(proof instanceof File) || proof.size <= 0) {
-      return NextResponse.json({ error: "Proof required." }, { status: 400 })
+      return NextResponse.json(
+        { error: "Payment proof is required." },
+        { status: 400 }
+      )
     }
 
-    // 🔥 UPLOAD (ADMIN FIX)
-    const ext = proof.name.split(".").pop() || "jpg"
-    const path = `${user.id}/${Date.now()}.${ext}`
+    if (proof.size > 10 * 1024 * 1024) {
+      return NextResponse.json(
+        { error: "Proof image must be 10MB or below." },
+        { status: 400 }
+      )
+    }
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"]
+    if (!allowedTypes.includes(proof.type)) {
+      return NextResponse.json(
+        { error: "Proof must be JPG, PNG, or WEBP." },
+        { status: 400 }
+      )
+    }
+
+    const ext = proof.name.split(".").pop()?.toLowerCase() || "jpg"
+    const safeRef =
+      paymentReference.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "proof"
+
+    const path = `${user.id}/${Date.now()}-${safeRef}.${ext}`
 
     const { error: uploadError } = await admin.storage
       .from("payment-proofs")
@@ -98,16 +124,17 @@ export async function POST(req: Request) {
 
     if (uploadError) {
       return NextResponse.json(
-        { error: uploadError.message },
+        { error: uploadError.message || "Failed to upload proof." },
         { status: 500 }
       )
     }
 
-    const { data: urlData } = admin.storage
+    const { data: publicUrlData } = admin.storage
       .from("payment-proofs")
       .getPublicUrl(path)
 
-    // 🧾 INSERT ORDER
+    const proofUrl = publicUrlData.publicUrl
+
     const { data: order, error: insertError } = await supabase
       .from("coin_purchase_orders")
       .insert({
@@ -117,26 +144,37 @@ export async function POST(req: Request) {
         label: label || `₱${amountPhp} Package`,
         payment_method: paymentMethod,
         payment_reference: paymentReference,
-        proof_url: urlData.publicUrl,
+        proof_url: proofUrl,
         status: "pending",
       })
-      .select()
+      .select("id, status, created_at")
       .single()
 
     if (insertError) {
       return NextResponse.json(
-        { error: insertError.message },
+        { error: insertError.message || "Failed to create order." },
         { status: 500 }
       )
     }
 
     return NextResponse.json({
       success: true,
-      message: "Payment submitted successfully",
-      transaction: order,
+      message: "Payment submitted. Please wait for admin approval.",
+      transaction: {
+        id: order.id,
+        status: order.status,
+        createdAt: order.created_at,
+      },
     })
-  } catch (err) {
-    console.error(err)
-    return NextResponse.json({ error: "Server error" }, { status: 500 })
+  } catch (error) {
+    console.error("Create coin purchase order error:", error)
+
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error ? error.message : "Something went wrong.",
+      },
+      { status: 500 }
+    )
   }
 }
