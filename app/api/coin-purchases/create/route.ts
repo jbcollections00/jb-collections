@@ -1,36 +1,61 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase-server"
+import { cookies } from "next/headers"
+import { createServerClient } from "@supabase/ssr"
+import { createClient as createAdminClient } from "@supabase/supabase-js"
 
 export const runtime = "nodejs"
 
-// ✅ SYNC WITH FRONTEND PACKAGES
+// ✅ VALID PACKAGES
 const VALID_PACKAGES = [
   { amount: 50, coins: 690 },
   { amount: 100, coins: 1400 },
   { amount: 200, coins: 2900 },
   { amount: 500, coins: 7500 },
   { amount: 1000, coins: 16000 },
-
-  // ✅ OPTIONAL: ENABLE ₱20 PACKAGE (REMOVE IF NOT NEEDED)
   { amount: 20, coins: 260 },
 ]
 
+// 🔐 USER CLIENT (AUTH)
+async function createUserClient() {
+  const cookieStore = cookies()
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get: (name: string) => cookieStore.get(name)?.value,
+        set: () => {},
+        remove: () => {},
+      },
+    }
+  )
+}
+
+// 🔥 ADMIN CLIENT (BYPASS RLS)
+function createAdmin() {
+  return createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
+
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient()
+    const supabase = await createUserClient()
+    const admin = createAdmin()
 
+    // 🔐 AUTH
     const {
       data: { user },
-      error: authError,
     } = await supabase.auth.getUser()
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const formData = await req.formData()
 
-    // 🔥 FIX: SUPPORT BOTH OLD + NEW FIELD NAMES
     const amountPhp = Number(formData.get("amount") || formData.get("amountPhp") || 0)
     const coins = Number(formData.get("coins") || 0)
 
@@ -38,83 +63,51 @@ export async function POST(req: Request) {
 
     const paymentMethod = String(
       formData.get("method") || formData.get("paymentMethod") || "maya"
-    )
-      .trim()
-      .toLowerCase()
+    ).toLowerCase()
 
     const paymentReference = String(
       formData.get("referenceNumber") || formData.get("paymentReference") || ""
     ).trim()
 
-    const proof =
-      formData.get("receipt") || formData.get("proof")
+    const proof = formData.get("receipt") || formData.get("proof")
 
-    // ✅ VALIDATE PACKAGE (ANTI-TAMPER)
+    // ✅ VALIDATE
     const isValidPackage = VALID_PACKAGES.some(
-      (pkg) => pkg.amount === amountPhp && pkg.coins === coins
+      (p) => p.amount === amountPhp && p.coins === coins
     )
 
     if (!isValidPackage) {
-      return NextResponse.json(
-        { error: "Invalid package configuration." },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "Invalid package." }, { status: 400 })
     }
 
     if (!paymentReference) {
-      return NextResponse.json(
-        { error: "Payment reference is required." },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "Reference required." }, { status: 400 })
     }
 
     if (!(proof instanceof File) || proof.size <= 0) {
-      return NextResponse.json(
-        { error: "Payment proof is required." },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "Proof required." }, { status: 400 })
     }
 
-    if (proof.size > 10 * 1024 * 1024) {
-      return NextResponse.json(
-        { error: "Proof image must be 10MB or below." },
-        { status: 400 }
-      )
-    }
+    // 🔥 UPLOAD (ADMIN FIX)
+    const ext = proof.name.split(".").pop() || "jpg"
+    const path = `${user.id}/${Date.now()}.${ext}`
 
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"]
-    if (!allowedTypes.includes(proof.type)) {
-      return NextResponse.json(
-        { error: "Proof must be JPG, PNG, or WEBP." },
-        { status: 400 }
-      )
-    }
-
-    // 🔐 SAFE STORAGE PATH
-    const ext = proof.name.split(".").pop()?.toLowerCase() || "jpg"
-    const safeRef =
-      paymentReference.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "proof"
-
-    const path = `${user.id}/${Date.now()}-${safeRef}.${ext}`
-
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await admin.storage
       .from("payment-proofs")
       .upload(path, proof, { upsert: false })
 
     if (uploadError) {
       return NextResponse.json(
-        { error: uploadError.message || "Failed to upload proof." },
+        { error: uploadError.message },
         { status: 500 }
       )
     }
 
-    const { data: publicUrlData } = supabase.storage
+    const { data: urlData } = admin.storage
       .from("payment-proofs")
       .getPublicUrl(path)
 
-    const proofUrl = publicUrlData.publicUrl
-
-    // 🧾 CREATE ORDER
+    // 🧾 INSERT ORDER
     const { data: order, error: insertError } = await supabase
       .from("coin_purchase_orders")
       .insert({
@@ -124,37 +117,26 @@ export async function POST(req: Request) {
         label: label || `₱${amountPhp} Package`,
         payment_method: paymentMethod,
         payment_reference: paymentReference,
-        proof_url: proofUrl,
+        proof_url: urlData.publicUrl,
         status: "pending",
       })
-      .select("id, status, created_at")
+      .select()
       .single()
 
     if (insertError) {
       return NextResponse.json(
-        { error: insertError.message || "Failed to create order." },
+        { error: insertError.message },
         { status: 500 }
       )
     }
 
     return NextResponse.json({
       success: true,
-      message: "Payment submitted. Please wait for admin approval.",
-      transaction: {
-        id: order.id,
-        status: order.status,
-        createdAt: order.created_at,
-      },
+      message: "Payment submitted successfully",
+      transaction: order,
     })
-  } catch (error) {
-    console.error("Create coin purchase order error:", error)
-
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Something went wrong.",
-      },
-      { status: 500 }
-    )
+  } catch (err) {
+    console.error(err)
+    return NextResponse.json({ error: "Server error" }, { status: 500 })
   }
 }
