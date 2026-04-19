@@ -74,6 +74,14 @@ type WalletSummary = {
   lifetimePurchased: number
 }
 
+const VALID_PACKAGES = [
+  { amount: 50, coins: 690, base: 650, bonus: 40 },
+  { amount: 100, coins: 1400, base: 1300, bonus: 100 },
+  { amount: 200, coins: 2900, base: 2600, bonus: 300 },
+  { amount: 500, coins: 7500, base: 6500, bonus: 1000 },
+  { amount: 1000, coins: 16000, base: 13000, bonus: 3000 },
+] as const
+
 function toSafeNumber(value: unknown, fallback = 0) {
   if (typeof value === "number" && Number.isFinite(value)) return value
   if (typeof value === "string") {
@@ -196,6 +204,15 @@ function getStatusConfig(status: TransactionStatus) {
   }
 }
 
+function decodeLabel(value: string | null) {
+  if (!value) return "JB Coin Package"
+  try {
+    return decodeURIComponent(value.replace(/\+/g, " "))
+  } catch {
+    return value.replace(/\+/g, " ")
+  }
+}
+
 function PaymentPageContent() {
   useMemo(() => createClient(), [])
   const searchParams = useSearchParams()
@@ -205,9 +222,28 @@ function PaymentPageContent() {
   const coins = Number(searchParams.get("coins") || 0)
   const bonus = Number(searchParams.get("bonus") || 0)
   const base = Number(searchParams.get("base") || Math.max(coins - bonus, 0))
-  const label = searchParams.get("label") || "JB Coin Package"
+  const label = decodeLabel(searchParams.get("label"))
   const initialMethod = (searchParams.get("method") || "maya").toLowerCase()
   const featured = searchParams.get("featured") === "1"
+
+  const isValidPackage = useMemo(() => {
+    if (
+      !Number.isFinite(amount) ||
+      !Number.isFinite(coins) ||
+      !Number.isFinite(base) ||
+      !Number.isFinite(bonus)
+    ) {
+      return false
+    }
+
+    return VALID_PACKAGES.some(
+      (pkg) =>
+        pkg.amount === amount &&
+        pkg.coins === coins &&
+        pkg.base === base &&
+        pkg.bonus === bonus
+    )
+  }, [amount, coins, base, bonus])
 
   const [method, setMethod] = useState<PaymentMethod>(
     initialMethod === "gcash" ? "gcash" : "maya"
@@ -397,6 +433,11 @@ function PaymentPageContent() {
     e.preventDefault()
     setSubmitError("")
 
+    if (!isValidPackage) {
+      setSubmitError("Invalid amount.")
+      return
+    }
+
     if (!payerName.trim()) {
       setSubmitError("Please enter the payer name.")
       return
@@ -423,7 +464,7 @@ function PaymentPageContent() {
       formData.append("label", label)
       formData.append("method", method)
       formData.append("payer_name", payerName)
-      formData.append("reference_number", referenceNumber)
+      formData.append("referenceNumber", referenceNumber)
       formData.append("notes", notes)
       formData.append("receipt", receiptFile)
 
@@ -605,6 +646,12 @@ function PaymentPageContent() {
               </div>
             </div>
           </section>
+
+          {!isValidPackage ? (
+            <div className="mt-5 rounded-[24px] border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              Invalid amount. This package does not match the allowed JB Coin Store packages.
+            </div>
+          ) : null}
 
           {walletSummaryError ? (
             <div className="mt-5 rounded-[24px] border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
@@ -1210,7 +1257,7 @@ function PaymentPageContent() {
                   <div className="grid gap-3">
                     <button
                       type="submit"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || !isValidPackage}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 px-5 py-3.5 text-sm font-black text-white shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <CreditCard size={16} />

@@ -1,11 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react"
 import { useRouter } from "next/navigation"
 import {
   CheckCircle2,
   Coins,
   Clock3,
+  ExternalLink,
+  ImageIcon,
   Mail,
   RefreshCw,
   Search,
@@ -39,6 +41,13 @@ type Order = {
   status: OrderStatus
   created_at: string
   notes?: string | null
+  receipt_url?: string | null
+  receipt_path?: string | null
+  receipt_name?: string | null
+  receipt_file_name?: string | null
+  proof_url?: string | null
+  proof_image_url?: string | null
+  screenshot_url?: string | null
 }
 
 type ToastState = {
@@ -82,6 +91,34 @@ function formatDate(value: string) {
   } catch {
     return value
   }
+}
+
+function getReceiptUrl(order: Order) {
+  const candidates = [
+    order.receipt_url,
+    order.proof_url,
+    order.proof_image_url,
+    order.screenshot_url,
+    order.receipt_path,
+  ]
+
+  for (const value of candidates) {
+    if (!value) continue
+    if (/^https?:\/\//i.test(value) || value.startsWith("/")) {
+      return value
+    }
+  }
+
+  return null
+}
+
+function getReceiptLabel(order: Order) {
+  return (
+    order.receipt_name ||
+    order.receipt_file_name ||
+    (order.receipt_path ? order.receipt_path.split("/").pop() : null) ||
+    "Receipt preview"
+  )
 }
 
 export default function AdminCoinPurchasesPage() {
@@ -316,6 +353,9 @@ export default function AdminCoinPurchasesPage() {
       order.label,
       order.payment_method,
       order.status,
+      order.receipt_name,
+      order.receipt_file_name,
+      order.receipt_path,
     ]
       .filter(Boolean)
       .join(" ")
@@ -395,7 +435,7 @@ export default function AdminCoinPurchasesPage() {
 
                 <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
                   Approving an order automatically credits the user wallet and writes a transaction log.
-                  You can also reject or permanently delete payment records here.
+                  You can now preview the uploaded receipt directly inside each order card before approving.
                 </p>
               </div>
 
@@ -507,7 +547,7 @@ export default function AdminCoinPurchasesPage() {
                     "--x": `${coin.x}px`,
                     "--y": `${coin.y}px`,
                     animation: "coin-burst 1.1s ease forwards",
-                  } as React.CSSProperties
+                  } as CSSProperties
                 }
               >
                 🪙
@@ -541,6 +581,8 @@ export default function AdminCoinPurchasesPage() {
                   order.status === "approved" ||
                   order.status === "rejected" ||
                   order.status === "removed"
+                const receiptUrl = getReceiptUrl(order)
+                const receiptLabel = getReceiptLabel(order)
 
                 return (
                   <article
@@ -595,55 +637,113 @@ export default function AdminCoinPurchasesPage() {
                             <p className="mt-1 text-xs text-slate-400">User ID: {order.user_id}</p>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="xl:w-[280px]">
-                        <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
-                          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Admin Actions</p>
+                        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(300px,0.95fr)]">
+                          <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Receipt Preview</p>
+                                <p className="mt-1 text-sm text-slate-300">
+                                  Check the payment proof before approving or rejecting this order.
+                                </p>
+                              </div>
 
-                          <div className="mt-4 grid gap-3">
-                            <button
-                              onClick={() => handleApprove(order)}
-                              disabled={isBusy || isDone}
-                              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {isBusy ? (
-                                <RefreshCw size={16} className="animate-spin" />
-                              ) : (
-                                <CheckCircle2 size={16} />
-                              )}
-                              Approve + Auto Credit
-                            </button>
+                              {receiptUrl ? (
+                                <a
+                                  href={receiptUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-2 rounded-2xl border border-sky-400/20 bg-sky-500/10 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-sky-200 transition hover:bg-sky-500/15"
+                                >
+                                  <ExternalLink size={14} />
+                                  Open Receipt
+                                </a>
+                              ) : null}
+                            </div>
 
-                            <button
-                              onClick={() => handleReject(order)}
-                              disabled={isBusy || isDone}
-                              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-rose-500/90 px-4 py-3 text-sm font-black text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {isBusy ? (
-                                <RefreshCw size={16} className="animate-spin" />
-                              ) : (
-                                <XCircle size={16} />
-                              )}
-                              Reject Order
-                            </button>
+                            {receiptUrl ? (
+                              <div className="mt-4 overflow-hidden rounded-[22px] border border-white/10 bg-slate-950/60">
+                                <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-white/5 px-4 py-3">
+                                  <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-white">
+                                    <ImageIcon size={16} className="shrink-0 text-sky-300" />
+                                    <span className="truncate">{receiptLabel}</span>
+                                  </div>
+                                  <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200">
+                                    Preview Ready
+                                  </span>
+                                </div>
 
-                            <button
-                              onClick={() => handleDelete(order)}
-                              disabled={isBusy}
-                              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-700 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {isBusy ? (
-                                <RefreshCw size={16} className="animate-spin" />
-                              ) : (
-                                <Trash2 size={16} />
-                              )}
-                              Delete Permanently
-                            </button>
+                                <a href={receiptUrl} target="_blank" rel="noreferrer" className="block">
+                                  <img
+                                    src={receiptUrl}
+                                    alt={receiptLabel}
+                                    className="h-[260px] w-full object-contain bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.14),transparent_35%),#020617] sm:h-[320px]"
+                                  />
+                                </a>
+                              </div>
+                            ) : (
+                              <div className="mt-4 flex min-h-[260px] flex-col items-center justify-center rounded-[22px] border border-dashed border-white/10 bg-slate-950/40 px-5 py-8 text-center sm:min-h-[320px]">
+                                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5 text-slate-400">
+                                  <ImageIcon size={24} />
+                                </div>
+                                <p className="mt-4 text-base font-bold text-white">No receipt preview available</p>
+                                <p className="mt-2 max-w-md text-sm leading-6 text-slate-400">
+                                  This order does not have a usable receipt URL yet. Save the uploaded receipt into a field like
+                                  <span className="mx-1 font-semibold text-slate-200">receipt_url</span>
+                                  so the admin can preview it here.
+                                </p>
+                              </div>
+                            )}
                           </div>
 
-                          <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-xs leading-6 text-slate-300">
-                            Approve credits the wallet. Reject blocks the payment. Delete permanently removes the order record.
+                          <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
+                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Admin Actions</p>
+
+                            <div className="mt-4 grid gap-3">
+                              <button
+                                onClick={() => handleApprove(order)}
+                                disabled={isBusy || isDone}
+                                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {isBusy ? (
+                                  <RefreshCw size={16} className="animate-spin" />
+                                ) : (
+                                  <CheckCircle2 size={16} />
+                                )}
+                                Approve + Auto Credit
+                              </button>
+
+                              <button
+                                onClick={() => handleReject(order)}
+                                disabled={isBusy || isDone}
+                                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-rose-500/90 px-4 py-3 text-sm font-black text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {isBusy ? (
+                                  <RefreshCw size={16} className="animate-spin" />
+                                ) : (
+                                  <XCircle size={16} />
+                                )}
+                                Reject Order
+                              </button>
+
+                              <button
+                                onClick={() => handleDelete(order)}
+                                disabled={isBusy}
+                                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-700 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {isBusy ? (
+                                  <RefreshCw size={16} className="animate-spin" />
+                                ) : (
+                                  <Trash2 size={16} />
+                                )}
+                                Delete Permanently
+                              </button>
+                            </div>
+
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-xs leading-6 text-slate-300">
+                              Approve credits the wallet. Reject blocks the payment. Delete permanently removes the order record.
+                              The receipt preview stays visible here so the admin can verify the screenshot before taking action.
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -657,12 +757,12 @@ export default function AdminCoinPurchasesPage() {
       </div>
 
       <AdminToast
-  open={toast.open}
-  title={toast.title}
-  message={toast.message || ""}
-  type={toast.variant}
-  onClose={closeToast}
-/>
+        open={toast.open}
+        title={toast.title}
+        message={toast.message || ""}
+        type={toast.variant}
+        onClose={closeToast}
+      />
     </div>
   )
 }
