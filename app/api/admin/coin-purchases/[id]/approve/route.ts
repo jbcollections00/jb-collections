@@ -132,56 +132,54 @@ async function bestEffortInsertHistory(
     finalStatus: string
   }
 ) {
-  const attempts: Array<() => Promise<unknown>> = [
-    () =>
-      supabase.from("coin_history").insert({
-        user_id: payload.userId,
-        coins: payload.coins,
-        type: "purchase_credit",
-        label: payload.label,
-        source: "coin_purchase_orders",
-        reference_id: payload.orderId,
-        amount_php: payload.amountPhp,
-        payment_method: payload.paymentMethod,
-        payment_reference: payload.paymentReference,
-        status: payload.finalStatus,
-        created_by: payload.adminId,
-      }),
-    () =>
-      supabase.from("jb_coin_transactions").insert({
-        user_id: payload.userId,
-        coins: payload.coins,
-        type: "purchase_credit",
-        label: payload.label,
-        reference_id: payload.orderId,
-        amount_php: payload.amountPhp,
-        payment_method: payload.paymentMethod,
-        payment_reference: payload.paymentReference,
-        status: payload.finalStatus,
-        created_by: payload.adminId,
-      }),
-    () =>
-      supabase.from("jb_points_log").insert({
-        user_id: payload.userId,
-        points: payload.coins,
-        coins: payload.coins,
-        action_type: "purchase_credit",
-        label: payload.label,
-        reference_id: payload.orderId,
-        amount_php: payload.amountPhp,
-        status: payload.finalStatus,
-        created_by: payload.adminId,
-      }),
-  ]
+  try {
+    const result = await supabase.from("coin_history").insert({
+      user_id: payload.userId,
+      coins: payload.coins,
+      type: "purchase_credit",
+      label: payload.label,
+      source: "coin_purchase_orders",
+      reference_id: payload.orderId,
+      amount_php: payload.amountPhp,
+      payment_method: payload.paymentMethod,
+      payment_reference: payload.paymentReference,
+      status: payload.finalStatus,
+      created_by: payload.adminId,
+    })
 
-  for (const attempt of attempts) {
-    try {
-      const result = (await attempt()) as { error?: { message?: string } | null }
-      if (!result?.error) return
-    } catch {
-      continue
-    }
-  }
+    if (!result.error) return
+  } catch {}
+
+  try {
+    const result = await supabase.from("jb_coin_transactions").insert({
+      user_id: payload.userId,
+      coins: payload.coins,
+      type: "purchase_credit",
+      label: payload.label,
+      reference_id: payload.orderId,
+      amount_php: payload.amountPhp,
+      payment_method: payload.paymentMethod,
+      payment_reference: payload.paymentReference,
+      status: payload.finalStatus,
+      created_by: payload.adminId,
+    })
+
+    if (!result.error) return
+  } catch {}
+
+  try {
+    await supabase.from("jb_points_log").insert({
+      user_id: payload.userId,
+      points: payload.coins,
+      coins: payload.coins,
+      action_type: "purchase_credit",
+      label: payload.label,
+      reference_id: payload.orderId,
+      amount_php: payload.amountPhp,
+      status: payload.finalStatus,
+      created_by: payload.adminId,
+    })
+  } catch {}
 }
 
 async function bestEffortMarkCreditedMetadata(
