@@ -275,14 +275,14 @@ function PaymentPageContent() {
 
   const walletDetails = {
     gcash: {
-      name: "JB Collections Official GCash",
+      name: "JB Collections",
       number: "09695289257",
       qr: "/gcash-qr.jpg",
       accent: "border-sky-400/30 bg-sky-500/10 text-sky-200",
       ring: "shadow-[0_0_0_1px_rgba(56,189,248,0.22),0_18px_50px_rgba(14,165,233,0.18)]",
     },
     maya: {
-      name: "JB Collections Official Maya",
+      name: "JB Collections",
       number: "09685289257",
       qr: "/maya-qr.jpg",
       accent: "border-emerald-400/30 bg-emerald-500/10 text-emerald-200",
