@@ -10,7 +10,7 @@ const VALID_PACKAGES = [
   { amount: 100, coins: 1400 },
   { amount: 200, coins: 2900 },
   { amount: 500, coins: 7500 },
-  { amount: 1000, coins: 16000 },
+  { amount: 1000, coins: 15500 },
   { amount: 20, coins: 260 },
 ]
 
