@@ -27,30 +27,32 @@ function requireEnv(name: string) {
 async function createSupabaseUserClient() {
   const cookieStore = await cookies()
 
-  const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL")
-  const supabaseAnonKey = requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
-
-  return createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value
+  return createServerClient(
+    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
+    requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set() {},
+        remove() {},
       },
-      set() {},
-      remove() {},
-    },
-  })
+    }
+  )
 }
 
 function createSupabaseAdminClient() {
-  const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL")
-  const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY")
-
-  return createSupabaseAdmin(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
+  return createSupabaseAdmin(
+    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
+    requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  )
 }
 
 function getDisplayName(profile: LeaderboardProfileRow) {
@@ -91,21 +93,21 @@ function getInitials(name: string) {
 
 export async function GET() {
   try {
-    const supabase = await createSupabaseUserClient()
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
-
-    if (userError || !user) {
-      return NextResponse.json(
-        { ok: false, error: "Unauthorized" },
-        { status: 401 }
-      )
-    }
-
     const adminDb = createSupabaseAdminClient()
+
+    let currentUserId: string | null = null
+
+    try {
+      const supabase = await createSupabaseUserClient()
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      currentUserId = user?.id || null
+    } catch {
+      currentUserId = null
+    }
 
     const { data: topProfiles, error: leaderboardError } = await adminDb
       .from("profiles")
@@ -115,6 +117,7 @@ export async function GET() {
 
     if (leaderboardError) {
       console.error("Leaderboard query error:", leaderboardError)
+
       return NextResponse.json(
         { ok: false, error: "Failed to load leaderboard" },
         { status: 500 }
@@ -124,37 +127,6 @@ export async function GET() {
     const leaderboardRows = Array.isArray(topProfiles)
       ? (topProfiles as LeaderboardProfileRow[])
       : []
-
-    const { data: currentUserProfile, error: currentUserError } = await adminDb
-      .from("profiles")
-      .select("id, coins, full_name, name, username, avatar_url, membership, role")
-      .eq("id", user.id)
-      .maybeSingle()
-
-    if (currentUserError) {
-      console.error("Current user leaderboard error:", currentUserError)
-      return NextResponse.json(
-        { ok: false, error: "Failed to load your leaderboard rank" },
-        { status: 500 }
-      )
-    }
-
-    const currentUserCoins = Number(currentUserProfile?.coins || 0)
-
-    const { count: higherCount, error: rankError } = await adminDb
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .gt("coins", currentUserCoins)
-
-    if (rankError) {
-      console.error("Leaderboard rank count error:", rankError)
-      return NextResponse.json(
-        { ok: false, error: "Failed to load leaderboard rank" },
-        { status: 500 }
-      )
-    }
-
-    const yourRank = Number(higherCount || 0) + 1
 
     const top = leaderboardRows.map((profile, index) => {
       const displayName = getDisplayName(profile)
@@ -170,39 +142,51 @@ export async function GET() {
         coins: Number(profile.coins || 0),
         membership,
         membership_label: getMembershipLabel(membership),
-        is_current_user: profile.id === user.id,
+        is_current_user: currentUserId ? profile.id === currentUserId : false,
       }
     })
 
-    const fallbackProfile: LeaderboardProfileRow = {
-      id: user.id,
-      full_name: "",
-      name: "",
-      username: "",
-      avatar_url: null,
-      coins: currentUserCoins,
-      membership: "standard",
-      role: null,
-    }
+    let me = null
 
-    const safeCurrentUserProfile = (currentUserProfile as LeaderboardProfileRow | null) || fallbackProfile
-    const currentUserDisplayName = getDisplayName(safeCurrentUserProfile)
-    const currentUserMembership = getMembership(safeCurrentUserProfile)
+    if (currentUserId) {
+      const { data: currentUserProfile, error: currentUserError } = await adminDb
+        .from("profiles")
+        .select("id, coins, full_name, name, username, avatar_url, membership, role")
+        .eq("id", currentUserId)
+        .maybeSingle()
+
+      if (!currentUserError && currentUserProfile) {
+        const safeCurrentUserProfile =
+          currentUserProfile as LeaderboardProfileRow
+
+        const currentUserCoins = Number(safeCurrentUserProfile.coins || 0)
+
+        const { count: higherCount } = await adminDb
+          .from("profiles")
+          .select("id", { count: "exact", head: true })
+          .gt("coins", currentUserCoins)
+
+        const currentUserDisplayName = getDisplayName(safeCurrentUserProfile)
+        const currentUserMembership = getMembership(safeCurrentUserProfile)
+
+        me = {
+          id: currentUserId,
+          rank: Number(higherCount || 0) + 1,
+          display_name: currentUserDisplayName,
+          username: safeCurrentUserProfile.username || null,
+          avatar_url: safeCurrentUserProfile.avatar_url || null,
+          initials: getInitials(currentUserDisplayName),
+          coins: currentUserCoins,
+          membership: currentUserMembership,
+          membership_label: getMembershipLabel(currentUserMembership),
+        }
+      }
+    }
 
     return NextResponse.json({
       ok: true,
       top,
-      me: {
-        id: user.id,
-        rank: yourRank,
-        display_name: currentUserDisplayName,
-        username: safeCurrentUserProfile.username || null,
-        avatar_url: safeCurrentUserProfile.avatar_url || null,
-        initials: getInitials(currentUserDisplayName),
-        coins: currentUserCoins,
-        membership: currentUserMembership,
-        membership_label: getMembershipLabel(currentUserMembership),
-      },
+      me,
     })
   } catch (error) {
     console.error("Leaderboard route error:", error)

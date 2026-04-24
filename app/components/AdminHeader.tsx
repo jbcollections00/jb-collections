@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 
 const navItems = [
@@ -22,12 +22,68 @@ export default function AdminHeader() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [messagesOpen, setMessagesOpen] = useState(false)
+  const [savingMessagesSetting, setSavingMessagesSetting] = useState(false)
 
   function isActive(href: string) {
     const currentPath = pathname || ""
     if (href === "/admin") return currentPath === "/admin"
     return currentPath.startsWith(href)
   }
+
+  async function loadMessagesSetting() {
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("key, value")
+      .eq("key", "messages_open")
+      .maybeSingle()
+
+    if (error) {
+      console.error("Failed to load messages setting:", error)
+      return
+    }
+
+    setMessagesOpen(String(data?.value || "false") === "true")
+  }
+
+  async function toggleMessages() {
+    try {
+      setSavingMessagesSetting(true)
+
+      const newValue = !messagesOpen
+
+      const { error } = await supabase
+        .from("app_settings")
+        .upsert(
+          {
+            key: "messages_open",
+            value: String(newValue),
+          },
+          {
+            onConflict: "key",
+          }
+        )
+
+      if (error) {
+        throw error
+      }
+
+      setMessagesOpen(newValue)
+    } catch (error) {
+      console.error("Failed to update messages setting:", error)
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to update messages setting."
+      )
+    } finally {
+      setSavingMessagesSetting(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadMessagesSetting()
+  }, [])
 
   async function handleLogout() {
     try {
@@ -95,6 +151,23 @@ export default function AdminHeader() {
             <div className="hidden shrink-0 items-center gap-2 lg:flex">
               <button
                 type="button"
+                onClick={toggleMessages}
+                disabled={savingMessagesSetting}
+                className={`inline-flex h-10 items-center justify-center rounded-full border px-4 text-xs font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-70 ${
+                  messagesOpen
+                    ? "border-emerald-400/30 bg-emerald-600 hover:bg-emerald-700"
+                    : "border-slate-600 bg-slate-800 hover:bg-slate-700"
+                }`}
+              >
+                {savingMessagesSetting
+                  ? "Saving..."
+                  : messagesOpen
+                  ? "Messages Open"
+                  : "Messages Closed"}
+              </button>
+
+              <button
+                type="button"
                 onClick={handleLogout}
                 disabled={loggingOut}
                 className="inline-flex h-10 items-center justify-center rounded-full border border-red-400/20 bg-red-600 px-4 text-xs font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70"
@@ -120,8 +193,27 @@ export default function AdminHeader() {
                   <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">
                     JB Collections
                   </div>
-                  <div className="mt-1 text-sm font-black text-white">Admin Control Center</div>
+                  <div className="mt-1 text-sm font-black text-white">
+                    Admin Control Center
+                  </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={toggleMessages}
+                  disabled={savingMessagesSetting}
+                  className={`inline-flex items-center justify-center rounded-2xl border px-4 py-3 text-sm font-bold transition disabled:opacity-70 ${
+                    messagesOpen
+                      ? "border-emerald-400/30 bg-emerald-600 text-white hover:bg-emerald-700"
+                      : "border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white"
+                  }`}
+                >
+                  {savingMessagesSetting
+                    ? "Saving..."
+                    : messagesOpen
+                    ? "Messages Open"
+                    : "Messages Closed"}
+                </button>
 
                 {navItems.map((item) => {
                   const active = isActive(item.href)
