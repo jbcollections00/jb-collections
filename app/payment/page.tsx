@@ -79,7 +79,7 @@ const VALID_PACKAGES = [
   { amount: 100, coins: 1400, base: 1300, bonus: 100 },
   { amount: 200, coins: 2900, base: 2600, bonus: 300 },
   { amount: 500, coins: 7500, base: 6500, bonus: 1000 },
-  { amount: 1000, coins: 16000, base: 13000, bonus: 3000 },
+  { amount: 1000, coins: 15500, base: 13000, bonus: 2500 },
 ] as const
 
 function toSafeNumber(value: unknown, fallback = 0) {
@@ -227,23 +227,16 @@ function PaymentPageContent() {
   const featured = searchParams.get("featured") === "1"
 
   const isValidPackage = useMemo(() => {
-    if (
-      !Number.isFinite(amount) ||
-      !Number.isFinite(coins) ||
-      !Number.isFinite(base) ||
-      !Number.isFinite(bonus)
-    ) {
-      return false
-    }
+  if (!Number.isFinite(amount) || !Number.isFinite(coins)) {
+    return false
+  }
 
-    return VALID_PACKAGES.some(
-      (pkg) =>
-        pkg.amount === amount &&
-        pkg.coins === coins &&
-        pkg.base === base &&
-        pkg.bonus === bonus
-    )
-  }, [amount, coins, base, bonus])
+  return VALID_PACKAGES.some(
+    (pkg) =>
+      pkg.amount === amount &&
+      pkg.coins === coins
+  )
+}, [amount, coins])
 
   const [method, setMethod] = useState<PaymentMethod>(
     initialMethod === "gcash" ? "gcash" : "maya"
@@ -565,6 +558,12 @@ function PaymentPageContent() {
   const walletBalance = walletSummary.balance
   const pendingCoins = walletSummary.pendingCoins
   const lifetimePurchased = walletSummary.lifetimePurchased
+  const isReady = Boolean(
+    isValidPackage &&
+      payerName.trim() &&
+      referenceNumber.trim() &&
+      receiptFile
+  )
 
   return (
     <>
@@ -1235,14 +1234,14 @@ function PaymentPageContent() {
                             </div>
                           </div>
 
-                          <div className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-400/10 px-3 py-3 text-xs text-fuchsia-200">
-                            <div className="font-black uppercase tracking-[0.18em]">
-                              Reference Match
-                            </div>
-                            <div className="mt-1 text-sm font-bold text-white">
-                              Ready to Submit
-                            </div>
-                          </div>
+                         <div className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-400/10 px-3 py-3 text-xs text-fuchsia-200">
+  <div className="font-black uppercase tracking-[0.18em]">
+    Reference Match
+  </div>
+  <div className="mt-1 text-sm font-bold text-white">
+    {isReady ? "Ready to Submit" : "Incomplete"}
+  </div>
+</div>
                         </div>
                       </div>
                     ) : null}
@@ -1256,8 +1255,14 @@ function PaymentPageContent() {
 
                   <div className="grid gap-3">
                     <button
-                      type="submit"
-                      disabled={isSubmitting || !isValidPackage}
+ 		       type="submit"
+ 		       disabled={
+   		         isSubmitting ||
+		         !isValidPackage ||
+		         !payerName.trim() ||
+		         !referenceNumber.trim() ||
+		         !receiptFile
+ 		       }
                       className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 px-5 py-3.5 text-sm font-black text-white shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <CreditCard size={16} />
