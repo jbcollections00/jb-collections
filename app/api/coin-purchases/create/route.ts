@@ -11,7 +11,7 @@ const VALID_PACKAGES = [
   { amount: 200, coins: 2900 },
   { amount: 500, coins: 7500 },
   { amount: 1000, coins: 15500 },
-  { amount: 20, coins: 260 },
+  { amount: 20, coins: 270 },
 ]
 
 async function createUserClient() {
