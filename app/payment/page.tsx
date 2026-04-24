@@ -219,24 +219,26 @@ function PaymentPageContent() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const amount = Number(searchParams.get("amount") || 0)
-  const coins = Number(searchParams.get("coins") || 0)
-  const bonus = Number(searchParams.get("bonus") || 0)
-  const base = Number(searchParams.get("base") || Math.max(coins - bonus, 0))
+  const urlCoins = Number(searchParams.get("coins") || 0)
+  const urlBonus = Number(searchParams.get("bonus") || 0)
+  const urlBase = Number(searchParams.get("base") || 0)
   const label = decodeLabel(searchParams.get("label"))
   const initialMethod = (searchParams.get("method") || "maya").toLowerCase()
   const featured = searchParams.get("featured") === "1"
 
-  const isValidPackage = useMemo(() => {
-  if (!Number.isFinite(amount) || !Number.isFinite(coins)) {
-    return false
-  }
+  const matchedPackage = useMemo(() => {
+    if (!Number.isFinite(amount)) return null
+    return VALID_PACKAGES.find((pkg) => pkg.amount === amount) || null
+  }, [amount])
 
-  return VALID_PACKAGES.some(
-    (pkg) =>
-      pkg.amount === amount &&
-      pkg.coins === coins
-  )
-}, [amount, coins])
+  const isValidPackage = matchedPackage !== null
+  const coins = matchedPackage?.coins ?? urlCoins
+  const bonus = matchedPackage?.bonus ?? urlBonus
+  const base =
+    matchedPackage?.base ??
+    (Number.isFinite(urlBase) && urlBase > 0
+      ? urlBase
+      : Math.max(coins - bonus, 0))
 
   const [method, setMethod] = useState<PaymentMethod>(
     initialMethod === "gcash" ? "gcash" : "maya"
