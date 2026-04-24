@@ -75,6 +75,7 @@ type WalletSummary = {
 }
 
 const VALID_PACKAGES = [
+  { amount: 20, coins: 270, base: 260, bonus: 10 },
   { amount: 50, coins: 690, base: 650, bonus: 40 },
   { amount: 100, coins: 1400, base: 1300, bonus: 100 },
   { amount: 200, coins: 2900, base: 2600, bonus: 300 },
@@ -1341,139 +1342,176 @@ function PaymentPageContent() {
       ) : null}
 
       {showSuccess && latestTransaction ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 px-3 py-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-[30px] border border-white/10 bg-slate-900 p-5 text-white shadow-[0_30px_100px_rgba(0,0,0,0.55)] sm:p-6">
-            <div className="grid gap-5 lg:grid-cols-[0.92fr_1.08fr]">
-              <div className="rounded-[26px] border border-emerald-400/20 bg-emerald-500/10 p-5">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300">
-                  <CheckCircle2 size={32} />
-                </div>
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/80 px-4 py-6 backdrop-blur-md">
+          <div className="flex min-h-full items-center justify-center">
+            <div className="w-full max-w-5xl rounded-[32px] border border-white/10 bg-slate-950/95 p-4 text-white shadow-[0_30px_100px_rgba(0,0,0,0.65)] sm:p-6 lg:p-7">
+              <div className="grid gap-5 lg:grid-cols-[0.92fr_1.08fr]">
+                <div className="rounded-[28px] border border-emerald-400/20 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_38%),rgba(6,78,59,0.12)] p-5 text-center shadow-[0_0_0_1px_rgba(52,211,153,0.08)] sm:p-6">
+                  <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-500/15 text-emerald-300 shadow-[0_0_35px_rgba(52,211,153,0.28)]">
+                    <CheckCircle2 size={42} />
+                  </div>
 
-                <div className="mt-4 text-center">
-                  <div className="text-2xl font-black">Payment Logged</div>
-                  <p className="mt-2 text-sm leading-7 text-emerald-100/85">
-                    Your receipt, reference number, and wallet request were submitted
-                    successfully.
+                  <h2 className="mt-5 text-3xl font-black tracking-tight text-white">
+                    Payment Logged
+                  </h2>
+
+                  <p className="mx-auto mt-3 max-w-sm text-sm leading-7 text-slate-300">
+                    Your receipt, reference number, and wallet request were submitted successfully.
                   </p>
-                </div>
 
-                <div className="mt-5 rounded-[24px] border border-white/10 bg-black/20 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm text-slate-300">Transaction ID</span>
-                    <span className="text-sm font-black text-white">
-                      {latestTransaction.id}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <span className="text-sm text-slate-300">Status</span>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-amber-200">
-                      <Clock3 size={12} />
-                      Pending Review
-                    </span>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <span className="text-sm text-slate-300">Submitted</span>
-                    <span className="text-sm font-black text-white">
-                      {latestTransaction.createdAt
-                        ? formatDateTime(new Date(latestTransaction.createdAt))
-                        : "—"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-[26px] border border-white/10 bg-slate-950/60 p-5">
-                <div className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-slate-300">
-                  <ReceiptText size={16} />
-                  Confirmation Summary
-                </div>
-
-                <div className="mt-4 space-y-3">
-                  <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                    <span>Package</span>
-                    <span className="font-black text-white">{latestTransaction.label}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                    <span>Payment</span>
-                    <span className="font-black text-amber-300">
-                      {formatPeso(latestTransaction.amount)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                    <span>Coins to Receive</span>
-                    <span className="font-black text-white">
-                      {formatCoins(latestTransaction.coins)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                    <span>Method</span>
-                    <span className="font-black capitalize text-white">
-                      {latestTransaction.method}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                    <span>Reference</span>
-                    <span className="font-black text-white">
-                      {latestTransaction.referenceNumber}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 text-sm text-slate-200">
-                    <span>Receipt</span>
-                    <span className="font-black text-white">
-                      {latestTransaction.receiptName}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-[24px] border border-sky-400/20 bg-sky-400/10 p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-xl bg-white/10 p-2 text-sky-200">
-                      <FileCheck2 size={16} />
-                    </div>
-                    <div>
-                      <div className="text-sm font-black text-white">
-                        What happens next
+                  <div className="mt-6 rounded-[24px] border border-white/10 bg-slate-950/70 p-4 text-left">
+                    <div className="grid gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-300">
+                          <ReceiptText size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm text-slate-400">Transaction ID</div>
+                          <div className="truncate font-black text-emerald-300">
+                            {latestTransaction.id}
+                          </div>
+                        </div>
                       </div>
-                      <p className="mt-1 text-sm leading-7 text-sky-100/85">
-                        Your request is now visible in Transaction History. Once
-                        approved, the status moves forward and your coins are credited
-                        into your wallet.
+
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-300">
+                          <Clock3 size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm text-slate-400">Status</div>
+                          <div className="mt-1 inline-flex rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-amber-200">
+                            Pending Review
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-300">
+                          <History size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm text-slate-400">Submitted</div>
+                          <div className="font-black text-white">
+                            {latestTransaction.createdAt
+                              ? formatDateTime(new Date(latestTransaction.createdAt))
+                              : "—"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 rounded-[24px] border border-sky-400/20 bg-sky-400/10 p-4 text-left">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-xl bg-white/10 p-2 text-sky-200">
+                        <ShieldCheck size={18} />
+                      </div>
+                      <p className="text-sm leading-7 text-sky-100/90">
+                        We&apos;ll notify you once your payment has been reviewed.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                  <button
-                    type="button"
-                    onClick={handleCloseSuccess}
-                    className="inline-flex flex-1 items-center justify-center rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-5 py-3 text-sm font-black text-white shadow-lg"
-                  >
-                    Done
-                  </button>
+                <div className="rounded-[28px] border border-white/10 bg-slate-900/60 p-5 sm:p-6">
+                  <div className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-slate-300">
+                    <ReceiptText size={18} className="text-sky-300" />
+                    Confirmation Summary
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowSuccess(false)
-                      document
-                        .getElementById("transaction-history")
-                        ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                    }}
-                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-slate-200 transition hover:bg-white/10"
-                  >
-                    View Activity
-                    <ChevronRight size={16} />
-                  </button>
+                  <div className="mt-5 divide-y divide-white/10 rounded-[24px] border border-white/10 bg-slate-950/60">
+                    <div className="grid grid-cols-[40px_1fr_auto] items-center gap-3 px-4 py-3">
+                      <Gem size={20} className="text-sky-300" />
+                      <span className="text-slate-300">Package</span>
+                      <span className="text-right font-black text-white">{latestTransaction.label}</span>
+                    </div>
+                    <div className="grid grid-cols-[40px_1fr_auto] items-center gap-3 px-4 py-3">
+                      <WalletCards size={20} className="text-emerald-300" />
+                      <span className="text-slate-300">Payment</span>
+                      <span className="font-black text-amber-300">{formatPeso(latestTransaction.amount)}</span>
+                    </div>
+                    <div className="grid grid-cols-[40px_1fr_auto] items-center gap-3 px-4 py-3">
+                      <Coins size={20} className="text-amber-300" />
+                      <span className="text-slate-300">Coins to Receive</span>
+                      <span className="font-black text-white">{formatCoins(latestTransaction.coins)}</span>
+                    </div>
+                    <div className="grid grid-cols-[40px_1fr_auto] items-center gap-3 px-4 py-3">
+                      <CreditCard size={20} className="text-violet-300" />
+                      <span className="text-slate-300">Method</span>
+                      <span className="font-black capitalize text-white">{latestTransaction.method}</span>
+                    </div>
+                    <div className="grid grid-cols-[40px_1fr_auto] items-center gap-3 px-4 py-3">
+                      <BadgeCheck size={20} className="text-sky-300" />
+                      <span className="text-slate-300">Reference</span>
+                      <span className="max-w-[220px] truncate text-right font-black text-white">
+                        {latestTransaction.referenceNumber}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-[40px_1fr_auto] items-center gap-3 px-4 py-3">
+                      <FileCheck2 size={20} className="text-emerald-300" />
+                      <span className="text-slate-300">Receipt</span>
+                      <span className="max-w-[240px] truncate text-right font-black text-white">
+                        {latestTransaction.receiptName}
+                      </span>
+                    </div>
+                  </div>
 
-                  <Link
-                    href="/upgrade"
-                    className="inline-flex flex-1 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-slate-200 transition hover:bg-white/10"
-                  >
-                    Back to Store
-                  </Link>
+                  <div className="mt-5 rounded-[24px] border border-sky-400/20 bg-sky-400/10 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-xl bg-white/10 p-2 text-sky-200">
+                        <Clock3 size={18} />
+                      </div>
+                      <div>
+                        <div className="font-black text-white">What happens next</div>
+                        <p className="mt-1 text-sm leading-7 text-sky-100/85">
+                          Your request is now visible in Transaction History. Once approved, the status moves forward and your coins are credited into your wallet.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    <button
+                      type="button"
+                      onClick={handleCloseSuccess}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-5 py-3.5 text-sm font-black text-white shadow-lg transition hover:opacity-95"
+                    >
+                      <CheckCircle2 size={18} />
+                      Done
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSuccess(false)
+                        document
+                          .getElementById("transaction-history")
+                          ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                      }}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3.5 text-sm font-black text-slate-200 transition hover:bg-white/10"
+                    >
+                      View Activity
+                      <ChevronRight size={18} />
+                    </button>
+
+                    <Link
+                      href="/upgrade"
+                      className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3.5 text-center text-sm font-black text-slate-200 transition hover:bg-white/10"
+                    >
+                      Back to Store
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-col gap-3 rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={16} className="text-sky-300" />
+                  All transactions are secure and traceable.
+                </div>
+                <div className="flex items-center gap-2">
+                  <Lock size={16} className="text-sky-300" />
+                  Your data is safe with us.
                 </div>
               </div>
             </div>
