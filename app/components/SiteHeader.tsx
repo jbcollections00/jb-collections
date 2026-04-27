@@ -18,7 +18,7 @@ const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "🏠" },
   { label: "Profile", href: "/profile", icon: "👤" },
   { label: "Messages", href: "/messages", icon: "💬" },
-  { label: "JB STORE", href: "/upgrade", icon: "🪙" },
+  { label: "Buy COINS", href: "/upgrade", icon: "🪙" },
 ]
 
 function toSafeNumber(value: unknown) {
