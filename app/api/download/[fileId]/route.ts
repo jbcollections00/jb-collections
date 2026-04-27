@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase-server"
 import { getSignedDownloadUrl } from "@/lib/r2"
@@ -67,6 +66,20 @@ function normalizeMembership(profile?: ProfileRow | null): MembershipLevel {
   return "standard"
 }
 
+function getDownloadCoinCost(level: MembershipLevel) {
+  if (level === "admin") return 0
+  if (level === "platinum") return 8
+  if (level === "premium") return 10
+  return 12
+}
+
+function getDownloadRewardAmount(level: MembershipLevel) {
+  if (level === "admin") return 0
+  if (level === "platinum") return 3
+  if (level === "premium") return 2
+  return 2
+}
+
 function getDailyDownloadRewardLimit(level: MembershipLevel) {
   if (level === "admin") return 0
   if (level === "platinum") return 50
@@ -101,6 +114,22 @@ function getTodayManilaDateString() {
   }).format(new Date())
 }
 
+function createAdminDb() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return null
+  }
+
+  return createSupabaseAdmin(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+}
+
 async function awardDownloadCoins(params: {
   userId: string
   fileId: string
@@ -113,27 +142,23 @@ async function awardDownloadCoins(params: {
     return { awarded: 0, reason: "admin_skipped" }
   }
 
-  const rewardAmount = 5
+  const rewardAmount = getDownloadRewardAmount(membershipLevel)
   const dailyLimit = getDailyDownloadRewardLimit(membershipLevel)
+
+  if (rewardAmount <= 0) {
+    return { awarded: 0, reason: "limit_disabled" }
+  }
 
   if (dailyLimit <= 0) {
     return { awarded: 0, reason: "limit_disabled" }
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const adminDb = createAdminDb()
 
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!adminDb) {
     console.warn("Download reward skipped: missing service role env vars.")
     return { awarded: 0, reason: "missing_env" }
   }
-
-  const adminDb = createSupabaseAdmin(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
 
   const rewardDate = getTodayManilaDateString()
 
@@ -252,6 +277,8 @@ export async function GET(
 
     const profile = profileData as ProfileRow | null
     const membershipLevel = normalizeMembership(profile)
+    const downloadCoinCost = getDownloadCoinCost(membershipLevel)
+    const userCoins = Number(profile?.coins || 0)
 
     const { data: fileData, error: fileError } = await supabase
       .from("files")
@@ -375,6 +402,56 @@ export async function GET(
       )
     }
 
+    if (downloadCoinCost > 0 && userCoins < downloadCoinCost) {
+      await supabase.from("download_logs").insert({
+        user_id: user.id,
+        file_id: fileOnly.id,
+        file_version_id: currentVersion.id,
+        result: "insufficient_coins",
+        ip_address: getClientIp(req),
+        user_agent: req.headers.get("user-agent"),
+      })
+
+      return NextResponse.json(
+        {
+          error: "Not enough JB Coins",
+          requiredCoins: downloadCoinCost,
+          currentCoins: userCoins,
+        },
+        { status: 402 }
+      )
+    }
+
+    if (downloadCoinCost > 0) {
+      const adminDb = createAdminDb()
+
+      if (!adminDb) {
+        return NextResponse.json(
+          { error: "Coin system unavailable. Missing service role config." },
+          { status: 500 }
+        )
+      }
+
+      const { error: spendError } = await adminDb.rpc("handle_coin_change", {
+        p_user_id: user.id,
+        p_amount: -downloadCoinCost,
+        p_type: "download_spend",
+        p_description: `Download spend for ${fileOnly.title || fileOnly.slug || fileOnly.id}`,
+      })
+
+      if (spendError) {
+        console.error("Download coin spend error:", spendError)
+
+        return NextResponse.json(
+          {
+            error: "Failed to deduct JB Coins",
+            details: spendError.message,
+          },
+          { status: 500 }
+        )
+      }
+    }
+
     const safeFilename = buildSafeFilename(fileOnly, currentVersion)
 
     const signedUrl = await getSignedDownloadUrl({
@@ -436,6 +513,7 @@ export async function GET(
     if (mode === "json") {
       return NextResponse.json({
         downloadUrl: signedUrl,
+        coinsUsed: downloadCoinCost,
         ...rewardResponse,
       })
     }

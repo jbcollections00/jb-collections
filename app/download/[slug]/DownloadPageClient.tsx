@@ -8,6 +8,7 @@ import AdSlot from "@/app/components/AdSlot"
 import { DOWNLOAD_TOP_AD, DOWNLOAD_WAIT_AD, STICKY_BOTTOM_AD } from "@/app/lib/adCodes"
 
 type FileVisibility = "free" | "premium" | "platinum" | "private"
+type MembershipLevel = "standard" | "premium" | "platinum" | "admin"
 
 type FileRow = {
   id: string
@@ -124,6 +125,20 @@ function getVisibilityPillClasses(visibility?: string | null) {
   return "bg-emerald-500 text-white"
 }
 
+function getDownloadCoinCost(level: MembershipLevel) {
+  if (level === "admin") return 0
+  if (level === "platinum") return 8
+  if (level === "premium") return 10
+  return 12
+}
+
+function getRewardAmount(level: MembershipLevel) {
+  if (level === "admin") return 0
+  if (level === "platinum") return 3
+  if (level === "premium") return 2
+  return 2
+}
+
 export default function DownloadPageClient() {
   const params = useParams()
   const router = useRouter()
@@ -138,6 +153,7 @@ export default function DownloadPageClient() {
   const [checking, setChecking] = useState(true)
   const [file, setFile] = useState<FileRow | null>(null)
   const [related, setRelated] = useState<RelatedFileRow[]>([])
+  const [membershipLevel, setMembershipLevel] = useState<MembershipLevel>("standard")
   const [isPremiumUser, setIsPremiumUser] = useState(false)
   const [isPlatinumUser, setIsPlatinumUser] = useState(false)
   const [error, setError] = useState("")
@@ -152,6 +168,11 @@ export default function DownloadPageClient() {
   const [downloadReady, setDownloadReady] = useState(false)
   const [startingDownload, setStartingDownload] = useState(false)
   const [showStickyAd, setShowStickyAd] = useState(true)
+
+  const [showCoinConfirm, setShowCoinConfirm] = useState(false)
+  const [showInsufficientCoins, setShowInsufficientCoins] = useState(false)
+  const [requiredCoins, setRequiredCoins] = useState<number | null>(null)
+  const [currentCoins, setCurrentCoins] = useState<number | null>(null)
 
   const [rewardNotice, setRewardNotice] = useState("")
   const [rewardNoticeType, setRewardNoticeType] = useState<RewardNoticeType>("success")
@@ -169,6 +190,8 @@ export default function DownloadPageClient() {
   )
   const visibility = (file?.visibility || "free").toLowerCase()
   const monetizationEnabled = file?.monetization_enabled !== false
+  const estimatedCoinCost = useMemo(() => getDownloadCoinCost(membershipLevel), [membershipLevel])
+  const estimatedReward = useMemo(() => getRewardAmount(membershipLevel), [membershipLevel])
 
   const clearRewardNoticeTimer = useCallback(() => {
     if (rewardNoticeTimerRef.current) {
@@ -225,11 +248,11 @@ export default function DownloadPageClient() {
       searchParams?.get("reward") === "today"
 
     const rewardAmountRaw =
-      searchParams?.get("rewardAmount") || searchParams?.get("reward_amount") || "5"
+      searchParams?.get("rewardAmount") || searchParams?.get("reward_amount") || "2"
 
     const parsedRewardAmount = Number(rewardAmountRaw)
     const rewardAmount =
-      Number.isFinite(parsedRewardAmount) && parsedRewardAmount > 0 ? parsedRewardAmount : 5
+      Number.isFinite(parsedRewardAmount) && parsedRewardAmount > 0 ? parsedRewardAmount : 2
 
     if (rewarded) {
       showRewardNotice(`+${rewardAmount} JB Coins earned`, "success")
@@ -316,15 +339,31 @@ export default function DownloadPageClient() {
     }
   }
 
+  function resolveMembership(refreshData: any): MembershipLevel {
+    const role = String(refreshData?.role || "").toLowerCase()
+    const membership = String(refreshData?.membership || "").toLowerCase()
+
+    if (role === "admin") return "admin"
+    if (refreshData?.is_platinum || membership === "platinum") return "platinum"
+    if (refreshData?.is_premium || membership === "premium") return "premium"
+
+    return "standard"
+  }
+
   async function loadPage() {
     try {
       setChecking(true)
       setError("")
       setFile(null)
       setRelated([])
+      setMembershipLevel("standard")
       setIsPremiumUser(false)
       setIsPlatinumUser(false)
       setShowPreviewModal(false)
+      setShowCoinConfirm(false)
+      setShowInsufficientCoins(false)
+      setRequiredCoins(null)
+      setCurrentCoins(null)
       setStep("waiting")
       setCountdown(3)
       setDownloadReady(false)
@@ -374,14 +413,16 @@ export default function DownloadPageClient() {
         return
       }
 
-      const premium = Boolean(refreshData?.is_premium)
-      const platinum = Boolean(refreshData?.is_platinum)
+      const level = resolveMembership(refreshData)
+      const premium = level === "premium" || level === "platinum" || level === "admin"
+      const platinum = level === "platinum" || level === "admin"
 
       const foundFile = fileData as FileRow
       const realFileId = foundFile.id
       const visibilityValue = (foundFile.visibility || "free").toLowerCase()
 
       setFile(foundFile)
+      setMembershipLevel(level)
       setIsPremiumUser(premium)
       setIsPlatinumUser(platinum)
 
@@ -412,48 +453,24 @@ export default function DownloadPageClient() {
             visibility: visibilityValue,
             monetization_enabled: foundFile.monetization_enabled !== false,
             unlocked_from_query: unlockedFromQuery,
+            membership_level: level,
+            estimated_coin_cost: getDownloadCoinCost(level),
           },
           realFileId
         )
       }
 
-      if (premium && (visibilityValue === "free" || visibilityValue === "premium")) {
-        void logEvent(
-          "premium_auto_download",
-          {
-            visibility: visibilityValue,
-            monetization_enabled: foundFile.monetization_enabled !== false,
-          },
-          realFileId
-        )
-        window.location.href = `/api/download/${realFileId}`
-        return
-      }
-
-      if (platinum && visibilityValue === "platinum") {
-        void logEvent(
-          "premium_auto_download",
-          {
-            visibility: visibilityValue,
-            monetization_enabled: foundFile.monetization_enabled !== false,
-          },
-          realFileId
-        )
-        window.location.href = `/api/download/${realFileId}`
-        return
-      }
-
-      if (visibilityValue === "platinum") {
+      if (visibilityValue === "platinum" && !platinum) {
         setStep("platinum-only")
         return
       }
 
-      if (visibilityValue === "premium" || visibilityValue === "private") {
+      if ((visibilityValue === "premium" || visibilityValue === "private") && !premium) {
         setStep("premium-only")
         return
       }
 
-      if (unlockedFromQuery && visibilityValue === "free") {
+      if (premium || unlockedFromQuery || visibilityValue !== "free") {
         setDownloadReady(true)
         setStep("ready")
         return
@@ -468,9 +485,16 @@ export default function DownloadPageClient() {
     }
   }
 
+  function handleDownloadButtonClick() {
+    if (startingDownload || !file?.id) return
+    setShowCoinConfirm(true)
+  }
+
   async function handleDirectDownload() {
     if (startingDownload || !file?.id) return
 
+    setShowCoinConfirm(false)
+    setShowInsufficientCoins(false)
     setStartingDownload(true)
 
     try {
@@ -478,6 +502,8 @@ export default function DownloadPageClient() {
         "download_click",
         {
           source: unlockedFromQuery ? "gate_after_unlock" : "direct_button",
+          membership_level: membershipLevel,
+          estimated_coin_cost: estimatedCoinCost,
         },
         file.id
       )
@@ -492,6 +518,16 @@ export default function DownloadPageClient() {
       const data = await res.json().catch(() => null)
 
       if (!res.ok) {
+        if (
+          res.status === 402 ||
+          data?.error?.toLowerCase?.().includes("coin") ||
+          data?.requiredCoins
+        ) {
+          setRequiredCoins(Number(data?.requiredCoins ?? data?.required ?? estimatedCoinCost))
+          setCurrentCoins(Number(data?.currentCoins ?? data?.balance ?? 0))
+          setShowInsufficientCoins(true)
+        }
+
         throw new Error(data?.error || "Failed to start download")
       }
 
@@ -499,13 +535,22 @@ export default function DownloadPageClient() {
         throw new Error("Missing download URL from API")
       }
 
+      if (typeof data?.coinsUsed === "number" && data.coinsUsed > 0) {
+        dispatchCoinPopup(-data.coinsUsed, "Download spend")
+        showRewardNotice(`-${data.coinsUsed} JB Coins used`, "info")
+      }
+
       if (data?.rewarded) {
-        const rewardAmount = Number(data.rewardAmount ?? 5)
-        showRewardNotice(`+${rewardAmount} JB Coins earned`, "success")
-        dispatchCoinPopup(rewardAmount, "Download reward")
+        const rewardAmount = Number(data.rewardAmount ?? estimatedReward)
+        window.setTimeout(() => {
+          showRewardNotice(`+${rewardAmount} JB Coins earned`, "success")
+          dispatchCoinPopup(rewardAmount, "Download reward")
+        }, 900)
       } else if (data?.alreadyRewardedToday) {
-        showRewardNotice("Already rewarded today", "info")
-        dispatchCoinPopup(0, "Already rewarded today")
+        window.setTimeout(() => {
+          showRewardNotice("Already rewarded today", "info")
+          dispatchCoinPopup(0, "Already rewarded today")
+        }, 900)
       }
 
       window.setTimeout(() => {
@@ -554,7 +599,7 @@ export default function DownloadPageClient() {
       <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
         <div className="rounded-3xl border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
           <p className="text-lg font-semibold text-slate-800">Preparing your download...</p>
-          <p className="mt-2 text-sm text-slate-500">Please wait.</p>
+          <p className="mt-2 text-sm text-slate-500">Checking membership and coin access.</p>
         </div>
       </div>
     )
@@ -636,6 +681,9 @@ export default function DownloadPageClient() {
                     <span className="inline-flex items-center rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold text-white">
                       {downloadsLabel}+ downloads
                     </span>
+                    <span className="inline-flex items-center rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold text-white">
+                      {membershipLevel.toUpperCase()}
+                    </span>
                   </div>
 
                   <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">
@@ -646,7 +694,7 @@ export default function DownloadPageClient() {
                     {getShortDescription(file)}
                   </p>
 
-                  <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-6 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-md">
                       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">
                         File type
@@ -658,6 +706,14 @@ export default function DownloadPageClient() {
                         Updated
                       </p>
                       <p className="mt-2 text-base font-black">{addedDateLabel}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-md">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">
+                        Download Cost
+                      </p>
+                      <p className="mt-2 text-base font-black">
+                        {estimatedCoinCost} JB Coins
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -712,22 +768,29 @@ export default function DownloadPageClient() {
                 </div>
 
                 <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      Why this page converts
+                  <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">
+                      Coin System
                     </p>
                     <div className="mt-4 space-y-3">
                       <div className="flex items-start gap-3">
-                        <span className="mt-0.5 text-emerald-600">✔</span>
-                        <span className="text-sm text-slate-700">Preview first before download</span>
+                        <span className="mt-0.5 text-amber-600">🪙</span>
+                        <span className="text-sm text-amber-900">
+                          This download costs <strong>{estimatedCoinCost} JB Coins</strong>.
+                        </span>
                       </div>
                       <div className="flex items-start gap-3">
-                        <span className="mt-0.5 text-emerald-600">✔</span>
-                        <span className="text-sm text-slate-700">Clear trust and access signals</span>
+                        <span className="mt-0.5 text-emerald-600">🎁</span>
+                        <span className="text-sm text-amber-900">
+                          Eligible downloads may reward up to{" "}
+                          <strong>{estimatedReward} JB Coins</strong>.
+                        </span>
                       </div>
                       <div className="flex items-start gap-3">
-                        <span className="mt-0.5 text-emerald-600">✔</span>
-                        <span className="text-sm text-slate-700">Real share and working CTA flow</span>
+                        <span className="mt-0.5 text-sky-600">⚡</span>
+                        <span className="text-sm text-amber-900">
+                          Premium and Platinum members skip ads.
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -857,8 +920,8 @@ export default function DownloadPageClient() {
                     </p>
                     <h2 className="mt-1 text-3xl font-black text-slate-900">Download now</h2>
                   </div>
-                  <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
-                    Trusted
+                  <div className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
+                    {estimatedCoinCost} Coins
                   </div>
                 </div>
 
@@ -875,6 +938,30 @@ export default function DownloadPageClient() {
                     <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
                       {downloadsLabel}+ users
                     </div>
+                  </div>
+
+                  <div className="mt-5 rounded-3xl border border-amber-200 bg-amber-50 p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-600">
+                          Required Coins
+                        </p>
+                        <p className="mt-1 text-3xl font-black text-amber-900">
+                          {estimatedCoinCost}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-600">
+                          Possible Reward
+                        </p>
+                        <p className="mt-1 text-2xl font-black text-emerald-700">
+                          +{estimatedReward}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-sm font-semibold text-amber-800">
+                      Coins are deducted only after you confirm the download.
+                    </p>
                   </div>
 
                   {step === "platinum-only" ? (
@@ -911,7 +998,7 @@ export default function DownloadPageClient() {
                           {countdown}s
                         </p>
                         <p className="mt-2 text-sm text-slate-500">
-                          Stay on this page while access is being prepared.
+                          Standard users see sponsored content before downloading.
                         </p>
                       </div>
 
@@ -922,13 +1009,13 @@ export default function DownloadPageClient() {
                       ) : (
                         <button
                           type="button"
-                          onClick={handleDirectDownload}
+                          onClick={handleDownloadButtonClick}
                           disabled={startingDownload}
                           className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-6 py-4 text-base font-black text-white shadow-lg shadow-blue-500/20 transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {startingDownload
                             ? "Starting download..."
-                            : "⬇ DOWNLOAD NOW — INSTANT ACCESS"}
+                            : `⬇ DOWNLOAD — ${estimatedCoinCost} JB COINS`}
                         </button>
                       )}
 
@@ -945,13 +1032,13 @@ export default function DownloadPageClient() {
                     <div className="mt-5">
                       <button
                         type="button"
-                        onClick={handleDirectDownload}
+                        onClick={handleDownloadButtonClick}
                         disabled={startingDownload}
                         className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-6 py-4 text-base font-black text-white shadow-lg shadow-blue-500/20 transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {startingDownload
                           ? "Starting download..."
-                          : "⬇ DOWNLOAD NOW — INSTANT ACCESS"}
+                          : `⬇ DOWNLOAD — ${estimatedCoinCost} JB COINS`}
                       </button>
                     </div>
                   )}
@@ -959,15 +1046,15 @@ export default function DownloadPageClient() {
                   {!isRestricted ? (
                     <div className="mt-5 grid gap-3 rounded-3xl border border-slate-200 bg-white p-4">
                       <div className="flex items-center gap-2 text-sm text-slate-700">
-                        <span className="text-emerald-600">✔</span>
-                        <span>Preview before download</span>
+                        <span className="text-amber-600">🪙</span>
+                        <span>Coins are required for every download</span>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-slate-700">
                         <span className="text-emerald-600">✔</span>
-                        <span>Real working CTA</span>
+                        <span>Premium and Platinum skip ads</span>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-slate-700">
-                        <span className="text-emerald-600">✔</span>
+                        <span className="text-sky-600">🎁</span>
                         <span>Reward flow still intact</span>
                       </div>
                     </div>
@@ -977,7 +1064,7 @@ export default function DownloadPageClient() {
                 {!isPremiumUser && visibility === "free" ? (
                   <div className="mt-5 rounded-[28px] border border-amber-200 bg-amber-50 p-5">
                     <p className="text-sm font-semibold text-amber-800">
-                      Want instant downloads with no sponsored step?
+                      Want downloads with no sponsored step?
                     </p>
                     <Link
                       href="/upgrade"
@@ -1005,25 +1092,25 @@ export default function DownloadPageClient() {
 
               <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Trust signals
+                  Coin perks
                 </p>
                 <div className="mt-4 space-y-3">
                   <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-sm font-bold text-slate-900">High-value presentation</p>
+                    <p className="text-sm font-bold text-slate-900">Standard</p>
                     <p className="mt-1 text-sm text-slate-600">
-                      Preview, file info, and strong access signals make this page feel premium.
+                      Pays 12 coins per download and sees ads before free-file downloads.
                     </p>
                   </div>
                   <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-sm font-bold text-slate-900">Conversion-focused CTA</p>
+                    <p className="text-sm font-bold text-slate-900">Premium</p>
                     <p className="mt-1 text-sm text-slate-600">
-                      The action area is now bigger, clearer, and visually stronger.
+                      Pays 10 coins per download and skips ads.
                     </p>
                   </div>
                   <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-sm font-bold text-slate-900">Social proof</p>
+                    <p className="text-sm font-bold text-slate-900">Platinum</p>
                     <p className="mt-1 text-sm text-slate-600">
-                      Downloads count is visible in both the hero and recommendation section.
+                      Pays 8 coins per download, skips ads, and gets the best reward rate.
                     </p>
                   </div>
                 </div>
@@ -1068,6 +1155,108 @@ export default function DownloadPageClient() {
           </div>
         ) : null}
       </div>
+
+      {showCoinConfirm ? (
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-white p-6 shadow-2xl">
+            <div className="text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-3xl">
+                🪙
+              </div>
+              <h3 className="mt-4 text-2xl font-black text-slate-900">
+                Confirm Download
+              </h3>
+              <p className="mt-2 text-sm text-slate-500">
+                This download will use JB Coins from your balance.
+              </p>
+            </div>
+
+            <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-5">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-amber-800">Download cost</span>
+                <span className="text-xl font-black text-amber-900">
+                  {estimatedCoinCost} coins
+                </span>
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <span className="text-sm font-bold text-emerald-700">Possible reward</span>
+                <span className="text-xl font-black text-emerald-700">
+                  +{estimatedReward} coins
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCoinConfirm(false)}
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDirectDownload}
+                disabled={startingDownload}
+                className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-5 py-3 text-sm font-black text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {startingDownload ? "Starting..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showInsufficientCoins ? (
+        <div className="fixed inset-0 z-[10002] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-white p-6 shadow-2xl">
+            <div className="text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-3xl">
+                ⚠️
+              </div>
+              <h3 className="mt-4 text-2xl font-black text-slate-900">
+                Not Enough Coins
+              </h3>
+              <p className="mt-2 text-sm text-slate-500">
+                You need more JB Coins to download this file.
+              </p>
+            </div>
+
+            <div className="mt-6 rounded-3xl border border-red-200 bg-red-50 p-5">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-red-700">Required</span>
+                <span className="text-xl font-black text-red-800">
+                  {requiredCoins ?? estimatedCoinCost}
+                </span>
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <span className="text-sm font-bold text-slate-600">Your balance</span>
+                <span className="text-xl font-black text-slate-800">
+                  {currentCoins ?? 0}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setShowInsufficientCoins(false)}
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+
+              <Link
+                href="/buy-coins"
+                className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-3 text-sm font-black text-white transition hover:opacity-90"
+              >
+                Buy Coins
+              </Link>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {showPreviewModal && previewAsset ? (
         <div

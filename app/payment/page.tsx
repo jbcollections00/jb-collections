@@ -253,6 +253,13 @@ function PaymentPageContent() {
   const [submitError, setSubmitError] = useState("")
   const [showSuccess, setShowSuccess] = useState(false)
   const [showCoinBurst, setShowCoinBurst] = useState(false)
+  const [toastMessage, setToastMessage] = useState("")
+  const [toastTone, setToastTone] = useState<"success" | "error" | "info">("info")
+  const [showReceiptPreview, setShowReceiptPreview] = useState(false)
+  const [isLiveRefreshing, setIsLiveRefreshing] = useState(false)
+  const toastTimerRef = useRef<number | null>(null)
+  const transactionStatusRef = useRef<Record<string, TransactionStatus>>({})
+  const hasLoadedTransactionsRef = useRef(false)
 
   const [walletSummary, setWalletSummary] = useState<WalletSummary>({
     balance: 0,
@@ -304,6 +311,33 @@ function PaymentPageContent() {
   }, [transactions])
 
   const activeTimelineStatus: TransactionStatus = latestTransaction?.status || "pending"
+
+  function showToast(message: string, tone: "success" | "error" | "info" = "info") {
+    setToastMessage(message)
+    setToastTone(tone)
+
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current)
+    }
+
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage("")
+      toastTimerRef.current = null
+    }, 2800)
+  }
+
+  async function refreshWalletActivity(options?: { silent?: boolean }) {
+    try {
+      setIsLiveRefreshing(true)
+      await Promise.all([loadWalletSummary(), loadTransactions()])
+
+      if (!options?.silent) {
+        showToast("Wallet activity refreshed.", "success")
+      }
+    } finally {
+      setIsLiveRefreshing(false)
+    }
+  }
 
   async function loadWalletSummary() {
     try {
@@ -360,6 +394,30 @@ function PaymentPageContent() {
           (item: TransactionItem | null): item is TransactionItem => item !== null
         )
 
+      if (hasLoadedTransactionsRef.current) {
+        const previousStatuses = transactionStatusRef.current
+
+        normalizedTransactions.forEach((transaction) => {
+          const previousStatus = previousStatuses[transaction.id]
+
+          if (previousStatus && previousStatus !== transaction.status) {
+            showToast(
+              `${transaction.label} moved to ${getStatusConfig(transaction.status).label}.`,
+              transaction.status === "rejected" ? "error" : "success"
+            )
+          }
+        })
+      }
+
+      transactionStatusRef.current = normalizedTransactions.reduce(
+        (acc, transaction) => {
+          acc[transaction.id] = transaction.status
+          return acc
+        },
+        {} as Record<string, TransactionStatus>
+      )
+      hasLoadedTransactionsRef.current = true
+
       setTransactions(normalizedTransactions)
       setLatestTransaction(normalizedTransactions[0] || null)
     } catch (error) {
@@ -372,7 +430,27 @@ function PaymentPageContent() {
   }
 
   useEffect(() => {
-    void Promise.all([loadWalletSummary(), loadTransactions()])
+    let isMounted = true
+
+    async function startLiveUpdates() {
+      if (!isMounted) return
+      await refreshWalletActivity({ silent: true })
+    }
+
+    void startLiveUpdates()
+
+    const interval = window.setInterval(() => {
+      void startLiveUpdates()
+    }, 6000)
+
+    return () => {
+      isMounted = false
+      window.clearInterval(interval)
+
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current)
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -403,6 +481,7 @@ function PaymentPageContent() {
 
     const url = URL.createObjectURL(file)
     setPreviewUrl(url)
+    showToast("Receipt uploaded. Tap preview to enlarge.", "success")
   }
 
   function clearReceipt() {
@@ -414,6 +493,8 @@ function PaymentPageContent() {
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
+    setShowReceiptPreview(false)
+    showToast("Receipt removed.", "info")
   }
 
   function createTransactionId() {
@@ -431,26 +512,31 @@ function PaymentPageContent() {
 
     if (!isValidPackage) {
       setSubmitError("Invalid amount.")
+      showToast("Invalid package amount.", "error")
       return
     }
 
     if (!payerName.trim()) {
       setSubmitError("Please enter the payer name.")
+      showToast("Please enter the payer name.", "error")
       return
     }
 
     if (!referenceNumber.trim()) {
       setSubmitError("Please enter the payment reference number.")
+      showToast("Please enter the payment reference number.", "error")
       return
     }
 
     if (!receiptFile) {
       setSubmitError("Please upload your payment receipt.")
+      showToast("Please upload your payment receipt.", "error")
       return
     }
 
     try {
       setIsSubmitting(true)
+      showToast("Submitting payment proof...", "info")
 
       const formData = new FormData()
       formData.append("amount", String(amount))
@@ -503,15 +589,16 @@ function PaymentPageContent() {
       }))
       setShowSuccess(true)
       setShowCoinBurst(true)
+      showToast("Payment proof submitted successfully.", "success")
 
       setPayerName("")
       setReferenceNumber("")
       setNotes("")
       clearReceipt()
     } catch (error) {
-      setSubmitError(
-        error instanceof Error ? error.message : "Something went wrong."
-      )
+      const message = error instanceof Error ? error.message : "Something went wrong."
+      setSubmitError(message)
+      showToast(message, "error")
     } finally {
       setIsSubmitting(false)
     }
@@ -583,9 +670,18 @@ function PaymentPageContent() {
               Back to JB Store
             </Link>
 
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-emerald-200">
-              <WalletCards size={14} />
-              Real Wallet Checkout
+            <div className="flex flex-wrap items-center gap-2">
+              {isLiveRefreshing ? (
+                <div className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-sky-200">
+                  <Clock3 size={14} className="animate-spin" />
+                  Live updating
+                </div>
+              ) : null}
+
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-emerald-200">
+                <WalletCards size={14} />
+                Real Wallet Checkout
+              </div>
             </div>
           </div>
 
@@ -661,64 +757,64 @@ function PaymentPageContent() {
             </div>
           ) : null}
 
-          <section className="mt-5 grid gap-4 xl:grid-cols-4">
-            <div className="rounded-[26px] border border-white/10 bg-slate-900/70 p-4 shadow-xl backdrop-blur">
+          <section className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div className="rounded-[22px] border border-white/10 bg-slate-900/70 p-4 shadow-xl backdrop-blur">
               <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
                 <WalletCards size={14} />
                 Wallet Balance
               </div>
-              <div className="mt-3 text-3xl font-black text-white">
+              <div className="mt-2 text-2xl font-black leading-tight text-white">
                 {isWalletSummaryLoading ? "Loading..." : formatCoins(walletBalance)}
               </div>
-              <div className="mt-2 text-sm text-slate-400">
-                Available balance ready to use
+              <div className="mt-1 text-xs text-slate-400">
+                Available
               </div>
             </div>
 
-            <div className="rounded-[26px] border border-amber-400/20 bg-amber-400/10 p-4 shadow-xl backdrop-blur">
+            <div className="rounded-[22px] border border-amber-400/20 bg-amber-400/10 p-4 shadow-xl backdrop-blur">
               <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-200">
                 <Clock3 size={14} />
                 Pending Coins
               </div>
-              <div className="mt-3 text-3xl font-black text-white">
+              <div className="mt-2 text-2xl font-black leading-tight text-white">
                 {isWalletSummaryLoading ? "Loading..." : formatCoins(pendingCoins)}
               </div>
-              <div className="mt-2 text-sm text-amber-100/80">
-                Waiting for approval before crediting
+              <div className="mt-1 text-xs text-amber-100/80">
+                Awaiting approval
               </div>
             </div>
 
-            <div className="rounded-[26px] border border-emerald-400/20 bg-emerald-400/10 p-4 shadow-xl backdrop-blur">
+            <div className="rounded-[22px] border border-emerald-400/20 bg-emerald-400/10 p-4 shadow-xl backdrop-blur">
               <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-200">
                 <Gem size={14} />
                 Lifetime Purchased
               </div>
-              <div className="mt-3 text-3xl font-black text-white">
+              <div className="mt-2 text-2xl font-black leading-tight text-white">
                 {isWalletSummaryLoading ? "Loading..." : formatCoins(lifetimePurchased)}
               </div>
-              <div className="mt-2 text-sm text-emerald-100/80">
-                Total coins purchased from the JB Store
+              <div className="mt-1 text-xs text-emerald-100/80">
+                Purchased total
               </div>
             </div>
 
-            <div className="rounded-[26px] border border-fuchsia-400/20 bg-fuchsia-400/10 p-4 shadow-xl backdrop-blur">
+            <div className="rounded-[22px] border border-fuchsia-400/20 bg-fuchsia-400/10 p-4 shadow-xl backdrop-blur">
               <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-fuchsia-200">
                 <ReceiptText size={14} />
                 Activity Status
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-black text-white">
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[10px] font-black text-white">
                   {statusCounts.pending} Pending
                 </span>
-                <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-black text-white">
+                <span className="rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[10px] font-black text-white">
                   {statusCounts.approved} Approved
                 </span>
-                <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-black text-white">
+                <span className="rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[10px] font-black text-white">
                   {statusCounts.credited} Credited
                 </span>
               </div>
-              <div className="mt-2 text-sm text-fuchsia-100/80">
-                Real-time wallet activity view
+              <div className="mt-1 text-xs text-fuchsia-100/80">
+                Live activity
               </div>
             </div>
           </section>
@@ -861,7 +957,7 @@ function PaymentPageContent() {
 
                   <button
                     type="button"
-                    onClick={() => void Promise.all([loadWalletSummary(), loadTransactions()])}
+                    onClick={() => void refreshWalletActivity()}
                     className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-slate-300 transition hover:bg-white/10"
                   >
                     Refresh
@@ -1212,11 +1308,18 @@ function PaymentPageContent() {
                           </button>
                         </div>
 
-                        <img
-                          src={previewUrl}
-                          alt="Receipt preview"
-                          className="max-h-[340px] w-full object-contain bg-black/20"
-                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowReceiptPreview(true)}
+                          className="block w-full bg-black/20"
+                          aria-label="Open receipt preview"
+                        >
+                          <img
+                            src={previewUrl}
+                            alt="Receipt preview"
+                            className="max-h-[340px] w-full object-contain transition hover:scale-[1.01]"
+                          />
+                        </button>
 
                         <div className="grid gap-3 border-t border-white/10 px-4 py-4 sm:grid-cols-3">
                           <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-3 text-xs text-emerald-200">
@@ -1338,6 +1441,43 @@ function PaymentPageContent() {
               </div>
             </div>
           ))}
+        </div>
+      ) : null}
+
+      {showReceiptPreview && previewUrl ? (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 px-4 py-6 backdrop-blur-md">
+          <button
+            type="button"
+            onClick={() => setShowReceiptPreview(false)}
+            className="absolute right-5 top-5 rounded-2xl border border-white/10 bg-white/10 p-3 text-white transition hover:bg-white/20"
+            aria-label="Close receipt preview"
+          >
+            <X size={20} />
+          </button>
+
+          <div className="w-full max-w-5xl overflow-hidden rounded-[28px] border border-white/10 bg-slate-950/90 p-3 shadow-[0_30px_100px_rgba(0,0,0,0.65)]">
+            <img
+              src={previewUrl}
+              alt="Full receipt preview"
+              className="max-h-[85vh] w-full rounded-[22px] object-contain"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {toastMessage ? (
+        <div className="fixed bottom-6 left-1/2 z-[200] w-[calc(100%-2rem)] max-w-md -translate-x-1/2">
+          <div
+            className={`rounded-2xl border px-4 py-3 text-sm font-black text-white shadow-[0_20px_70px_rgba(0,0,0,0.45)] backdrop-blur-md ${
+              toastTone === "success"
+                ? "border-emerald-400/25 bg-emerald-500/90"
+                : toastTone === "error"
+                ? "border-red-400/25 bg-red-500/90"
+                : "border-sky-400/25 bg-sky-500/90"
+            }`}
+          >
+            {toastMessage}
+          </div>
         </div>
       ) : null}
 
