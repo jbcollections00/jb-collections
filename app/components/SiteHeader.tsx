@@ -19,6 +19,7 @@ const navItems = [
   { label: "Profile", href: "/profile", icon: "👤" },
   { label: "Messages", href: "/messages", icon: "💬" },
   { label: "Buy COINS", href: "/upgrade", icon: "🪙" },
+  { label: "Earn Coins", href: "/earn-coins", icon: "🎯" },
 ]
 
 function toSafeNumber(value: unknown) {

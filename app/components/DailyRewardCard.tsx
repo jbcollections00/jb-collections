@@ -7,6 +7,14 @@ type DailyRewardResponse = {
   claimed?: boolean
   alreadyClaimed?: boolean
   coins?: number
+  baseCoins?: number
+  streak?: number
+  streakBonus?: number
+  nextMilestone?: {
+    target: number
+    remaining: number
+    bonus: number
+  }
   rewardDate?: string
   nextClaimDate?: string
   claimedAt?: string | null
@@ -38,6 +46,10 @@ export default function DailyRewardCard() {
   const [claiming, setClaiming] = useState(false)
   const [claimed, setClaimed] = useState(false)
   const [coins, setCoins] = useState(FIXED_DAILY_COINS)
+  const [baseCoins, setBaseCoins] = useState(FIXED_DAILY_COINS)
+  const [streak, setStreak] = useState(0)
+  const [streakBonus, setStreakBonus] = useState(0)
+  const [nextMilestone, setNextMilestone] = useState<DailyRewardResponse["nextMilestone"] | null>(null)
   const [rewardDate, setRewardDate] = useState("")
   const [nextClaimDate, setNextClaimDate] = useState("")
   const [message, setMessage] = useState("")
@@ -81,6 +93,14 @@ export default function DailyRewardCard() {
   const wasClaimedForDate = useCallback((date: string) => {
     if (!date || typeof window === "undefined") return false
     return window.sessionStorage.getItem(getClaimedKey(date)) === "1"
+  }, [])
+
+  const applyRewardData = useCallback((data: DailyRewardResponse) => {
+    setCoins(Number(data.coins ?? FIXED_DAILY_COINS))
+    setBaseCoins(Number(data.baseCoins ?? FIXED_DAILY_COINS))
+    setStreak(Number(data.streak || 0))
+    setStreakBonus(Number(data.streakBonus || 0))
+    setNextMilestone(data.nextMilestone || null)
   }, [])
 
   const createCoinBurst = useCallback((amount: number) => {
@@ -127,7 +147,7 @@ export default function DailyRewardCard() {
       const dismissedForToday = wasDismissedForDate(serverRewardDate)
 
       setClaimed(alreadyClaimed)
-      setCoins(FIXED_DAILY_COINS)
+      applyRewardData(data)
       setRewardDate(serverRewardDate)
       setNextClaimDate(data.nextClaimDate ?? "")
       setMessage(alreadyClaimed ? data.message || "You already claimed today’s daily reward." : "")
@@ -158,7 +178,7 @@ export default function DailyRewardCard() {
     } finally {
       setLoading(false)
     }
-  }, [clearTimers, rememberClaimed, wasClaimedForDate, wasDismissedForDate])
+  }, [applyRewardData, clearTimers, rememberClaimed, wasClaimedForDate, wasDismissedForDate])
 
   useEffect(() => {
     void loadStatus()
@@ -201,7 +221,7 @@ export default function DailyRewardCard() {
       if (!res.ok || !data.ok) {
         if (data.alreadyClaimed || data.claimed) {
           setClaimed(true)
-          setCoins(FIXED_DAILY_COINS)
+          applyRewardData(data)
           setRewardDate(responseRewardDate)
           setNextClaimDate(data.nextClaimDate ?? "")
           setMessage(data.message || "You already claimed today’s daily reward.")
@@ -216,8 +236,10 @@ export default function DailyRewardCard() {
         return
       }
 
+      const claimedCoins = Number(data.coins ?? FIXED_DAILY_COINS)
+
       setClaimed(true)
-      setCoins(FIXED_DAILY_COINS)
+      applyRewardData(data)
       setRewardDate(responseRewardDate)
       setNextClaimDate(data.nextClaimDate ?? "")
       setMessage(data.message || "Daily reward claimed successfully.")
@@ -227,7 +249,7 @@ export default function DailyRewardCard() {
       setShowClaimSuccess(true)
 
       rememberClaimed(responseRewardDate)
-      createCoinBurst(FIXED_DAILY_COINS)
+      createCoinBurst(claimedCoins)
 
       successTimerRef.current = setTimeout(() => {
         setShowClaimSuccess(false)
@@ -238,11 +260,16 @@ export default function DailyRewardCard() {
     } finally {
       setClaiming(false)
     }
-  }, [createCoinBurst, rewardDate, rememberClaimed])
+  }, [applyRewardData, createCoinBurst, rewardDate, rememberClaimed])
 
   const marqueeText = useMemo(() => {
-    return `Claim your daily JB Coins • Claim your daily JB Coins • Claim your daily JB Coins • `
+    return `Claim your daily JB Coins • Build your login streak • Unlock streak bonuses • `
   }, [])
+
+  const rewardHeadline = streakBonus > 0 ? `${baseCoins} + ${streakBonus} bonus` : `${coins}`
+  const nextMilestoneText = nextMilestone
+    ? `${nextMilestone.remaining} day${nextMilestone.remaining === 1 ? "" : "s"} to +${nextMilestone.bonus} bonus`
+    : "Keep logging in daily for bigger rewards."
 
   return (
     <>
@@ -313,7 +340,7 @@ export default function DailyRewardCard() {
               className="mx-auto h-10 w-10 object-contain"
             />
             <div className="mt-1 text-sm font-bold text-amber-300">
-              +{FIXED_DAILY_COINS} JB Coins
+              +{coins} JB Coins
             </div>
           </div>
         </div>
@@ -366,13 +393,23 @@ export default function DailyRewardCard() {
               </div>
 
               <h3 className="mt-2 text-3xl font-black tracking-tight text-white">
-                Claim {FIXED_DAILY_COINS} JB Coins
+                Claim {rewardHeadline} JB Coins
               </h3>
 
               <p className="mt-3 text-sm leading-6 text-slate-300">
-                Your daily reward is ready. Claim it now and come back again tomorrow
-                for more JB Coins.
+                Your daily reward is ready. Keep your login streak alive to unlock milestone bonuses.
               </p>
+
+              <div className="mt-4 grid grid-cols-2 gap-3 text-left">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-300">Current Streak</div>
+                  <div className="mt-1 text-xl font-black text-white">🔥 Day {streak || 1}</div>
+                </div>
+                <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-100/80">Next Bonus</div>
+                  <div className="mt-1 text-xs font-bold leading-5 text-amber-200">{nextMilestoneText}</div>
+                </div>
+              </div>
 
               {message ? (
                 <p className="mt-3 text-sm text-rose-400">{message}</p>
@@ -398,7 +435,7 @@ export default function DailyRewardCard() {
                     : "bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 hover:brightness-105"
                 }`}
               >
-                {claiming ? "Claiming..." : claimed ? "Claimed" : `Claim ${FIXED_DAILY_COINS}`}
+                {claiming ? "Claiming..." : claimed ? "Claimed" : `Claim ${coins}`}
               </button>
             </div>
           </div>
