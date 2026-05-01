@@ -1,5 +1,6 @@
 "use client"
 
+import SiteHeader from "../components/SiteHeader"
 import { useState } from "react"
 
 export default function MysteryBoxPage() {
@@ -23,40 +24,54 @@ export default function MysteryBoxPage() {
       }
 
       setReward(data.reward)
+
+      window.dispatchEvent(
+        new CustomEvent("jb-coins-updated", {
+          detail: { reward: data.reward },
+        })
+      )
     } catch (err: any) {
-      setError(err.message)
+      setError(err.message || "Something went wrong")
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="p-6 text-center">
-      <h1 className="text-3xl font-bold mb-4">🎁 Mystery Box</h1>
+    <>
+      <SiteHeader />
 
-      <p className="mb-6 text-gray-400">
-        Open once per day and win random coins!
-      </p>
+      <main className="min-h-[calc(100vh-104px)] px-6 py-16 text-center">
+        <div className="mx-auto max-w-xl">
+          <h1 className="mb-4 text-4xl font-black text-white">
+            🎁 Mystery Box
+          </h1>
 
-      <button
-        onClick={openBox}
-        disabled={loading}
-        className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold"
-      >
-        {loading ? "Opening..." : "Open Mystery Box"}
-      </button>
+          <p className="mb-8 text-lg text-gray-400">
+            Open once per day and win random coins!
+          </p>
 
-      {reward && (
-        <div className="mt-6 text-green-400 text-xl font-bold animate-pulse">
-          🎉 You won {reward} JB Coins!
+          <button
+            onClick={openBox}
+            disabled={loading}
+            className="rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 text-lg font-bold text-white shadow-lg transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? "Opening..." : "Open Mystery Box"}
+          </button>
+
+          {reward && (
+            <div className="mt-8 text-2xl font-bold text-green-400 animate-pulse">
+              🎉 You won {reward} JB Coins!
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-8 text-xl font-semibold text-red-400">
+              {error}
+            </div>
+          )}
         </div>
-      )}
-
-      {error && (
-        <div className="mt-6 text-red-400">
-          {error}
-        </div>
-      )}
-    </div>
+      </main>
+    </>
   )
 }
