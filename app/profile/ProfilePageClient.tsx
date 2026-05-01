@@ -1993,7 +1993,7 @@ export default function ProfilePageClient() {
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-                      {visibleDownloadsHistory.map((item) => {
+                      {visibleDownloadsHistory.map((item, index) => {
                         const cardContent = (
                           <>
                             <div className="relative aspect-[3/4] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.20),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.65),rgba(2,6,23,0.98))]">
@@ -2021,7 +2021,7 @@ export default function ProfilePageClient() {
 
                         return item.href ? (
                           <Link
-                            key={item.id}
+                            key={`${item.id}-${index}`}
                             href={item.href}
                             className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.22)]"
                           >
@@ -2029,7 +2029,7 @@ export default function ProfilePageClient() {
                           </Link>
                         ) : (
                           <div
-                            key={item.id}
+                            key={`${item.id}-${index}`}
                             className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.22)]"
                           >
                             {cardContent}

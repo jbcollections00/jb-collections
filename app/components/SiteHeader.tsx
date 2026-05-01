@@ -17,7 +17,6 @@ type UserProfile = {
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "🏠" },
   { label: "Profile", href: "/profile", icon: "👤" },
-  { label: "Messages", href: "/messages", icon: "💬" },
   { label: "Buy COINS", href: "/upgrade", icon: "🪙" },
   { label: "Earn Coins", href: "/earn-coins", icon: "🎯" },
   { label: "Mystery Box", href: "/mystery-box", icon: "🎁" },
@@ -36,27 +35,10 @@ export default function SiteHeader() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [coins, setCoins] = useState(0)
-  const [messagesOpen, setMessagesOpen] = useState(false)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const currentUserIdRef = useRef<string | null>(null)
-
-  const isAdmin = String(profile?.role || "").toLowerCase() === "admin"
-
-  const visibleNavItems = navItems.filter((item) => {
-    if (item.href === "/messages") return isAdmin || messagesOpen
-    return true
-  })
-
-  async function loadSettings() {
-    const { data } = await supabase
-      .from("app_settings")
-      .select("key, value")
-      .eq("key", "messages_open")
-      .maybeSingle()
-
-    setMessagesOpen(data?.value === "true")
-  }
+  const menuRef = useRef<HTMLDivElement | null>(null)
 
   async function refreshWallet() {
     const userId = currentUserIdRef.current
@@ -89,7 +71,7 @@ export default function SiteHeader() {
 
       setProfile(data as UserProfile)
 
-      await Promise.all([refreshWallet(), loadSettings()])
+      await refreshWallet()
     }
 
     void init()
@@ -116,6 +98,22 @@ export default function SiteHeader() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (!menuRef.current) return
+
+      if (!menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [])
+
   function isActive(href: string) {
     if (href === "/dashboard") return pathname === "/dashboard"
     return pathname === href || pathname.startsWith(`${href}/`)
@@ -124,13 +122,13 @@ export default function SiteHeader() {
   async function handleLogout() {
     await supabase.auth.signOut()
     router.replace("/login")
-    setMobileMenuOpen(false)
+    setMenuOpen(false)
   }
 
   return (
     <>
       <header className="fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-4 sm:pt-4">
-        <div className="mx-auto w-full max-w-[1800px] overflow-hidden rounded-[24px] border border-white/15 bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 shadow-[0_14px_34px_rgba(37,99,235,0.22)] backdrop-blur-xl">
+        <div className="mx-auto w-full max-w-[1800px] overflow-visible rounded-[24px] border border-white/15 bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 shadow-[0_14px_34px_rgba(37,99,235,0.22)] backdrop-blur-xl">
           <div className="flex min-h-[68px] items-center gap-3 px-4 py-2 sm:px-5 lg:px-6">
             <Link href="/dashboard" className="flex min-w-0 items-center gap-3 pr-2">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/12 ring-1 ring-white/15 backdrop-blur">
@@ -151,99 +149,69 @@ export default function SiteHeader() {
               </div>
             </Link>
 
-            <nav className="ml-2 hidden items-center gap-2 lg:flex">
-              {visibleNavItems.map((item) => {
-                const active = isActive(item.href)
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`relative inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-bold transition ${
-                      active
-                        ? "bg-white text-blue-700 shadow-[0_10px_24px_rgba(255,255,255,0.22)]"
-                        : "bg-white/10 text-white hover:bg-white/18"
-                    }`}
-                  >
-                    <span className="text-[15px]">{item.icon}</span>
-                    <span>{item.label}</span>
-                  </Link>
-                )
-              })}
-            </nav>
-
-            <div className="ml-auto hidden items-center gap-2 lg:flex">
-              <div className="min-w-[150px] rounded-full border border-white/20 bg-black/30 px-3 py-1.5">
+            <div className="ml-auto flex items-center gap-2">
+              <div className="rounded-full border border-white/20 bg-black/30 px-3 py-1.5 sm:min-w-[150px]">
                 <div className="flex items-center gap-2">
                   <img src="/jb-coin.png" alt="JB Coin" className="h-4 w-4 object-contain" />
                   <div className="min-w-0">
-                    <div className="truncate text-[9px] font-bold uppercase tracking-[0.2em] text-white/65">
+                    <div className="hidden truncate text-[9px] font-bold uppercase tracking-[0.2em] text-white/65 sm:block">
                       JB Wallet
                     </div>
-                    <div className="truncate text-sm font-black text-yellow-300">
+                    <div className="truncate text-xs font-black text-yellow-300 sm:text-sm">
                       {coins.toLocaleString()} JB
                     </div>
                   </div>
                 </div>
               </div>
 
-              <button
-                onClick={handleLogout}
-                className="inline-flex h-10 items-center rounded-full border border-red-300/20 bg-red-500 px-4 text-xs font-bold text-white transition hover:bg-red-600"
-              >
-                Logout
-              </button>
-            </div>
+              <div ref={menuRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen((prev) => !prev)}
+                  className="inline-flex h-10 items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 text-xs font-black text-white transition hover:bg-white/20 sm:h-11 sm:text-sm"
+                  aria-label="Toggle menu"
+                  aria-expanded={menuOpen}
+                >
+                  <span className="text-lg leading-none">{menuOpen ? "×" : "☰"}</span>
+                  <span>Menu</span>
+                </button>
 
-            <div className="ml-auto flex items-center gap-2 lg:hidden">
-              <div className="rounded-full border border-white/20 bg-black/25 px-3 py-2 text-xs font-black text-yellow-300">
-                {coins.toLocaleString()} JB
+                {menuOpen && (
+                  <div className="absolute right-0 top-[calc(100%+12px)] w-[260px] overflow-hidden rounded-3xl border border-white/15 bg-slate-950/95 p-2 shadow-[0_22px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+                    <div className="grid gap-1.5">
+                      {navItems.map((item) => {
+                        const active = isActive(item.href)
+
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={() => setMenuOpen(false)}
+                            className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black transition ${
+                              active
+                                ? "bg-white text-blue-700"
+                                : "bg-white/10 text-white hover:bg-white/20"
+                            }`}
+                          >
+                            <span className="text-base">{item.icon}</span>
+                            <span>{item.label}</span>
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <button
                 type="button"
-                onClick={() => setMobileMenuOpen((prev) => !prev)}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-2xl font-black text-white transition hover:bg-white/20"
-                aria-label="Toggle menu"
+                onClick={handleLogout}
+                className="inline-flex h-10 items-center rounded-full border border-red-300/20 bg-red-500 px-4 text-xs font-bold text-white transition hover:bg-red-600 sm:h-11 sm:px-5 sm:text-sm"
               >
-                {mobileMenuOpen ? "×" : "☰"}
+                Logout
               </button>
             </div>
           </div>
-
-          {mobileMenuOpen && (
-            <div className="border-t border-white/15 bg-slate-950/20 px-4 pb-4 pt-3 lg:hidden">
-              <div className="grid gap-2">
-                {visibleNavItems.map((item) => {
-                  const active = isActive(item.href)
-
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black transition ${
-                        active
-                          ? "bg-white text-blue-700"
-                          : "bg-white/10 text-white hover:bg-white/20"
-                      }`}
-                    >
-                      <span>{item.icon}</span>
-                      <span>{item.label}</span>
-                    </Link>
-                  )
-                })}
-
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="mt-1 rounded-2xl bg-red-500 px-4 py-3 text-sm font-black text-white transition hover:bg-red-600"
-                >
-                  Logout
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </header>
 
