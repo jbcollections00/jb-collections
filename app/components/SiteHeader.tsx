@@ -21,6 +21,7 @@ const navItems = [
   { label: "Buy COINS", href: "/upgrade", icon: "🪙" },
   { label: "Earn Coins", href: "/earn-coins", icon: "🎯" },
   { label: "Mystery Box", href: "/mystery-box", icon: "🎁" },
+  { label: "Tutorials", href: "/tutorials", icon: "📘" },
 ]
 
 function toSafeNumber(value: unknown) {
