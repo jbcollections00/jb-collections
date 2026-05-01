@@ -23,23 +23,31 @@ function getRandomReward() {
 
 export async function POST() {
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
 
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser()
 
-    if (!user) {
+    if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // check cooldown (1 per day)
-    const { data: existing } = await supabase
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+
+    const { data: existing, error: existingError } = await supabase
       .from("mystery_box_claims")
-      .select("*")
+      .select("id")
       .eq("user_id", user.id)
-      .gte("created_at", new Date(new Date().setHours(0,0,0,0)).toISOString())
+      .gte("created_at", todayStart.toISOString())
       .maybeSingle()
+
+    if (existingError) {
+      console.error("Mystery box existing check error:", existingError)
+      return NextResponse.json({ error: "Failed to check mystery box cooldown" }, { status: 500 })
+    }
 
     if (existing) {
       return NextResponse.json({ error: "Already opened today" }, { status: 400 })
@@ -47,24 +55,32 @@ export async function POST() {
 
     const reward = getRandomReward()
 
-    // insert claim
-    await supabase.from("mystery_box_claims").insert({
+    const { error: insertError } = await supabase.from("mystery_box_claims").insert({
       user_id: user.id,
       coins: reward,
     })
 
-    // update wallet
-    await supabase.rpc("increment_wallet", {
+    if (insertError) {
+      console.error("Mystery box insert error:", insertError)
+      return NextResponse.json({ error: "Failed to save mystery box claim" }, { status: 500 })
+    }
+
+    const { error: walletError } = await supabase.rpc("increment_wallet", {
       user_id: user.id,
       amount: reward,
     })
+
+    if (walletError) {
+      console.error("Mystery box wallet update error:", walletError)
+      return NextResponse.json({ error: "Failed to update wallet" }, { status: 500 })
+    }
 
     return NextResponse.json({
       success: true,
       reward,
     })
   } catch (err) {
-    console.error(err)
+    console.error("Mystery box server error:", err)
     return NextResponse.json({ error: "Server error" }, { status: 500 })
   }
 }
