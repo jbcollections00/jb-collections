@@ -852,28 +852,38 @@ export default function TutorialsPage() {
             {selectedTutorial.screenshots &&
               selectedTutorial.screenshots.length > 0 && (
                 <div className="mt-6">
-                  <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-cyan-300">
+                  <h3 className="mb-3 text-center text-sm font-black uppercase tracking-[0.18em] text-cyan-300">
                     Screenshots Guide
                   </h3>
 
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-6">
                     {selectedTutorial.screenshots.map((screenshot, index) => (
                       <div
                         key={`${screenshot.src}-${index}`}
                         className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]"
                       >
-                        <img
-                          src={screenshot.src}
-                          alt={screenshot.title}
-                          className="h-48 w-full object-cover"
-                        />
+                        <a
+                          href={screenshot.src}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex justify-center bg-slate-950/40 p-3"
+                        >
+                          <img
+                            src={screenshot.src}
+                            alt={screenshot.title}
+                            className="block h-auto max-h-none max-w-full rounded-xl object-contain"
+                          />
+                        </a>
 
-                        <div className="p-4">
+                        <div className="p-4 text-center">
                           <h4 className="text-sm font-black text-white">
                             {screenshot.title}
                           </h4>
                           <p className="mt-1 text-sm leading-6 text-slate-400">
                             {screenshot.description}
+                          </p>
+                          <p className="mt-2 text-xs font-bold text-cyan-300">
+                            Click image to view full size
                           </p>
                         </div>
                       </div>

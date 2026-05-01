@@ -167,6 +167,7 @@ export default function DownloadPageClient() {
   const [countdown, setCountdown] = useState(3)
   const [downloadReady, setDownloadReady] = useState(false)
   const [startingDownload, setStartingDownload] = useState(false)
+  const [downloadError, setDownloadError] = useState("")
   const [showStickyAd, setShowStickyAd] = useState(true)
 
   const [showCoinConfirm, setShowCoinConfirm] = useState(false)
@@ -368,6 +369,7 @@ export default function DownloadPageClient() {
       setCountdown(3)
       setDownloadReady(false)
       setStartingDownload(false)
+      setDownloadError("")
       hasLoggedGateViewRef.current = false
 
       const {
@@ -487,6 +489,7 @@ export default function DownloadPageClient() {
 
   function handleDownloadButtonClick() {
     if (startingDownload || !file?.id) return
+    setDownloadError("")
     setShowCoinConfirm(true)
   }
 
@@ -495,25 +498,42 @@ export default function DownloadPageClient() {
 
     setShowCoinConfirm(false)
     setShowInsufficientCoins(false)
+    setDownloadError("")
     setStartingDownload(true)
 
     try {
       void logEvent(
         "download_click",
         {
-          source: unlockedFromQuery ? "gate_after_unlock" : "direct_button",
+          source: unlockedFromQuery ? "gate_after_unlock" : "confirmed_button",
           membership_level: membershipLevel,
           estimated_coin_cost: estimatedCoinCost,
         },
         file.id
       )
 
-      const res = await fetch(`/api/download/${file.id}?mode=json`, {
-        method: "GET",
+      let res = await fetch(`/api/download/${file.id}?mode=json`, {
+        method: "POST",
         headers: {
           accept: "application/json",
+          "content-type": "application/json",
+          "x-jb-download-intent": "button_confirm",
         },
+        body: JSON.stringify({
+          confirmed: true,
+          source: "download_button",
+        }),
       })
+
+      if (res.status === 404 || res.status === 405) {
+        res = await fetch(`/api/download/${file.id}?mode=json`, {
+          method: "GET",
+          headers: {
+            accept: "application/json",
+            "x-jb-download-intent": "button_confirm",
+          },
+        })
+      }
 
       const data = await res.json().catch(() => null)
 
@@ -528,11 +548,19 @@ export default function DownloadPageClient() {
           setShowInsufficientCoins(true)
         }
 
-        throw new Error(data?.error || "Failed to start download")
+        const message = data?.error || "Failed to start download"
+        showRewardNotice(message, "error")
+        setDownloadError(message)
+        setStartingDownload(false)
+        return
       }
 
       if (!data?.downloadUrl) {
-        throw new Error("Missing download URL from API")
+        const message = "Missing download URL from API"
+        showRewardNotice(message, "error")
+        setDownloadError(message)
+        setStartingDownload(false)
+        return
       }
 
       if (typeof data?.coinsUsed === "number" && data.coinsUsed > 0) {
@@ -558,8 +586,9 @@ export default function DownloadPageClient() {
       }, 850)
     } catch (err) {
       console.error("Download start error:", err)
-      showRewardNotice(err instanceof Error ? err.message : "Failed to start download.", "error")
-      setError(err instanceof Error ? err.message : "Failed to start download.")
+      const message = err instanceof Error ? err.message : "Failed to start download."
+      showRewardNotice(message, "error")
+      setDownloadError(message)
       setStartingDownload(false)
     }
   }
@@ -1042,6 +1071,12 @@ export default function DownloadPageClient() {
                       </button>
                     </div>
                   )}
+
+                  {downloadError ? (
+                    <div className="mt-5 rounded-3xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+                      {downloadError}
+                    </div>
+                  ) : null}
 
                   {!isRestricted ? (
                     <div className="mt-5 grid gap-3 rounded-3xl border border-slate-200 bg-white p-4">

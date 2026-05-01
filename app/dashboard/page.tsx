@@ -771,6 +771,43 @@ function DashboardPageContent() {
         <div className="mx-auto w-full max-w-[1800px] px-4 pb-8 pt-24 sm:px-6 sm:pb-10 sm:pt-28 lg:px-8">
           <DailyRewardCard />
 
+          <section className="mt-4 overflow-hidden rounded-[28px] border border-cyan-300/20 bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-violet-500/10 p-5 shadow-[0_18px_45px_rgba(14,165,233,0.12)] backdrop-blur-md sm:p-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-cyan-200">
+                  <span>New here?</span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" />
+                  <span>Start Guide</span>
+                </div>
+
+                <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">
+                  Learn how to use JB Collections
+                </h2>
+
+                <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-300">
+                  Follow the Tutorial Guide to learn how to earn coins, open Mystery Box,
+                  buy coins, use coins, download files, and fix common problems.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row lg:shrink-0">
+                <Link
+                  href="/tutorials"
+                  className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-950/40 transition duration-300 hover:-translate-y-0.5 hover:brightness-110"
+                >
+                  📘 Open Tutorials
+                </Link>
+
+                <Link
+                  href="/mystery-box"
+                  className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-3 text-sm font-black text-slate-100 transition duration-300 hover:-translate-y-0.5 hover:bg-white/[0.1]"
+                >
+                  🎁 Try Mystery Box
+                </Link>
+              </div>
+            </div>
+          </section>
+
           <section className="mt-3 overflow-hidden rounded-[34px] border border-white/10 bg-white/[0.04] shadow-[0_25px_80px_rgba(0,0,0,0.35)] backdrop-blur-md">
             <div className="relative overflow-hidden border-b border-white/10 px-5 py-7 sm:px-6 sm:py-8 lg:px-8">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.14),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(99,102,241,0.18),_transparent_34%)]" />
