@@ -28,6 +28,12 @@ type Task = {
   ready_at?: string | null
   completed_at?: string | null
   seconds_remaining?: number
+  boost_started_at?: string | null
+  boost_ready_at?: string | null
+  boost_used?: boolean
+  boost_can_claim?: boolean
+  boost_seconds_remaining?: number
+  double_reward_ad_seconds?: number
 }
 
 type TasksResponse = {
@@ -47,6 +53,7 @@ type TaskActionResponse = {
   reward?: number
   baseReward?: number
   bonusReward?: number
+  boostReward?: number
   claimCount?: number
   maxClaims?: number
   seconds_remaining?: number
@@ -57,10 +64,13 @@ type ClaimCelebration = {
   title: string
   reward: number
   bonusReward?: number
+  boostReward?: number
 } | null
 
 const RETURN_TASK_KEY = "jb_earn_return_task_id"
 const RETURN_TASK_TITLE_KEY = "jb_earn_return_task_title"
+const BOOST_TASK_KEY = "jb_earn_boost_task_id"
+const BOOST_TASK_TITLE_KEY = "jb_earn_boost_task_title"
 
 function getSecondsRemaining(readyAt?: string | null) {
   if (!readyAt) return 0
@@ -128,6 +138,8 @@ export default function EarnTasksSection() {
   const [tick, setTick] = useState(0)
   const [returnPopupTaskId, setReturnPopupTaskId] = useState<string | null>(null)
   const [returnPopupTitle, setReturnPopupTitle] = useState("")
+  const [boostPopupTaskId, setBoostPopupTaskId] = useState<string | null>(null)
+  const [boostPopupTitle, setBoostPopupTitle] = useState("")
   const [claimCelebration, setClaimCelebration] = useState<ClaimCelebration>(null)
 
   useEffect(() => {
@@ -152,6 +164,14 @@ export default function EarnTasksSection() {
       setReturnPopupTaskId(storedTaskId)
       setReturnPopupTitle(storedTaskTitle)
     }
+
+    const storedBoostTaskId = window.sessionStorage.getItem(BOOST_TASK_KEY)
+    const storedBoostTaskTitle = window.sessionStorage.getItem(BOOST_TASK_TITLE_KEY) || ""
+
+    if (storedBoostTaskId) {
+      setBoostPopupTaskId(storedBoostTaskId)
+      setBoostPopupTitle(storedBoostTaskTitle)
+    }
   }, [])
 
   useEffect(() => {
@@ -174,6 +194,15 @@ export default function EarnTasksSection() {
       const cooldownRemaining = completed ? 0 : getCooldownRemaining(task)
       const canClaim = Boolean(task.can_claim) || (started && !completed && secondsRemaining <= 0)
       const canStart = Boolean(task.can_start) || (!completed && !started && cooldownRemaining <= 0)
+      const boostSecondsRemaining = completed ? 0 : getSecondsRemaining(task.boost_ready_at)
+      const boostCanClaim =
+        Boolean(task.boost_can_claim) ||
+        (!completed &&
+          !isAdTask(task) &&
+          Boolean(task.boost_started_at) &&
+          Boolean(task.boost_ready_at) &&
+          !Boolean(task.boost_used) &&
+          boostSecondsRemaining <= 0)
 
       return {
         ...task,
@@ -187,6 +216,8 @@ export default function EarnTasksSection() {
         claim_count: claimCount,
         max_claims_per_day: maxClaims,
         remaining_claims: Math.max(0, maxClaims - claimCount),
+        boost_seconds_remaining: boostSecondsRemaining,
+        boost_can_claim: boostCanClaim,
       }
     })
   }, [tasks, tick])
@@ -198,6 +229,10 @@ export default function EarnTasksSection() {
 
   const returnTask = returnPopupTaskId
     ? decoratedTasks.find((task) => task.id === returnPopupTaskId) || null
+    : null
+
+  const boostTask = boostPopupTaskId
+    ? decoratedTasks.find((task) => task.id === boostPopupTaskId) || null
     : null
 
   async function loadTasks() {
@@ -259,6 +294,26 @@ export default function EarnTasksSection() {
     setReturnPopupTitle("")
   }
 
+  function rememberBoostTask(task: Task) {
+    if (typeof window === "undefined") return
+
+    window.sessionStorage.setItem(BOOST_TASK_KEY, task.id)
+    window.sessionStorage.setItem(BOOST_TASK_TITLE_KEY, task.title)
+
+    setBoostPopupTaskId(task.id)
+    setBoostPopupTitle(task.title)
+  }
+
+  function clearBoostTask() {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(BOOST_TASK_KEY)
+      window.sessionStorage.removeItem(BOOST_TASK_TITLE_KEY)
+    }
+
+    setBoostPopupTaskId(null)
+    setBoostPopupTitle("")
+  }
+
   function openTaskLink(task: Task) {
     if (!task.link) return
 
@@ -270,7 +325,7 @@ export default function EarnTasksSection() {
     router.push(task.link)
   }
 
-  async function runTaskAction(task: Task, action: "start" | "claim") {
+  async function runTaskAction(task: Task, action: "start" | "claim" | "start_boost", boosted = false) {
     try {
       setWorkingTaskId(task.id)
       setError("")
@@ -286,6 +341,8 @@ export default function EarnTasksSection() {
           action,
           taskId: task.id,
           task_id: task.id,
+          boosted,
+          double_reward: boosted,
         }),
       })
 
@@ -312,14 +369,24 @@ export default function EarnTasksSection() {
         }, 450)
       }
 
+      if (action === "start_boost") {
+        rememberBoostTask(task)
+
+        window.setTimeout(() => {
+          openTaskLink(task)
+        }, 450)
+      }
+
       if (action === "claim") {
         const reward = Number(data.coinsAdded || data.reward || task.reward || 0)
         const bonusReward = Number(data.bonusReward || 0)
+        const boostReward = Number(data.boostReward || 0)
 
         setClaimCelebration({
           title: task.title,
           reward,
           bonusReward,
+          boostReward,
         })
 
         if (typeof window !== "undefined") {
@@ -335,6 +402,7 @@ export default function EarnTasksSection() {
 
         if (!data.task || data.task.completed) {
           clearReturnTask()
+          clearBoostTask()
         }
 
         await loadTasks()
@@ -366,6 +434,17 @@ export default function EarnTasksSection() {
     return false
   }
 
+  function handleBoostButton(task: Task) {
+    if (task.completed || isAdTask(task)) return
+
+    if (task.boost_can_claim) {
+      void runTaskAction(task, "claim", true)
+      return
+    }
+
+    void runTaskAction(task, "start_boost")
+  }
+
   function handleTaskButton(task: Task) {
     if (task.completed) return
 
@@ -392,6 +471,20 @@ export default function EarnTasksSection() {
 
     if (returnTask.can_claim) {
       void runTaskAction(returnTask, "claim")
+      return
+    }
+
+    await loadTasks()
+  }
+
+  async function handleBoostPopupMainAction() {
+    if (!boostTask) {
+      await loadTasks()
+      return
+    }
+
+    if (boostTask.boost_can_claim) {
+      void runTaskAction(boostTask, "claim", true)
       return
     }
 
@@ -548,6 +641,19 @@ export default function EarnTasksSection() {
                       {getButtonLabel(task)}
                     </button>
 
+                    {!isAdTask(task) && task.can_claim && !task.completed && !task.boost_used ? (
+                      <button
+                        type="button"
+                        onClick={() => handleBoostButton(task)}
+                        disabled={workingTaskId === task.id}
+                        className="mt-3 w-full rounded-2xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-sky-600 px-4 py-2.5 text-xs font-black text-white shadow-lg shadow-violet-950/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {task.boost_can_claim
+                          ? `Claim Double Reward +${Number(task.reward || 0) * 2} Coins`
+                          : `🔥 Watch Sponsor to Double Reward`}
+                      </button>
+                    ) : null}
+
                     {task.started && !task.completed && !task.can_claim && task.link ? (
                       <button
                         type="button"
@@ -628,6 +734,69 @@ export default function EarnTasksSection() {
         </div>
       ) : null}
 
+      {boostPopupTaskId ? (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-md overflow-hidden rounded-[30px] border border-white/10 bg-[#081226] p-6 text-center shadow-[0_30px_90px_rgba(0,0,0,0.55)]">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.22),transparent_34%)]" />
+
+            <div className="relative">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-fuchsia-400/20 bg-fuchsia-400/10 text-3xl">
+                ⚡
+              </div>
+
+              <h3 className="mt-5 text-2xl font-black text-white">
+                Double Reward Boost
+              </h3>
+
+              <p className="mt-3 text-sm leading-6 text-slate-300">
+                You returned from the sponsor for{" "}
+                <span className="font-bold text-fuchsia-200">
+                  {boostTask?.title || boostPopupTitle || "your task"}
+                </span>
+                . Claim your 2x reward when it is ready.
+              </p>
+
+              <div className="mt-5 rounded-2xl border border-fuchsia-400/20 bg-fuchsia-400/10 px-4 py-3 text-lg font-black text-fuchsia-200">
+                2x Reward: +{Number(boostTask?.reward || 0) * 2} JB Coins
+              </div>
+
+              <div className="mt-6 grid gap-3">
+                <button
+                  type="button"
+                  onClick={handleBoostPopupMainAction}
+                  disabled={Boolean(boostTask && workingTaskId === boostTask.id)}
+                  className={`rounded-2xl px-4 py-3 text-sm font-black shadow-lg transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                    boostTask?.boost_can_claim
+                      ? "bg-gradient-to-r from-fuchsia-500 via-violet-600 to-sky-600 text-white shadow-violet-950/30 hover:brightness-110"
+                      : "bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 text-white shadow-blue-950/30 hover:brightness-110"
+                  }`}
+                >
+                  {boostTask?.boost_can_claim
+                    ? workingTaskId === boostTask.id
+                      ? "Claiming..."
+                      : "Claim Double Reward"
+                    : "Check Double Reward Status"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={clearBoostTask}
+                  className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-white/[0.1]"
+                >
+                  Close
+                </button>
+              </div>
+
+              {boostTask && !boostTask.boost_can_claim && !boostTask.completed ? (
+                <p className="mt-4 text-xs font-semibold text-slate-400">
+                  Sponsor boost is being verified. You can check again shortly.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {claimCelebration ? (
         <div className="pointer-events-none fixed inset-0 z-[10000] flex items-center justify-center px-4">
           <div className="relative overflow-hidden rounded-[32px] border border-yellow-300/30 bg-slate-950/90 px-8 py-7 text-center shadow-[0_30px_90px_rgba(0,0,0,0.6)] backdrop-blur-md animate-[coinPop_2.8s_ease-in-out_forwards]">
@@ -652,6 +821,11 @@ export default function EarnTasksSection() {
               <div className="mt-2 text-lg font-black text-white">
                 Reward Claimed!
               </div>
+              {claimCelebration.boostReward ? (
+                <div className="mt-2 rounded-full border border-fuchsia-400/25 bg-fuchsia-400/10 px-4 py-2 text-sm font-black text-fuchsia-200">
+                  Includes +{claimCelebration.boostReward} double reward boost
+                </div>
+              ) : null}
               {claimCelebration.bonusReward ? (
                 <div className="mt-2 rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-2 text-sm font-black text-amber-200">
                   Includes +{claimCelebration.bonusReward} bonus coins

@@ -1,6 +1,7 @@
 import "./globals.css"
 import type { Metadata } from "next"
 import LayoutShell from "./components/LayoutShell"
+import BackgroundAds from "@/app/components/BackgroundAds" // ✅ ADD THIS
 
 function getSiteUrl() {
   return (
@@ -67,14 +68,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* ✅ AdSense Script (ADDED) */}
+        {/* ✅ AdSense */}
         <script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6646475793737493"
           crossOrigin="anonymous"
         ></script>
 
-        {/* existing icons */}
+        {/* icons */}
         <link rel="icon" href="/favicon.ico" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
@@ -85,6 +86,9 @@ export default function RootLayout({
 
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
         <LayoutShell>{children}</LayoutShell>
+
+        {/* 🔥 THIS IS THE MONEY PART */}
+        <BackgroundAds />
       </body>
     </html>
   )

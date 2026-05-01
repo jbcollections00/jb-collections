@@ -91,6 +91,27 @@ export default function SiteHeader() {
     }
 
     void init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    function handleCoinsUpdated(event: Event) {
+      const customEvent = event as CustomEvent<{ reward?: number }>
+      const reward = toSafeNumber(customEvent.detail?.reward)
+
+      if (reward > 0) {
+        setCoins((currentCoins) => currentCoins + reward)
+      }
+
+      void refreshWallet()
+    }
+
+    window.addEventListener("jb-coins-updated", handleCoinsUpdated)
+
+    return () => {
+      window.removeEventListener("jb-coins-updated", handleCoinsUpdated)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function isActive(href: string) {
@@ -163,7 +184,9 @@ export default function SiteHeader() {
                   </div>
                 </div>
               </div>
-
+<a href="/mystery-box" className="nav-link">
+  🎁 Mystery Box
+</a>
               <button
                 onClick={handleLogout}
                 className="inline-flex h-10 items-center rounded-full border border-red-300/20 bg-red-500 px-4 text-xs font-bold text-white transition hover:bg-red-600"

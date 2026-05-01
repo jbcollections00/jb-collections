@@ -5,6 +5,11 @@ import { createClient as createSupabaseAdmin } from "@supabase/supabase-js"
 
 export const runtime = "nodejs"
 
+const DOWNLOAD_BOOST_EXTRA_COST = 8
+const DOWNLOAD_BOOST_EXTRA_REWARD = 3
+const POPULAR_FILE_PRICE_PLUS_1_THRESHOLD = 1000
+const POPULAR_FILE_PRICE_PLUS_2_THRESHOLD = 5000
+
 type MembershipLevel = "standard" | "premium" | "platinum" | "admin"
 
 type ProfileRow = {
@@ -66,18 +71,46 @@ function normalizeMembership(profile?: ProfileRow | null): MembershipLevel {
   return "standard"
 }
 
-function getDownloadCoinCost(level: MembershipLevel) {
+function getBaseDownloadCoinCost(level: MembershipLevel) {
   if (level === "admin") return 0
   if (level === "platinum") return 8
   if (level === "premium") return 10
   return 12
 }
 
-function getDownloadRewardAmount(level: MembershipLevel) {
+function getDownloadCoinCost(level: MembershipLevel, file?: FileRow | null, boosted = false) {
+  let cost = getBaseDownloadCoinCost(level)
+
+  if (level !== "admin" && file) {
+    const downloadsCount = Number(file.downloads_count || 0)
+
+    if (downloadsCount >= POPULAR_FILE_PRICE_PLUS_2_THRESHOLD) {
+      cost += 5
+    } else if (downloadsCount >= POPULAR_FILE_PRICE_PLUS_1_THRESHOLD) {
+      cost += 2
+    }
+  }
+
+  if (level !== "admin" && boosted) {
+    cost += DOWNLOAD_BOOST_EXTRA_COST
+  }
+
+  return Math.max(0, cost)
+}
+
+function getDownloadRewardAmount(level: MembershipLevel, boosted = false) {
   if (level === "admin") return 0
-  if (level === "platinum") return 3
-  if (level === "premium") return 2
-  return 2
+
+  let reward = 2
+
+  if (level === "platinum") reward = 3
+  if (level === "premium") reward = 2
+
+  if (boosted) {
+    reward += DOWNLOAD_BOOST_EXTRA_REWARD
+  }
+
+  return reward
 }
 
 function getDailyDownloadRewardLimit(level: MembershipLevel) {
@@ -135,14 +168,15 @@ async function awardDownloadCoins(params: {
   fileId: string
   fileTitle: string
   membershipLevel: MembershipLevel
+  boosted?: boolean
 }): Promise<RewardResult> {
-  const { userId, fileId, fileTitle, membershipLevel } = params
+  const { userId, fileId, fileTitle, membershipLevel, boosted = false } = params
 
   if (membershipLevel === "admin") {
     return { awarded: 0, reason: "admin_skipped" }
   }
 
-  const rewardAmount = getDownloadRewardAmount(membershipLevel)
+  const rewardAmount = getDownloadRewardAmount(membershipLevel, boosted)
   const dailyLimit = getDailyDownloadRewardLimit(membershipLevel)
 
   if (rewardAmount <= 0) {
@@ -209,8 +243,10 @@ async function awardDownloadCoins(params: {
   const { error: coinError } = await adminDb.rpc("handle_coin_change", {
     p_user_id: userId,
     p_amount: rewardAmount,
-    p_type: "download_reward",
-    p_description: `Download reward for ${fileTitle || fileId}`,
+    p_type: boosted ? "download_boost_reward" : "download_reward",
+    p_description: boosted
+      ? `Boosted download reward for ${fileTitle || fileId}`
+      : `Download reward for ${fileTitle || fileId}`,
   })
 
   if (coinError) {
@@ -240,6 +276,7 @@ export async function GET(
 
     const url = new URL(req.url)
     const mode = url.searchParams.get("mode")
+    const boosted = url.searchParams.get("boost") === "1"
 
     const referer = req.headers.get("referer") || ""
     const allowedHost = normalizeSiteUrl(String(process.env.NEXT_PUBLIC_SITE_URL || ""))
@@ -277,7 +314,6 @@ export async function GET(
 
     const profile = profileData as ProfileRow | null
     const membershipLevel = normalizeMembership(profile)
-    const downloadCoinCost = getDownloadCoinCost(membershipLevel)
     const userCoins = Number(profile?.coins || 0)
 
     const { data: fileData, error: fileError } = await supabase
@@ -300,6 +336,10 @@ export async function GET(
     }
 
     const fileOnly = fileData as FileRow
+    const downloadCoinCost = getDownloadCoinCost(membershipLevel, fileOnly, boosted)
+    const baseDownloadCoinCost = getDownloadCoinCost(membershipLevel, fileOnly, false)
+    const boostExtraCost = boosted ? DOWNLOAD_BOOST_EXTRA_COST : 0
+    const expectedRewardAmount = getDownloadRewardAmount(membershipLevel, boosted)
 
     if (fileOnly.status !== "published") {
       return NextResponse.json(
@@ -435,8 +475,10 @@ export async function GET(
       const { error: spendError } = await adminDb.rpc("handle_coin_change", {
         p_user_id: user.id,
         p_amount: -downloadCoinCost,
-        p_type: "download_spend",
-        p_description: `Download spend for ${fileOnly.title || fileOnly.slug || fileOnly.id}`,
+        p_type: boosted ? "boosted_download_spend" : "download_spend",
+        p_description: boosted
+          ? `Boosted download spend for ${fileOnly.title || fileOnly.slug || fileOnly.id}`
+          : `Download spend for ${fileOnly.title || fileOnly.slug || fileOnly.id}`,
       })
 
       if (spendError) {
@@ -465,7 +507,7 @@ export async function GET(
       user_id: user.id,
       file_id: fileOnly.id,
       file_version_id: currentVersion.id,
-      result: "success",
+      result: boosted ? "success_boosted" : "success",
       ip_address: getClientIp(req),
       user_agent: req.headers.get("user-agent"),
     })
@@ -489,6 +531,7 @@ export async function GET(
         fileId: fileOnly.id,
         fileTitle: fileOnly.title || fileOnly.slug || fileOnly.id,
         membershipLevel,
+        boosted,
       })
 
       console.log("Download coin reward result:", rewardResult)
@@ -514,6 +557,10 @@ export async function GET(
       return NextResponse.json({
         downloadUrl: signedUrl,
         coinsUsed: downloadCoinCost,
+        baseCoinsUsed: baseDownloadCoinCost,
+        boostExtraCost,
+        boosted,
+        expectedRewardAmount,
         ...rewardResponse,
       })
     }
