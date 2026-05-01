@@ -20,6 +20,7 @@ const navItems = [
   { label: "Messages", href: "/messages", icon: "💬" },
   { label: "Buy COINS", href: "/upgrade", icon: "🪙" },
   { label: "Earn Coins", href: "/earn-coins", icon: "🎯" },
+  { label: "Mystery Box", href: "/mystery-box", icon: "🎁" },
 ]
 
 function toSafeNumber(value: unknown) {
@@ -184,9 +185,7 @@ export default function SiteHeader() {
                   </div>
                 </div>
               </div>
-<a href="/mystery-box" className="nav-link">
-  🎁 Mystery Box
-</a>
+
               <button
                 onClick={handleLogout}
                 className="inline-flex h-10 items-center rounded-full border border-red-300/20 bg-red-500 px-4 text-xs font-bold text-white transition hover:bg-red-600"
