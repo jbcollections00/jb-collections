@@ -198,18 +198,19 @@ export default function SiteHeader() {
                           </Link>
                         )
                       })}
+
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="flex items-center gap-3 rounded-2xl bg-red-500 px-4 py-3 text-sm font-black text-white transition hover:bg-red-600"
+                      >
+                        <span className="text-base">🚪</span>
+                        <span>Logout</span>
+                      </button>
                     </div>
                   </div>
                 )}
               </div>
-
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="inline-flex h-10 items-center rounded-full border border-red-300/20 bg-red-500 px-4 text-xs font-bold text-white transition hover:bg-red-600 sm:h-11 sm:px-5 sm:text-sm"
-              >
-                Logout
-              </button>
             </div>
           </div>
         </div>
