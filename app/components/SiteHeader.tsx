@@ -130,7 +130,7 @@ export default function SiteHeader() {
       <header className="fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-4 sm:pt-4">
         <div className="mx-auto w-full max-w-[1800px] overflow-visible rounded-[24px] border border-white/15 bg-gradient-to-r from-cyan-600 via-sky-500 to-indigo-600 shadow-[0_14px_34px_rgba(37,99,235,0.22)] backdrop-blur-xl">
           <div className="flex min-h-[68px] items-center gap-3 px-4 py-2 sm:px-5 lg:px-6">
-            <Link href="/dashboard" className="flex min-w-0 items-center gap-3 pr-2">
+            <Link href="/dashboard" className="flex shrink-0 items-center gap-3 pr-1 sm:min-w-0 sm:pr-2">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/12 ring-1 ring-white/15 backdrop-blur">
                 <img
                   src="/jb-logo.png"
@@ -139,11 +139,11 @@ export default function SiteHeader() {
                 />
               </div>
 
-              <div className="min-w-0">
-                <div className="truncate text-[15px] font-black tracking-[0.12em] text-white sm:text-[17px] lg:text-[18px]">
+              <div className="hidden min-w-0 sm:block">
+                <div className="truncate text-[17px] font-black tracking-[0.12em] text-white lg:text-[18px]">
                   JB COLLECTIONS
                 </div>
-                <div className="hidden text-[9px] font-bold uppercase tracking-[0.28em] text-cyan-100/80 sm:block">
+                <div className="text-[9px] font-bold uppercase tracking-[0.28em] text-cyan-100/80">
                   Premium Access Hub
                 </div>
               </div>
