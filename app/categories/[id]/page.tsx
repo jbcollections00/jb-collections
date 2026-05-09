@@ -826,7 +826,7 @@ export default function CategoryPage() {
           </div>
         </div>
 
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        <div className="hidden mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           {[
             { label: "Total Files", value: formatNumber(files.length) },
             { label: "Downloads", value: formatNumber(totalDownloads) },
@@ -842,7 +842,7 @@ export default function CategoryPage() {
           ))}
         </div>
 
-        <div className="mb-8 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="hidden mb-8 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(0,0,0,0.24)]">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
@@ -1043,7 +1043,7 @@ export default function CategoryPage() {
                       </h3>
 
                       <p className="line-clamp-2 min-h-[38px] text-xs leading-5 text-slate-400">
-                        {file.description || "No description available."}
+                        {file.description || "Fresh collection available for quick preview and download."}
                       </p>
 
                       <div className="grid grid-cols-2 gap-2">
@@ -1096,75 +1096,6 @@ export default function CategoryPage() {
               })}
             </div>
 
-
-            {relatedFiles.length > 0 && (
-              <div className="mt-12">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-xl font-black tracking-tight text-white">✨ Users Also Downloaded</h3>
-                    <p className="mt-1 text-sm text-slate-400">More files people open after viewing this category</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-                  {relatedFiles.map((file) => {
-                    const previewImage = getPreviewImage(file)
-                    return (
-                      <div
-                        key={file.id}
-                        className="group overflow-hidden rounded-[24px] border border-white/10 bg-slate-900/80 shadow-[0_12px_30px_rgba(0,0,0,0.26)] transition-all duration-300 hover:-translate-y-1.5 hover:scale-[1.01] hover:border-sky-400/35" style={{ animation: `fadeUp 0.45s ease ${relatedFiles.findIndex((entry) => entry.id === file.id) * 0.04}s both` }}
-                      >
-                        <div className="relative aspect-[3/4] overflow-hidden bg-slate-800">
-                          {previewImage ? (
-                            <>
-                              <img
-                                src={previewImage}
-                                alt={getDisplayName(file)}
-                                className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                              />
-                              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
-                            </>
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-4xl">
-                              {getFileIcon(getDisplayFileType(file))}
-                            </div>
-                          )}
-
-                          <div className={`absolute left-3 top-3 rounded-full border px-3 py-1.5 text-[11px] font-bold backdrop-blur-md ${getVisibilityBadgeClasses(file)}`}>
-                            {getVisibilityLabel(file)}
-                          </div>
-                        </div>
-
-                        <div className="space-y-2 p-4">
-                          <h4 className="line-clamp-2 text-sm font-black text-white">{getDisplayName(file)}</h4>
-                          <p className="text-xs text-slate-400">
-                            {formatNumber(file.downloads_count || file.download_count || 0)} downloads
-                          </p>
-                          <p className="text-xs text-slate-400">Size: {formatFileSize(file.file_size || file.size)}</p>
-
-                          <div className="flex gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => openPreview(file)}
-                              className="inline-flex flex-1 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/10"
-                            >
-                              Preview
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDownload(file)}
-                              className="inline-flex flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-3 py-2 text-xs font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
-                            >
-                              Download
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
 
             <div className="mt-8 flex flex-col items-center gap-4 pb-24 sm:mt-10">
               <div className="flex flex-wrap items-center justify-center gap-2">
