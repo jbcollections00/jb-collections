@@ -5,7 +5,7 @@ import SiteFooter from "@/app/components/SiteFooter"
 export const metadata = {
   title: "Contact Us | JB Collections",
   description:
-    "Contact JB Collections for account concerns, membership, coins, rewards, password recovery, and support.",
+    "Contact JB Collections for account concerns, membership, coins, rewards, password recovery, Telegram support, and other concerns.",
 }
 
 export default function ContactPage() {
@@ -13,7 +13,7 @@ export default function ContactPage() {
     <div className="min-h-screen bg-[#020617] text-slate-100">
       <SiteHeader />
 
-      <main className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
+      <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
         <section className="overflow-hidden rounded-[32px] border border-blue-500/20 bg-slate-900 shadow-[0_24px_70px_rgba(2,6,23,0.45)]">
           <div className="relative">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.22),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(99,102,241,0.22),transparent_34%)]" />
@@ -29,8 +29,8 @@ export default function ContactPage() {
 
               <p className="mt-4 max-w-3xl text-base leading-8 text-slate-300">
                 Need help with your JB Collections account, membership, coins,
-                rewards, password recovery, or other concerns? We are here to
-                assist you.
+                rewards, password recovery, download access, or other concerns?
+                We are here to assist you.
               </p>
             </div>
           </div>
@@ -64,26 +64,12 @@ export default function ContactPage() {
 
               <div className="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-4">
                 <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
-                  Telegram
-                </div>
-                <a
-                  href="https://t.me/JB_Collections_2019"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-1 inline-block font-bold text-cyan-300 transition hover:text-cyan-200"
-                >
-                  @JB_Collections_2019
-                </a>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-4">
-                <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
                   Website
                 </div>
                 <a
                   href="https://jb-collections.com"
                   target="_blank"
-                  rel="noopener noreferrer"
+                  rel="noreferrer"
                   className="mt-1 inline-block font-bold text-cyan-300 transition hover:text-cyan-200"
                 >
                   https://jb-collections.com
@@ -105,20 +91,35 @@ export default function ContactPage() {
             <div className="mt-5 space-y-4 text-sm leading-7 text-slate-300">
               <div className="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-4">
                 <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
-                  Business Hours
+                  Telegram Username
                 </div>
-                <div className="mt-1 font-bold text-white">
-                  Monday to Sunday, 9:00 AM – 8:00 PM
-                </div>
+                <a
+                  href="https://t.me/JB_Collections_2019"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 inline-block font-bold text-cyan-300 transition hover:text-cyan-200"
+                >
+                  @JB_Collections_2019
+                </a>
               </div>
 
               <div className="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-4">
                 <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
-                  Response Time
+                  Telegram Mobile
                 </div>
-                <div className="mt-1 font-bold text-white">
-                  We usually respond within 24–48 hours.
+                <a
+                  href="tel:+639685289257"
+                  className="mt-1 inline-block font-bold text-cyan-300 transition hover:text-cyan-200"
+                >
+                  +63 968 528 9257
+                </a>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-4">
+                <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
+                  Business Hours
                 </div>
+                <div className="mt-1 font-bold text-white">Open 24 hours</div>
               </div>
 
               <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-4">
@@ -157,9 +158,9 @@ export default function ContactPage() {
               "Membership questions",
               "JB Coins concerns",
               "Rewards and referrals",
+              "Download issues",
               "Payment issues",
               "Website support",
-              "General inquiries",
             ].map((item) => (
               <div
                 key={item}
@@ -181,7 +182,7 @@ export default function ContactPage() {
             <a
               href="https://t.me/JB_Collections_2019"
               target="_blank"
-              rel="noopener noreferrer"
+              rel="noreferrer"
               className="inline-flex items-center justify-center rounded-2xl bg-cyan-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-cyan-700"
             >
               Message on Telegram
