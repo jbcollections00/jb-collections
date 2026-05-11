@@ -201,6 +201,13 @@ export default function AdminUsersPage() {
   const [coinOperation, setCoinOperation] = useState<CoinOperation>("add")
   const [coinLoading, setCoinLoading] = useState(false)
 
+  const [recoveryEmail, setRecoveryEmail] = useState("")
+  const [recoveryPassword, setRecoveryPassword] = useState("")
+  const [recoveryReason, setRecoveryReason] = useState("")
+  const [recoveryLoading, setRecoveryLoading] = useState(false)
+  const [recoveryErrorMessage, setRecoveryErrorMessage] = useState("")
+  const [recoverySuccessMessage, setRecoverySuccessMessage] = useState("")
+
   const [errorMessage, setErrorMessage] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [coinErrorMessage, setCoinErrorMessage] = useState("")
@@ -247,6 +254,12 @@ export default function AdminUsersPage() {
     setCoinOperation("add")
     setCoinErrorMessage("")
     setCoinSuccessMessage("")
+
+    setRecoveryEmail(selectedUser.email || "")
+    setRecoveryPassword("")
+    setRecoveryReason("")
+    setRecoveryErrorMessage("")
+    setRecoverySuccessMessage("")
   }, [selectedUser])
 
   useEffect(() => {
@@ -413,6 +426,8 @@ export default function AdminUsersPage() {
     setSelectedUser(user)
     setCoinErrorMessage("")
     setCoinSuccessMessage("")
+    setRecoveryErrorMessage("")
+    setRecoverySuccessMessage("")
     setErrorMessage("")
     setSuccessMessage("")
     setUserModalOpen(true)
@@ -562,6 +577,98 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function recoverUserAccount() {
+    if (!selectedUser) return
+
+    try {
+      setRecoveryLoading(true)
+      setRecoveryErrorMessage("")
+      setRecoverySuccessMessage("")
+      setErrorMessage("")
+      setSuccessMessage("")
+
+      const trimmedEmail = recoveryEmail.trim().toLowerCase()
+      const trimmedPassword = recoveryPassword.trim()
+      const trimmedReason = recoveryReason.trim()
+
+      if (!trimmedEmail) {
+        setRecoveryErrorMessage("Please enter the user's recovery email.")
+        return
+      }
+
+      if (!trimmedEmail.includes("@") || !trimmedEmail.includes(".")) {
+        setRecoveryErrorMessage("Please enter a valid email address.")
+        return
+      }
+
+      if (!trimmedPassword) {
+        setRecoveryErrorMessage("Please enter a temporary password.")
+        return
+      }
+
+      if (trimmedPassword.length < 6) {
+        setRecoveryErrorMessage("Temporary password must be at least 6 characters.")
+        return
+      }
+
+      if (!trimmedReason) {
+        setRecoveryErrorMessage("Please enter the recovery reason or verification note.")
+        return
+      }
+
+      const res = await fetch("/api/admin/users/recover-account", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          email: trimmedEmail,
+          password: trimmedPassword,
+          reason: trimmedReason,
+        }),
+      })
+
+      const result = await res.json()
+
+      if (!res.ok) {
+        setRecoveryErrorMessage(result?.error || "Failed to recover account.")
+        return
+      }
+
+      setSelectedUser((current) =>
+        current
+          ? {
+              ...current,
+              email: trimmedEmail,
+            }
+          : current
+      )
+
+      setUsers((currentUsers) =>
+        currentUsers.map((user) =>
+          user.id === selectedUser.id
+            ? {
+                ...user,
+                email: trimmedEmail,
+              }
+            : user
+        )
+      )
+
+      setRecoverySuccessMessage(
+        result?.message || "Account recovered. Give the temporary password to the verified owner only."
+      )
+      setRecoveryPassword("")
+      setRecoveryReason("")
+    } catch (error) {
+      console.error("Recover account error:", error)
+      setRecoveryErrorMessage("Failed to recover account.")
+    } finally {
+      setRecoveryLoading(false)
+    }
+  }
+
   const catalogueButtons: Array<{ key: CatalogueFilter; label: string }> = [
     { key: "all", label: "All" },
     { key: "standard", label: "Standard" },
@@ -613,7 +720,7 @@ export default function AdminUsersPage() {
                 <button
                   type="button"
                   onClick={() => loadUsers(true)}
-                  disabled={loading || saving || coinLoading}
+                  disabled={loading || saving || coinLoading || recoveryLoading}
                   className="inline-flex items-center justify-center rounded-2xl border border-blue-400/20 bg-blue-500/15 px-5 py-3 text-sm font-bold text-blue-100 transition hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {loading ? "Refreshing..." : "Refresh Users"}
@@ -1097,6 +1204,87 @@ export default function AdminUsersPage() {
                         <span className="font-bold text-white">Created At:</span>{" "}
                         {formatDateTime(selectedUser.created_at)}
                       </div>
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard
+                    title="Account Recovery"
+                    subtitle="Use only after confirming the real account owner. This changes the login email and temporary password."
+                  >
+                    <div className="mb-4 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-200">
+                      Current login email: <span className="font-bold text-white">{selectedUser.email || "No email"}</span>
+                    </div>
+
+                    {recoveryErrorMessage ? (
+                      <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300">
+                        {recoveryErrorMessage}
+                      </div>
+                    ) : null}
+
+                    {recoverySuccessMessage ? (
+                      <div className="mb-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-300">
+                        {recoverySuccessMessage}
+                      </div>
+                    ) : null}
+
+                    <div className="grid gap-4">
+                      <div>
+                        <label className="mb-2 block text-sm font-bold text-slate-200">Recovery Email</label>
+                        <input
+                          type="email"
+                          value={recoveryEmail}
+                          onChange={(e) => setRecoveryEmail(e.target.value)}
+                          placeholder="Enter new or confirmed email"
+                          className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-bold text-slate-200">Temporary Password</label>
+                        <input
+                          type="text"
+                          value={recoveryPassword}
+                          onChange={(e) => setRecoveryPassword(e.target.value)}
+                          placeholder="Minimum 6 characters"
+                          className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-bold text-slate-200">Verification Note</label>
+                        <textarea
+                          value={recoveryReason}
+                          onChange={(e) => setRecoveryReason(e.target.value)}
+                          rows={3}
+                          placeholder="Example: User verified by receipt, full name, username, or other proof."
+                          className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={recoverUserAccount}
+                        disabled={recoveryLoading}
+                        className="inline-flex items-center justify-center rounded-2xl bg-cyan-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        {recoveryLoading ? "Recovering..." : "Recover Account"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRecoveryEmail(selectedUser.email || "")
+                          setRecoveryPassword("")
+                          setRecoveryReason("")
+                          setRecoveryErrorMessage("")
+                          setRecoverySuccessMessage("")
+                        }}
+                        className="inline-flex items-center justify-center rounded-2xl bg-slate-700 px-5 py-3 text-sm font-bold text-slate-100 transition hover:bg-slate-600"
+                      >
+                        Reset Recovery Form
+                      </button>
                     </div>
                   </SectionCard>
 
