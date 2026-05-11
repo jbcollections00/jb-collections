@@ -16,7 +16,7 @@ type UserRow = {
   status: string | null
   is_premium: boolean | null
   role: string | null
-  jb_points?: number | null
+  coins?: number | null
   last_seen?: string | null
   created_at?: string | null
   membership_payment_type?: string | null
@@ -398,8 +398,8 @@ export default function AdminUsersPage() {
       const nameB = getDisplayName(b).toLowerCase()
       const timeA = new Date(a.created_at || 0).getTime() || 0
       const timeB = new Date(b.created_at || 0).getTime() || 0
-      const coinsA = Number(a.jb_points || 0)
-      const coinsB = Number(b.jb_points || 0)
+      const coinsA = Number(a.coins || 0)
+      const coinsB = Number(b.coins || 0)
 
       if (sortBy === "az") return nameA.localeCompare(nameB)
       if (sortBy === "za") return nameB.localeCompare(nameA)
@@ -543,13 +543,13 @@ export default function AdminUsersPage() {
         return
       }
 
-      const updatedCoins = Number(result?.newCoins ?? selectedUser.jb_points ?? 0)
+      const updatedCoins = Number(result?.newCoins ?? selectedUser.coins ?? 0)
 
       setSelectedUser((current) =>
         current
           ? {
               ...current,
-              jb_points: updatedCoins,
+              coins: updatedCoins,
             }
           : current
       )
@@ -559,7 +559,7 @@ export default function AdminUsersPage() {
           user.id === selectedUser.id
             ? {
                 ...user,
-                jb_points: updatedCoins,
+                coins: updatedCoins,
               }
             : user
         )
@@ -951,7 +951,7 @@ export default function AdminUsersPage() {
                           JB Coins
                         </div>
                         <div className="mt-1 text-xl font-black text-amber-300">
-                          {Number(selectedUser.jb_points || 0).toLocaleString()}
+                          {Number(selectedUser.coins || 0).toLocaleString()}
                         </div>
                       </div>
                       <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-center backdrop-blur">
@@ -1293,7 +1293,7 @@ export default function AdminUsersPage() {
                     subtitle="Add, subtract, or set the exact JB Coin balance for this user."
                   >
                     <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-300">
-                      Current Balance: {Number(selectedUser.jb_points || 0).toLocaleString()} JB Coins
+                      Current Balance: {Number(selectedUser.coins || 0).toLocaleString()} JB Coins
                     </div>
 
                     {coinErrorMessage ? (

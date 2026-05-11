@@ -31,7 +31,7 @@ export async function GET(
       return NextResponse.json({ error: "Missing user id." }, { status: 400 })
     }
 
-    // 🔥 IMPORTANT: only select needed fields (including jb_points)
+    // 🔥 IMPORTANT: only select needed fields (including coins)
     const { data, error } = await supabase
       .from("profiles")
       .select(`
@@ -45,7 +45,7 @@ export async function GET(
         account_status,
         status,
         is_premium,
-        jb_points,
+        coins,
         last_seen,
         created_at
       `)

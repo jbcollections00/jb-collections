@@ -14,7 +14,7 @@ type RequestBody = {
 type ProfileRow = {
   id: string
   role?: string | null
-  jb_points?: number | null
+  coins?: number | null
   full_name?: string | null
   name?: string | null
   email?: string | null
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
 
     const { data: targetProfile, error: targetProfileError } = await adminDb
       .from("profiles")
-      .select("id, jb_points, full_name, name, email")
+      .select("id, coins, full_name, name, email")
       .eq("id", userId)
       .single()
 
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     }
 
     const profile = targetProfile as ProfileRow
-    const currentCoins = Number(profile.jb_points || 0)
+    const currentCoins = Number(profile.coins || 0)
 
     let nextCoins = currentCoins
     let transactionAmount = 0
@@ -124,18 +124,19 @@ export async function POST(req: NextRequest) {
       transactionAmount = nextCoins - currentCoins
     }
 
-    const { error: updateError } = await adminDb
+    const { data: updatedProfile, error: updateError } = await adminDb
       .from("profiles")
       .update({
-        jb_points: nextCoins,
+        coins: nextCoins,
       })
       .eq("id", userId)
-      .eq("jb_points", currentCoins)
+      .select("coins")
+      .single()
 
-    if (updateError) {
+    if (updateError || !updatedProfile) {
       return NextResponse.json(
         {
-          error: updateError.message || "Failed to update user coins",
+          error: updateError?.message || "Failed to update user coins",
         },
         { status: 500 }
       )
@@ -171,7 +172,7 @@ export async function POST(req: NextRequest) {
         await adminDb
           .from("profiles")
           .update({
-            jb_points: currentCoins,
+            coins: currentCoins,
           })
           .eq("id", userId)
 

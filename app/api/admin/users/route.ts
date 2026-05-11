@@ -57,7 +57,7 @@ export async function GET() {
     const { data, error } = await adminSupabase
       .from("profiles")
       .select(
-        "id, email, full_name, name, username, membership, membership_payment_type, membership_started_at, membership_expires_at, account_status, status, is_premium, role, jb_points, last_seen, created_at"
+        "id, email, full_name, name, username, membership, membership_payment_type, membership_started_at, membership_expires_at, account_status, status, is_premium, role, coins, last_seen, created_at"
       )
       .order("created_at", { ascending: false })
 
