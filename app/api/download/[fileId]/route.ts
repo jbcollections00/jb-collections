@@ -68,6 +68,7 @@ function normalizeMembership(profile?: ProfileRow | null): MembershipLevel {
   if (membership === "platinum") return "platinum"
   if (membership === "premium") return "premium"
   if (profile?.is_premium) return "premium"
+
   return "standard"
 }
 
@@ -247,6 +248,9 @@ async function awardDownloadCoins(params: {
     p_description: boosted
       ? `Boosted download reward for ${fileTitle || fileId}`
       : `Download reward for ${fileTitle || fileId}`,
+    p_reference: boosted
+      ? `download_boost_reward:${userId}:${fileId}:${rewardDate}`
+      : `download_reward:${userId}:${fileId}:${rewardDate}`,
   })
 
   if (coinError) {
@@ -283,6 +287,7 @@ export async function GET(
 
     if (allowedHost && referer) {
       const normalizedReferer = referer.replace(/\/$/, "")
+
       if (!normalizedReferer.startsWith(allowedHost)) {
         return NextResponse.json(
           { error: "Direct download not allowed" },
@@ -292,6 +297,7 @@ export async function GET(
     }
 
     const supabase = await createClient()
+    const adminDb = createAdminDb()
 
     const {
       data: { user },
@@ -302,17 +308,51 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profileData, error: profileError } = await supabase
-      .from("profiles")
-      .select("id, role, membership, is_premium, coins")
-      .eq("id", user.id)
-      .maybeSingle()
+    let profile: ProfileRow | null = null
 
-    if (profileError) {
-      console.error("Profile fetch error:", profileError)
+    if (adminDb) {
+      const { data: adminProfileData, error: adminProfileError } = await adminDb
+        .from("profiles")
+        .select("id, role, membership, is_premium, coins")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      if (adminProfileError) {
+        console.error("Admin profile fetch error:", adminProfileError)
+      } else {
+        profile = adminProfileData as ProfileRow | null
+      }
     }
 
-    const profile = profileData as ProfileRow | null
+    if (!profile) {
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, role, membership, is_premium, coins")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      if (profileError) {
+        console.error("Profile fetch error:", profileError)
+
+        return NextResponse.json(
+          {
+            error: "Failed to read user coins",
+            details: profileError.message,
+          },
+          { status: 500 }
+        )
+      }
+
+      profile = profileData as ProfileRow | null
+    }
+
+    if (!profile) {
+      return NextResponse.json(
+        { error: "User profile not found" },
+        { status: 404 }
+      )
+    }
+
     const membershipLevel = normalizeMembership(profile)
     const userCoins = Number(profile?.coins || 0)
 
@@ -463,8 +503,6 @@ export async function GET(
     }
 
     if (downloadCoinCost > 0) {
-      const adminDb = createAdminDb()
-
       if (!adminDb) {
         return NextResponse.json(
           { error: "Coin system unavailable. Missing service role config." },
@@ -479,6 +517,9 @@ export async function GET(
         p_description: boosted
           ? `Boosted download spend for ${fileOnly.title || fileOnly.slug || fileOnly.id}`
           : `Download spend for ${fileOnly.title || fileOnly.slug || fileOnly.id}`,
+        p_reference: boosted
+          ? `boosted_download_spend:${user.id}:${fileOnly.id}:${Date.now()}`
+          : `download_spend:${user.id}:${fileOnly.id}:${Date.now()}`,
       })
 
       if (spendError) {
@@ -576,4 +617,11 @@ export async function GET(
       { status: 500 }
     )
   }
+}
+
+export async function POST(
+  req: NextRequest,
+  context: { params: Promise<{ fileId: string }> }
+) {
+  return GET(req, context)
 }
