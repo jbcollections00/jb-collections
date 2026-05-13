@@ -512,7 +512,9 @@ export default function DownloadPageClient() {
         file.id
       )
 
-      let res = await fetch(`/api/download/${file.id}?mode=json`, {
+      const downloadApiUrl = `/api/download/${file.id}?mode=json${unlockedFromQuery ? "&unlocked=1" : ""}`
+
+      let res = await fetch(downloadApiUrl, {
         method: "POST",
         headers: {
           accept: "application/json",
@@ -526,7 +528,7 @@ export default function DownloadPageClient() {
       })
 
       if (res.status === 404 || res.status === 405) {
-        res = await fetch(`/api/download/${file.id}?mode=json`, {
+        res = await fetch(downloadApiUrl, {
           method: "GET",
           headers: {
             accept: "application/json",
@@ -552,6 +554,14 @@ export default function DownloadPageClient() {
         showRewardNotice(message, "error")
         setDownloadError(message)
         setStartingDownload(false)
+        return
+      }
+
+      if (data?.redirectUrl) {
+        showRewardNotice("Opening sponsored step...", "info")
+        window.setTimeout(() => {
+          window.location.href = data.redirectUrl
+        }, 450)
         return
       }
 

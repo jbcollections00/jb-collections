@@ -281,6 +281,7 @@ export async function GET(
     const url = new URL(req.url)
     const mode = url.searchParams.get("mode")
     const boosted = url.searchParams.get("boost") === "1"
+    const unlocked = url.searchParams.get("unlocked") === "1"
 
     const referer = req.headers.get("referer") || ""
     const allowedHost = normalizeSiteUrl(String(process.env.NEXT_PUBLIC_SITE_URL || ""))
@@ -480,6 +481,35 @@ export async function GET(
         },
         { status: 403 }
       )
+    }
+
+    const linkvertiseUrl = fileOnly.linkvertise_url?.trim() || ""
+    const shouldUseLinkvertise =
+      !unlocked &&
+      !boosted &&
+      membershipLevel === "standard" &&
+      visibility === "free" &&
+      fileOnly.monetization_enabled !== false &&
+      Boolean(linkvertiseUrl)
+
+    if (shouldUseLinkvertise) {
+      await supabase.from("download_logs").insert({
+        user_id: user.id,
+        file_id: fileOnly.id,
+        file_version_id: currentVersion.id,
+        result: "linkvertise_redirect",
+        ip_address: getClientIp(req),
+        user_agent: req.headers.get("user-agent"),
+      })
+
+      if (mode === "json") {
+        return NextResponse.json({
+          redirectUrl: linkvertiseUrl,
+          requiresMonetization: true,
+        })
+      }
+
+      return NextResponse.redirect(linkvertiseUrl, { status: 302 })
     }
 
     if (downloadCoinCost > 0 && userCoins < downloadCoinCost) {

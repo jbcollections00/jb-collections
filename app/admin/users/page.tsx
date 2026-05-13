@@ -5,6 +5,15 @@ import { useRouter } from "next/navigation"
 import AdminHeader from "@/app/components/AdminHeader"
 import { createClient } from "@/lib/supabase/client"
 
+type UserActivity = {
+  id: string
+  amount: number | null
+  type: string | null
+  description: string | null
+  reference: string | null
+  created_at: string | null
+}
+
 type UserRow = {
   id: string
   email: string | null
@@ -22,6 +31,9 @@ type UserRow = {
   membership_payment_type?: string | null
   membership_started_at?: string | null
   membership_expires_at?: string | null
+  signup_bonus_amount?: number | null
+  signup_bonus_created_at?: string | null
+  recent_activities?: UserActivity[]
 }
 
 type AdminProfile = {
@@ -90,6 +102,18 @@ function formatDateTime(value?: string | null) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "Not set"
   return date.toLocaleString()
+}
+
+function getActivityLabel(type?: string | null) {
+  const value = String(type || "").replace(/_/g, " " ).trim()
+  if (!value) return "Activity"
+  return value.charAt(0).toUpperCase() + value.slice(1)
+}
+
+function getActivityAmount(amount?: number | null) {
+  if (amount === null || amount === undefined) return "—"
+  if (amount > 0) return `+${amount} JB`
+  return `${amount} JB`
 }
 
 function isOnlineNow(user: UserRow) {
@@ -1204,6 +1228,81 @@ export default function AdminUsersPage() {
                         <span className="font-bold text-white">Created At:</span>{" "}
                         {formatDateTime(selectedUser.created_at)}
                       </div>
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard
+                    title="Activity History"
+                    subtitle="Latest coin changes, signup bonus, rewards, and download deductions for this user."
+                  >
+                    <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-[20px] border border-slate-800 bg-slate-950/70 p-4">
+                        <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">
+                          Signup Bonus
+                        </div>
+                        <div className="mt-2 text-2xl font-black text-yellow-300">
+                          {selectedUser.signup_bonus_amount ? `+${selectedUser.signup_bonus_amount} JB` : "No bonus recorded"}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {selectedUser.signup_bonus_created_at
+                            ? formatDateTime(selectedUser.signup_bonus_created_at)
+                            : "Walang signup_bonus record sa coin_history."}
+                        </div>
+                      </div>
+                      <div className="rounded-[20px] border border-slate-800 bg-slate-950/70 p-4">
+                        <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">
+                          Total Records Shown
+                        </div>
+                        <div className="mt-2 text-2xl font-black text-white">
+                          {selectedUser.recent_activities?.length || 0}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">Latest 20 activities from coin_history.</div>
+                      </div>
+                    </div>
+
+                    <div className="max-h-96 overflow-y-auto rounded-[22px] border border-slate-800 bg-slate-950/60">
+                      {selectedUser.recent_activities && selectedUser.recent_activities.length > 0 ? (
+                        <div className="divide-y divide-slate-800">
+                          {selectedUser.recent_activities.map((activity) => (
+                            <div
+                              key={activity.id}
+                              className="grid gap-3 p-4 text-sm sm:grid-cols-[140px_1fr_120px] sm:items-center"
+                            >
+                              <div>
+                                <div className="font-black uppercase tracking-[0.12em] text-cyan-200">
+                                  {getActivityLabel(activity.type)}
+                                </div>
+                                <div className="mt-1 text-xs text-slate-500">
+                                  {formatDateTime(activity.created_at)}
+                                </div>
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-semibold text-slate-200">
+                                  {activity.description || "No description"}
+                                </div>
+                                {activity.reference ? (
+                                  <div className="mt-1 truncate text-xs text-slate-500">
+                                    Reference: {activity.reference}
+                                  </div>
+                                ) : null}
+                              </div>
+                              <div
+                                className={`rounded-2xl border px-4 py-2 text-center font-black ${
+                                  Number(activity.amount || 0) >= 0
+                                    ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-200"
+                                    : "border-rose-400/20 bg-rose-500/10 text-rose-200"
+                                }`}
+                              >
+                                {getActivityAmount(activity.amount)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-6 text-center text-sm text-slate-400">
+                          Wala pang activity record ang user na ito sa coin_history.
+                        </div>
+                      )}
                     </div>
                   </SectionCard>
 
