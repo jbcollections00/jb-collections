@@ -16,8 +16,17 @@ export async function GET(req: Request) {
     const authHeader = req.headers.get("authorization")
 
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+  return NextResponse.json(
+    {
+      error: "Unauthorized",
+      hasCronSecret: Boolean(process.env.CRON_SECRET),
+      cronSecretLength: process.env.CRON_SECRET?.length || 0,
+      receivedHeader: authHeader,
+      receivedHeaderLength: authHeader?.length || 0,
+    },
+    { status: 401 }
+  )
+}
 
     const supabase = createAdmin()
     const now = new Date().toISOString()
