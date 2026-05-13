@@ -328,14 +328,14 @@ export async function POST(
     }
 
     const order = orderResult.order
-    const coinsToCredit = Number(order.coins || 0)
+    const packageCoins = Number(order.coins || 0)
     const amountPhp = Number(order.amount_php ?? order.amount ?? 0)
 
     if (!order.user_id) {
       return NextResponse.json({ error: "Order user is missing." }, { status: 400 })
     }
 
-    if (!coinsToCredit || coinsToCredit <= 0) {
+    if (!packageCoins || packageCoins <= 0) {
       return NextResponse.json({ error: "Invalid coin amount on order." }, { status: 400 })
     }
 
@@ -354,6 +354,31 @@ export async function POST(
         { status: 409 }
       )
     }
+
+    const { count: previousApprovedPurchases, error: previousPurchaseError } =
+      await supabase
+        .from("coin_purchase_orders")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", order.user_id)
+        .in("status", ["credited", "approved"])
+
+    if (previousPurchaseError) {
+      return NextResponse.json(
+        {
+          error:
+            previousPurchaseError.message ||
+            "Failed to check first purchase promo eligibility.",
+        },
+        { status: 500 }
+      )
+    }
+
+    const isFirstPurchasePromo = Number(previousApprovedPurchases || 0) === 0
+    const promoMonths = isFirstPurchasePromo ? 12 : 1
+    const coinsToCredit = packageCoins * promoMonths
+    const promoLabel = isFirstPurchasePromo
+      ? `${order.label || `₱${amountPhp} Package`} - First Purchase Yearly Promo x12`
+      : order.label || `₱${amountPhp} Package`
 
     const targetProfileResult = await readTargetProfile(supabase, order.user_id)
     if (!targetProfileResult.ok) {
@@ -408,7 +433,7 @@ export async function POST(
       orderId: order.id,
       coins: coinsToCredit,
       amountPhp,
-      label: order.label || `₱${amountPhp} Package`,
+      label: promoLabel,
       adminId: user.id,
       paymentMethod: String(order.payment_method || "maya"),
       paymentReference: String(order.payment_reference || order.reference_number || ""),
@@ -417,7 +442,15 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: "Order approved and coins credited successfully.",
+      message: isFirstPurchasePromo
+        ? "Order approved. First purchase yearly promo applied successfully."
+        : "Order approved and coins credited successfully.",
+      promo: {
+        firstPurchasePromoApplied: isFirstPurchasePromo,
+        months: promoMonths,
+        packageCoins,
+        totalCoinsCredited: coinsToCredit,
+      },
     })
   } catch (error) {
     console.error("Admin approve error:", error)
