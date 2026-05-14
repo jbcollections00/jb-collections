@@ -56,10 +56,6 @@ type RewardResult = {
   reason: RewardResultReason
 }
 
-function normalizeSiteUrl(url: string) {
-  return url.trim().replace(/\/$/, "")
-}
-
 function normalizeMembership(profile?: ProfileRow | null): MembershipLevel {
   const role = String(profile?.role || "").trim().toLowerCase()
   const membership = String(profile?.membership || "").trim().toLowerCase()
@@ -284,12 +280,13 @@ export async function GET(
     const unlocked = url.searchParams.get("unlocked") === "1"
 
     const referer = req.headers.get("referer") || ""
-    const allowedHost = normalizeSiteUrl(String(process.env.NEXT_PUBLIC_SITE_URL || ""))
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || req.nextUrl.origin
+    const allowedOrigin = new URL(siteUrl).origin
 
-    if (allowedHost && referer) {
-      const normalizedReferer = referer.replace(/\/$/, "")
+    if (referer) {
+      const refererOrigin = new URL(referer).origin
 
-      if (!normalizedReferer.startsWith(allowedHost)) {
+      if (refererOrigin !== allowedOrigin) {
         return NextResponse.json(
           { error: "Direct download not allowed" },
           { status: 403 }
