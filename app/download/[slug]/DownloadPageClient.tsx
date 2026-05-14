@@ -512,7 +512,14 @@ export default function DownloadPageClient() {
         file.id
       )
 
-      const downloadApiUrl = `/api/download/${file.id}?mode=json${unlockedFromQuery ? "&unlocked=1" : ""}`
+      const shouldSkipAds =
+        membershipLevel === "admin" ||
+        membershipLevel === "premium" ||
+        membershipLevel === "platinum"
+
+      const downloadApiUrl = `/api/download/${file.id}?mode=json${
+        unlockedFromQuery || shouldSkipAds ? "&unlocked=1" : ""
+      }`
 
       let res = await fetch(downloadApiUrl, {
         method: "POST",
