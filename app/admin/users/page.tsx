@@ -372,7 +372,7 @@ export default function AdminUsersPage() {
       const rawUsers = (result?.users as ApiUserRow[]) || []
       const nextUsers: UserRow[] = rawUsers.map((user) => ({
         ...user,
-        coins: Number(user.coins ?? user.jb_points ?? 0),
+        coins: Number(user.jb_points ?? user.coins ?? 0),
       }))
 
       setUsers(nextUsers)
@@ -577,7 +577,14 @@ export default function AdminUsersPage() {
         return
       }
 
-      const updatedCoins = Number(result?.newCoins ?? selectedUser.coins ?? 0)
+      const updatedCoins = Number(
+        result?.newCoins ??
+          result?.newBalance ??
+          result?.coins ??
+          result?.jb_points ??
+          selectedUser.coins ??
+          0
+      )
 
       setSelectedUser((current) =>
         current
@@ -603,6 +610,7 @@ export default function AdminUsersPage() {
       setEditCoins("")
       setCoinReason("")
       setCoinOperation("add")
+      await loadUsers(false)
     } catch (error) {
       console.error("Apply coin adjustment error:", error)
       setCoinErrorMessage("Failed to adjust JB Coins.")

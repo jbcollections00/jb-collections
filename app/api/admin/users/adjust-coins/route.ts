@@ -14,7 +14,7 @@ type RequestBody = {
 type ProfileRow = {
   id: string
   role?: string | null
-  coins?: number | null
+  jb_points?: number | null
   full_name?: string | null
   name?: string | null
   email?: string | null
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
 
     const { data: targetProfile, error: targetProfileError } = await adminDb
       .from("profiles")
-      .select("id, coins, full_name, name, email")
+      .select("id, jb_points, full_name, name, email")
       .eq("id", userId)
       .single()
 
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     }
 
     const profile = targetProfile as ProfileRow
-    const currentCoins = Number(profile.coins || 0)
+    const currentCoins = Number(profile.jb_points || 0)
 
     let nextCoins = currentCoins
     let transactionAmount = 0
@@ -127,10 +127,10 @@ export async function POST(req: NextRequest) {
     const { data: updatedProfile, error: updateError } = await adminDb
       .from("profiles")
       .update({
-        coins: nextCoins,
+        jb_points: nextCoins,
       })
       .eq("id", userId)
-      .select("coins")
+      .select("jb_points")
       .single()
 
     if (updateError || !updatedProfile) {
@@ -172,7 +172,7 @@ export async function POST(req: NextRequest) {
         await adminDb
           .from("profiles")
           .update({
-            coins: currentCoins,
+            jb_points: currentCoins,
           })
           .eq("id", userId)
 
