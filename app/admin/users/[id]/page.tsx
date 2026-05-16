@@ -15,9 +15,13 @@ type User = {
   account_status?: string | null
   status?: string | null
   is_premium?: boolean | null
-  jb_points?: number | null
+  coins?: number | null
   last_seen?: string | null
   created_at?: string | null
+}
+
+type ApiUser = User & {
+  jb_points?: number | null
 }
 
 type AdjustOperation = "add" | "subtract" | "set"
@@ -61,7 +65,16 @@ export default function AdminUserViewPage() {
         return
       }
 
-      setUser((result?.user as User) || null)
+      const rawUser = (result?.user as ApiUser) || null
+
+      setUser(
+        rawUser
+          ? {
+              ...rawUser,
+              coins: Number(rawUser.coins ?? rawUser.jb_points ?? 0),
+            }
+          : null
+      )
     } catch (err) {
       console.error(err)
       setError("Failed to load user.")
@@ -131,7 +144,7 @@ export default function AdminUserViewPage() {
         prev
           ? {
               ...prev,
-              jb_points: Number(result?.newCoins ?? prev.jb_points ?? 0),
+              coins: Number(result?.newCoins ?? prev.coins ?? 0),
             }
           : prev
       )
@@ -255,7 +268,7 @@ export default function AdminUserViewPage() {
             <div>
               <div className="text-sm font-bold text-slate-500">JB Coins</div>
               <div className="mt-1 text-base font-semibold text-slate-900">
-                {Number(user.jb_points || 0).toLocaleString()}
+                {Number(user.coins || 0).toLocaleString()}
               </div>
             </div>
 

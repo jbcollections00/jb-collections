@@ -36,6 +36,11 @@ type UserRow = {
   recent_activities?: UserActivity[]
 }
 
+type ApiUserRow = Omit<UserRow, "coins"> & {
+  coins?: number | null
+  jb_points?: number | null
+}
+
 type AdminProfile = {
   role?: string | null
 }
@@ -364,7 +369,12 @@ export default function AdminUsersPage() {
         return
       }
 
-      const nextUsers = (result?.users as UserRow[]) || []
+      const rawUsers = (result?.users as ApiUserRow[]) || []
+      const nextUsers: UserRow[] = rawUsers.map((user) => ({
+        ...user,
+        coins: Number(user.coins ?? user.jb_points ?? 0),
+      }))
+
       setUsers(nextUsers)
 
       setSelectedUser((current) => {
