@@ -1,4 +1,6 @@
-import Link from "next/link"
+"use client"
+
+import { useRouter } from "next/navigation"
 
 const floatingCoins = [
   {
@@ -36,6 +38,21 @@ const floatingCoins = [
 ]
 
 export default function HomePage() {
+  const router = useRouter()
+
+  const handleContinue = () => {
+    // Check if user is logged in via cookies, localStorage, or auth session
+    const isLoggedIn = 
+      typeof window !== "undefined" && 
+      (localStorage.getItem("token") !== null || localStorage.getItem("user") !== null)
+
+    if (isLoggedIn) {
+      router.push("/dashboard")
+    } else {
+      router.push("/login")
+    }
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white flex items-center justify-center">
       <div className="absolute inset-0 bg-[linear-gradient(135deg,#020617_0%,#0f172a_40%,#111827_100%)]" />
@@ -77,11 +94,7 @@ export default function HomePage() {
       <main className="relative z-10 w-full max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="relative w-full overflow-hidden rounded-[34px] border border-white/10 bg-white/10 p-8 text-center shadow-[0_20px_100px_rgba(0,0,0,0.50)] backdrop-blur-xl sm:p-12 lg:p-16">
           
-          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
-            Premium Digital Platform
-          </div>
-
-          <div className="mt-8 flex flex-col items-center justify-center gap-3">
+          <div className="mt-4 flex flex-col items-center justify-center gap-3">
             <img
               src="/jb-logo.png"
               alt="JB Collections Logo"
@@ -90,9 +103,6 @@ export default function HomePage() {
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.25em] text-slate-300">
                 JB Collections
-              </p>
-              <p className="text-xs text-slate-400 sm:text-sm">
-                Premium-ready file download platform
               </p>
             </div>
           </div>
@@ -110,19 +120,12 @@ export default function HomePage() {
           </p>
 
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Link
-              href="/signup"
-              className="animate-gradient-x inline-flex h-14 w-full sm:w-auto items-center justify-center rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-500 to-indigo-600 bg-[length:200%_200%] px-10 text-base font-bold text-white shadow-[0_10px_30px_rgba(37,99,235,0.35)] transition duration-300 hover:scale-[1.03]"
+            <button
+              onClick={handleContinue}
+              className="animate-gradient-x inline-flex h-14 w-full sm:w-64 items-center justify-center rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-500 to-indigo-600 bg-[length:200%_200%] px-10 text-base font-bold text-white shadow-[0_10px_30px_rgba(37,99,235,0.35)] transition duration-300 hover:scale-[1.03]"
             >
-              Create Account
-            </Link>
-
-            <Link
-              href="/login"
-              className="inline-flex h-14 w-full sm:w-auto items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-10 text-base font-bold text-white backdrop-blur-md transition duration-300 hover:scale-[1.03]"
-            >
-              Login
-            </Link>
+              Continue
+            </button>
           </div>
 
         </div>
