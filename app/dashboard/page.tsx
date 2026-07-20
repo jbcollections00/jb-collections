@@ -33,12 +33,14 @@ type HomeFile = {
   downloads_count?: number | null
   created_at?: string | null
   visibility?: "free" | "premium" | "private" | null
+  user_name?: string | null
 }
 
 type HomeSectionsResponse = {
   trending?: HomeFile[]
   top?: HomeFile[]
   latest?: HomeFile[]
+  recent_downloads?: HomeFile[]
 }
 
 type CurrentUserProfile = {
@@ -219,7 +221,7 @@ function getProgressPercent(current: number, min: number, max: number) {
   return Math.round(((current - min) / range) * 100)
 }
 
-function HomeFileCard({ file }: { file: HomeFile }) {
+function HomeFileCard({ file, rank }: { file: HomeFile; rank?: number }) {
   const image = getFileImage(file)
   const title = getFileTitle(file)
   const downloadCount = Number(file.downloads_count || 0)
@@ -229,6 +231,12 @@ function HomeFileCard({ file }: { file: HomeFile }) {
   return (
     <div className="group relative overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.045] shadow-[0_14px_36px_rgba(0,0,0,0.28)] backdrop-blur-sm transition duration-300 hover:-translate-y-1.5 hover:border-cyan-400/40 hover:bg-white/[0.07] hover:shadow-[0_24px_60px_rgba(37,99,235,0.24)]">
       <div className="pointer-events-none absolute inset-x-6 top-0 h-24 bg-cyan-400/10 blur-3xl opacity-0 transition duration-300 group-hover:opacity-100" />
+
+      {rank ? (
+        <div className="absolute top-3 right-3 z-10 bg-amber-500 text-slate-950 font-black text-xs px-2.5 py-1 rounded-full shadow-lg">
+          #{rank}
+        </div>
+      ) : null}
 
       <div className="relative aspect-[3/4] overflow-hidden bg-slate-900/60">
         {image ? (
@@ -264,9 +272,15 @@ function HomeFileCard({ file }: { file: HomeFile }) {
           {title}
         </h3>
 
-        <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-300">
-          {file.description?.trim() || "Open this file to view details and download it."}
-        </p>
+        {file.user_name ? (
+          <p className="mt-2 text-xs text-cyan-300 truncate font-medium">
+            Downloaded by <strong className="text-white">{file.user_name}</strong>
+          </p>
+        ) : (
+          <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-300">
+            {file.description?.trim() || "Open this file to view details and download it."}
+          </p>
+        )}
 
         <Link
           href={getFileHref(file)}
@@ -368,6 +382,8 @@ function FileSection({
   emptyMessage,
   badge,
   variant = "standard",
+  showRank = false,
+  maxItems = 5,
 }: {
   title: string
   subtitle: string
@@ -376,6 +392,8 @@ function FileSection({
   emptyMessage: string
   badge?: string
   variant?: "standard" | "hot" | "curated" | "fresh"
+  showRank?: boolean
+  maxItems?: number
 }) {
   const variantClass =
     variant === "hot"
@@ -386,13 +404,15 @@ function FileSection({
           ? "bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.08),transparent_32%),rgba(255,255,255,0.02)]"
           : "bg-transparent"
 
+  const displayedFiles = files.slice(0, maxItems)
+
   return (
-    <section className={`mt-12 overflow-hidden rounded-[30px] border border-white/5 p-5 sm:p-6 ${variantClass}`}>
-      <SectionHeader title={title} subtitle={subtitle} count={files.length} badge={badge} />
+    <section className={`mt-10 overflow-hidden rounded-[30px] border border-white/5 p-5 sm:p-6 ${variantClass}`}>
+      <SectionHeader title={title} subtitle={subtitle} count={displayedFiles.length} badge={badge} />
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
-          {Array.from({ length: 10 }).map((_, index) => (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+          {Array.from({ length: maxItems }).map((_, index) => (
             <div
               key={index}
               className="overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.05] shadow-[0_10px_30px_rgba(0,0,0,0.25)]"
@@ -406,14 +426,14 @@ function FileSection({
             </div>
           ))}
         </div>
-      ) : files.length === 0 ? (
+      ) : displayedFiles.length === 0 ? (
         <div className="rounded-[24px] border border-dashed border-white/15 bg-white/[0.03] px-6 py-10 text-center text-sm font-medium text-slate-300">
           {emptyMessage}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
-          {files.map((file) => (
-            <HomeFileCard key={file.id} file={file} />
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+          {displayedFiles.map((file, idx) => (
+            <HomeFileCard key={file.id} file={file} rank={showRank ? idx + 1 : undefined} />
           ))}
         </div>
       )}
@@ -432,8 +452,9 @@ function DashboardPageContent() {
 
   const [sectionsLoading, setSectionsLoading] = useState(true)
   const [, setTrendingFiles] = useState<HomeFile[]>([])
-  const [, setTopFiles] = useState<HomeFile[]>([])
+  const [topFiles, setTopFiles] = useState<HomeFile[]>([])
   const [latestFiles, setLatestFiles] = useState<HomeFile[]>([])
+  const [recentDownloads, setRecentDownloads] = useState<HomeFile[]>([])
 
   const [currentUserProfile, setCurrentUserProfile] = useState<CurrentUserProfile | null>(null)
   const [onlineMembers, setOnlineMembers] = useState<MemberItem[]>([])
@@ -541,11 +562,13 @@ function DashboardPageContent() {
       setTrendingFiles(Array.isArray(data.trending) ? data.trending : [])
       setTopFiles(Array.isArray(data.top) ? data.top : [])
       setLatestFiles(Array.isArray(data.latest) ? data.latest : [])
+      setRecentDownloads(Array.isArray(data.recent_downloads) ? data.recent_downloads : [])
     } catch (error) {
       console.error("Error fetching homepage sections:", error)
       setTrendingFiles([])
       setTopFiles([])
       setLatestFiles([])
+      setRecentDownloads([])
     }
   }
 
@@ -764,6 +787,32 @@ function DashboardPageContent() {
             </div>
 
             <div className="px-5 py-6 sm:px-6 sm:py-7 lg:px-8">
+              {/* ⚡ SECTION: Recent Member Downloads (Single Line - Max 5) */}
+              <FileSection
+                title="⚡ Recent Activity"
+                subtitle="Live downloads from community members."
+                files={recentDownloads}
+                loading={sectionsLoading}
+                emptyMessage="⚡ No recent download activity recorded yet."
+                badge="Activity"
+                variant="curated"
+                maxItems={5}
+              />
+
+              {/* 🔥 SECTION: Top 5 Downloaded Files (Single Line - Max 5) */}
+              <FileSection
+                title="🔥 Top Downloaded"
+                subtitle="Most popular files downloaded across the platform."
+                files={topFiles}
+                loading={sectionsLoading}
+                emptyMessage="🔥 No top downloaded files yet."
+                badge="Top 5"
+                variant="hot"
+                showRank={true}
+                maxItems={5}
+              />
+
+              {/* 🆕 SECTION: New Uploads */}
               <FileSection
                 title="🆕 New Uploads"
                 subtitle="Fresh files recently added to your website."
@@ -772,6 +821,7 @@ function DashboardPageContent() {
                 emptyMessage="🆕 No new uploads yet. Your latest content will appear here automatically."
                 badge="Fresh"
                 variant="fresh"
+                maxItems={5}
               />
 
               <section className="mt-12">
