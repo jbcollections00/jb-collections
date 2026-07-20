@@ -1,4 +1,3 @@
-
 "use client"
 
 import Link from "next/link"
@@ -233,20 +232,6 @@ function formatHistoryDate(value?: string | null) {
   }).format(date)
 }
 
-function formatShortDate(value?: string | null) {
-  if (!value) return "Recently"
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Recently"
-
-  return new Intl.DateTimeFormat("en-PH", {
-    timeZone: "Asia/Manila",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date)
-}
-
 function parseDownloadedFileTitle(description?: string | null, fallbackIndex = 0) {
   const raw = String(description || "").trim()
   if (!raw) return `Downloaded file ${fallbackIndex + 1}`
@@ -297,29 +282,6 @@ function SectionCard({
   )
 }
 
-function StatCard({
-  label,
-  value,
-  hint,
-  icon,
-}: {
-  label: string
-  value: string
-  hint?: string
-  icon?: string
-}) {
-  return (
-    <div className="w-full rounded-[24px] border border-white/10 bg-slate-900/80 p-4 shadow-sm ring-1 ring-white/5 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.25)]">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-xs uppercase tracking-[0.16em] text-slate-400">{label}</p>
-        {icon ? <span className="text-lg">{icon}</span> : null}
-      </div>
-      <p className="mt-2 truncate text-xl font-black text-white sm:text-2xl">{value}</p>
-      {hint ? <p className="mt-2 text-xs text-slate-500">{hint}</p> : null}
-    </div>
-  )
-}
-
 function DetailCard({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-slate-950 p-4 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.18)]">
@@ -328,7 +290,6 @@ function DetailCard({ label, children }: { label: string; children: ReactNode })
     </div>
   )
 }
-
 
 export default function ProfilePageClient() {
   const supabase = useMemo(() => createClient(), [])
@@ -1169,7 +1130,6 @@ export default function ProfilePageClient() {
     }
   }
 
-
   const successParam = searchParams?.get("success") ?? ""
   const errorParam = searchParams?.get("error") ?? ""
 
@@ -1218,10 +1178,6 @@ export default function ProfilePageClient() {
   const nextMilestone = dailyRewardStatus?.nextMilestone || null
   const todayRewardCoins = Number(dailyRewardStatus?.coins || baseCoins + streakBonus || 15)
 
-  const hasPremiumAccess =
-    membershipLevel === "premium" || membershipLevel === "platinum" || membershipLevel === "admin"
-  const hasPlatinumAccess = membershipLevel === "platinum" || membershipLevel === "admin"
-
   const canRedeemPremium =
     membershipLevel !== "admin" &&
     membershipLevel !== "premium" &&
@@ -1233,8 +1189,6 @@ export default function ProfilePageClient() {
 
   const premiumCoinsNeeded = Math.max(0, 3000 - jbPoints)
   const platinumCoinsNeeded = Math.max(0, 4000 - jbPoints)
-
-  const reactionTotal = profileViewStats.views + profileViewStats.visitors + downloadsHistory.length
 
   const derivedReactions = useMemo<SocialReaction[]>(
     () => [
@@ -1307,35 +1261,6 @@ export default function ProfilePageClient() {
     [activityFeed, showAllActivityFeed]
   )
 
-  const walletLedgerItems = useMemo(
-    () =>
-      coinHistory.slice(0, 3).map((item) => {
-        const amount = Number(item.amount || 0)
-        const isEarn = amount >= 0
-        return {
-          id: item.id,
-          label: formatCoinAction(item.type, item.description),
-          amountLabel: `${isEarn ? "+" : ""}${amount.toLocaleString()} 🪙`,
-          amountClass: isEarn ? "text-emerald-200" : "text-red-300",
-        }
-      }),
-    [coinHistory]
-  )
-
-  const walletLedgerTotals = useMemo(() => {
-    const credits = coinHistory.reduce((sum, item) => {
-      const amount = Number(item.amount || 0)
-      return amount > 0 ? sum + amount : sum
-    }, 0)
-
-    const debits = coinHistory.reduce((sum, item) => {
-      const amount = Number(item.amount || 0)
-      return amount < 0 ? sum + Math.abs(amount) : sum
-    }, 0)
-
-    return { credits, debits }
-  }, [coinHistory])
-
   const gamerTitle =
     membershipLevel === "admin"
       ? "System Commander"
@@ -1346,30 +1271,6 @@ export default function ProfilePageClient() {
           : "Rising Collector"
 
   const hasMoreDownloads = downloadsHistory.length > 5
-  const walletEntryCount = coinHistory.length
-
-  const achievementCards = [
-    {
-      icon: "🏆",
-      label: "Wallet Power",
-      value: `${jbPoints.toLocaleString()} coins`,
-    },
-    {
-      icon: "👁",
-      label: "Public Reach",
-      value: `${profileViewStats.views.toLocaleString()} views`,
-    },
-    {
-      icon: "⬇️",
-      label: "Downloads",
-      value: `${downloadsHistory.length.toLocaleString()} recent`,
-    },
-    {
-      icon: "🔥",
-      label: "Current Streak",
-      value: `${streak} day${streak === 1 ? "" : "s"}`,
-    },
-  ]
 
   if (loading) {
     return (
@@ -1379,14 +1280,6 @@ export default function ProfilePageClient() {
           <div className="mx-auto w-full max-w-md px-3 pb-10 sm:max-w-2xl sm:px-4 lg:max-w-7xl">
             <div className="h-56 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
             <div className="-mt-14 h-72 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
-            <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="h-24 animate-pulse rounded-[24px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5"
-                />
-              ))}
-            </div>
             <div className="mt-6 h-80 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
           </div>
         </div>
@@ -1486,7 +1379,6 @@ export default function ProfilePageClient() {
           }
           100% {
             transform: scale(1);
-            opacity: 1;
           }
         }
 
@@ -1606,55 +1498,6 @@ export default function ProfilePageClient() {
                     <h1 className="mt-3 truncate text-3xl font-black text-white sm:text-4xl">{displayName}</h1>
                     <p className="mt-1 text-sm font-semibold text-cyan-100">{displayEmail}</p>
                     <p className="mt-1 text-xs uppercase tracking-[0.2em] text-cyan-100/70">{displayStatus}</p>
-
-                    <div className="mt-4 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
-                      {achievementCards.map((item) => (
-                        <div
-                          key={item.label}
-                          className="rounded-2xl border border-white/15 bg-black/20 px-3 py-2 text-white backdrop-blur"
-                        >
-                          <p className="text-xs uppercase tracking-wide text-white/60">
-                            {item.icon} {item.label}
-                          </p>
-                          <p className="mt-1 text-sm font-black">{item.value}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  className={`w-full min-w-0 lg:w-[380px] rounded-[28px] border border-amber-300/20 bg-black/20 p-4 sm:p-5 text-white shadow-2xl backdrop-blur ${
-                    walletPulse ? "wallet-pulse" : ""
-                  } ${walletShake ? "wallet-shake" : ""}`}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.2em] text-amber-100/80">JB Coin Wallet</p>
-                      <div className="mt-2 flex items-center gap-3">
-                        <span className="coin-float text-4xl">🪙</span>
-                        <div>
-                          <p className="text-4xl font-black text-amber-200">{jbPoints.toLocaleString()}</p>
-                          <p className="text-sm font-semibold text-amber-100/80">Real balance from wallet</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/70">Recent Credits</p>
-                      <p className="mt-1 text-lg font-black text-emerald-200">+{walletLedgerTotals.credits.toLocaleString()} 🪙</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/70">Recent Debits</p>
-                      <p className="mt-1 text-lg font-black text-red-300">-{walletLedgerTotals.debits.toLocaleString()} 🪙</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/70">Wallet Activity</p>
-                    <p className="mt-1 text-sm font-semibold text-white/90">{walletEntryCount.toLocaleString()} real wallet entr{walletEntryCount === 1 ? "y" : "ies"} recorded.</p>
                   </div>
                 </div>
               </div>
@@ -1687,29 +1530,6 @@ export default function ProfilePageClient() {
               </div>
             </div>
           </section>
-
-          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <StatCard label="JB Coins" value={jbPoints.toLocaleString()} hint="Your current balance" icon="🪙" />
-            <StatCard
-              label="Daily Streak"
-              value={`${streak} Day${streak === 1 ? "" : "s"}`}
-              hint="Keep claiming every day"
-              icon="🔥"
-            />
-            <StatCard
-              label="Profile Views"
-              value={viewStatsLoading ? "Loading..." : profileViewStats.views.toLocaleString()}
-              hint="Total public profile views"
-              icon="👁"
-            />
-            <StatCard
-              label="Unique Visitors"
-              value={viewStatsLoading ? "Loading..." : profileViewStats.visitors.toLocaleString()}
-              hint="Different people who visited"
-              icon="🌐"
-            />
-            <StatCard label="Activity Total" value={reactionTotal.toLocaleString()} hint="Views, visitors, and downloads" icon="📦" />
-          </div>
 
           <div className="mt-6 grid grid-cols-1 gap-3 sm:flex sm:flex-wrap">
             <button type="button" onClick={() => setActiveTab("overview")} className={tabClass(activeTab === "overview")}>
@@ -1815,234 +1635,227 @@ export default function ProfilePageClient() {
           ) : null}
 
           {activeTab === "overview" ? (
-            <div className="mt-6 grid w-full gap-6 lg:grid-cols-[1.35fr,0.95fr]">
-              <div className="space-y-6">
-                <SectionCard
-                  title="Profile Identity"
-                  subtitle="A simpler identity block with the important profile details only."
-                >
-                  <div className="rounded-[24px] border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(15,23,42,0.95))] p-5">
-                    <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">Bio Highlight</p>
+            <div className="mt-6 flex flex-col gap-6">
+              <SectionCard title="Profile Identity">
+                <div className="rounded-[24px] border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(15,23,42,0.95))] p-5">
+                  <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">Bio Highlight</p>
+                  {profile?.bio?.trim() ? (
                     <p className="mt-3 text-lg font-bold leading-relaxed text-white">
-                      {profile?.bio?.trim()
-                        ? profile.bio
-                        : "Collector profile powered by JB Coins, daily streaks, downloads, and premium progression."}
+                      {profile.bio}
                     </p>
+                  ) : null}
 
-                    <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <p className="text-xs uppercase tracking-wide text-slate-400">Profile Type</p>
-                        <p className="mt-2 text-base font-black text-white">{gamerTitle}</p>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <p className="text-xs uppercase tracking-wide text-slate-400">Membership</p>
-                        <p className="mt-2 text-base font-black text-white">{displayMembership}</p>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <p className="text-xs uppercase tracking-wide text-slate-400">Downloads</p>
-                        <p className="mt-2 text-base font-black text-white">{downloadsHistory.length.toLocaleString()} recorded</p>
-                      </div>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <p className="text-xs uppercase tracking-wide text-slate-400">Profile Type</p>
+                      <p className="mt-2 text-base font-black text-white">{gamerTitle}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <p className="text-xs uppercase tracking-wide text-slate-400">Membership</p>
+                      <p className="mt-2 text-base font-black text-white">{displayMembership}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <p className="text-xs uppercase tracking-wide text-slate-400">Downloads</p>
+                      <p className="mt-2 text-base font-black text-white">{downloadsHistory.length.toLocaleString()} recorded</p>
                     </div>
                   </div>
-                </SectionCard>
+                </div>
+              </SectionCard>
 
-                <SectionCard
-                  title="JB Coins Engine"
-                  subtitle="Make the economy obvious. Spending, earning, and value are shown clearly here."
-                >
-                  <div className="grid gap-4 lg:grid-cols-[1.05fr,0.95fr]">
-                    <div className="space-y-4">
-                      <div className="rounded-[24px] border border-amber-400/20 bg-[linear-gradient(135deg,rgba(251,191,36,0.18),rgba(15,23,42,0.92))] p-5">
-                        <p className="text-xs uppercase tracking-[0.16em] text-amber-200">Daily Reward</p>
-                        <h3 className="mt-2 text-3xl font-black text-white">+{todayRewardCoins.toLocaleString()} JB Coins</h3>
-                        <p className="mt-2 text-sm text-amber-100/80">
-                          Base reward: +{baseCoins.toLocaleString()} • Streak bonus: +{streakBonus.toLocaleString()}
-                        </p>
+              <SectionCard title="JB Coins Engine">
+                <div className="grid gap-4 lg:grid-cols-[1.05fr,0.95fr]">
+                  <div className="space-y-4">
+                    <div className="rounded-[24px] border border-amber-400/20 bg-[linear-gradient(135deg,rgba(251,191,36,0.18),rgba(15,23,42,0.92))] p-5">
+                      <p className="text-xs uppercase tracking-[0.16em] text-amber-200">Daily Reward</p>
+                      <h3 className="mt-2 text-3xl font-black text-white">+{todayRewardCoins.toLocaleString()} JB Coins</h3>
+                      <p className="mt-2 text-sm text-amber-100/80">
+                        Base reward: +{baseCoins.toLocaleString()} • Streak bonus: +{streakBonus.toLocaleString()}
+                      </p>
 
-                        <button
-                          type="button"
-                          onClick={() => void handleClaimDailyReward()}
-                          disabled={Boolean(dailyRewardStatus?.claimed || dailyRewardStatus?.alreadyClaimed || streakLoading)}
-                          className="mt-5 w-full rounded-2xl bg-amber-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {streakLoading
-                            ? "Loading..."
-                            : dailyRewardStatus?.claimed || dailyRewardStatus?.alreadyClaimed
-                              ? "Already claimed today"
-                              : `Claim +${todayRewardCoins.toLocaleString()} JB Coins`}
-                        </button>
-
-                        {dailyRewardStatus?.nextClaimDate ? (
-                          <p className="mt-3 text-xs text-slate-300">Next claim: {dailyRewardStatus.nextClaimDate}</p>
-                        ) : null}
-                      </div>
-
-                      <div className="rounded-[24px] border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(15,23,42,0.95))] p-5">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">Account Redemption</p>
-                            <h3 className="mt-2 text-2xl font-black text-white">Upgrade with JB Coins</h3>
-                            <p className="mt-2 text-sm text-slate-300">Premium costs 3,000 coins. Platinum costs 4,000 coins.</p>
-                          </div>
-                          <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-black text-white">{jbPoints.toLocaleString()} 🪙</span>
-                        </div>
-
-                        <div className="mt-4 grid gap-3">
-                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                            <div className="flex items-center justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-black text-white">Premium</p>
-                                <p className="mt-1 text-xs text-slate-300">3,000 coins</p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => void handleRedeem("premium")}
-                                disabled={redeemingPlan !== null || !canRedeemPremium}
-                                className="rounded-2xl bg-cyan-400 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {redeemingPlan === "premium" ? "Redeeming..." : canRedeemPremium ? "Redeem" : "Locked"}
-                              </button>
-                            </div>
-                            {!canRedeemPremium ? (
-                              <p className="mt-2 text-xs text-slate-400">Need {premiumCoinsNeeded.toLocaleString()} more coins.</p>
-                            ) : null}
-                          </div>
-
-                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                            <div className="flex items-center justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-black text-white">Platinum</p>
-                                <p className="mt-1 text-xs text-slate-300">4,000 coins</p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => void handleRedeem("platinum")}
-                                disabled={redeemingPlan !== null || !canRedeemPlatinum}
-                                className="rounded-2xl bg-white px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {redeemingPlan === "platinum" ? "Redeeming..." : canRedeemPlatinum ? "Redeem" : "Locked"}
-                              </button>
-                            </div>
-                            {!canRedeemPlatinum ? (
-                              <p className="mt-2 text-xs text-slate-400">Need {platinumCoinsNeeded.toLocaleString()} more coins.</p>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-[24px] border border-orange-400/20 bg-[linear-gradient(135deg,rgba(251,146,60,0.14),rgba(239,68,68,0.08),rgba(15,23,42,0.9))] p-5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.16em] text-orange-200">Daily Streak</p>
-                          <h3 className="mt-1 text-3xl font-black text-white">🔥 {streak} Day{streak === 1 ? "" : "s"}</h3>
-                        </div>
-                        {streakLoading ? <span className="text-xs font-bold text-orange-200">Loading...</span> : null}
-                      </div>
-
-                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <p className="text-xs uppercase tracking-wide text-slate-400">Base Daily Reward</p>
-                          <p className="mt-2 text-xl font-black text-amber-300">+{baseCoins} JB Coins</p>
-                        </div>
-
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <p className="text-xs uppercase tracking-wide text-slate-400">Today's Streak Bonus</p>
-                          <p className="mt-2 text-xl font-black text-emerald-300">+{streakBonus} JB Coins</p>
-                        </div>
-                      </div>
-
-                      {nextMilestone?.target ? (
-                        <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <p className="text-xs uppercase tracking-wide text-slate-400">Next Milestone</p>
-                          <p className="mt-2 text-base font-bold text-white">
-                            Reach {Number(nextMilestone.target).toLocaleString()} days to unlock +{Number(nextMilestone.bonus || 0).toLocaleString()} bonus coins.
-                          </p>
-                          <p className="mt-1 text-sm text-slate-300">
-                            Remaining: {Number(nextMilestone.remaining || 0).toLocaleString()} day(s)
-                          </p>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                </SectionCard>
-
-                <SectionCard
-                  title="Downloads History"
-                   action={
-                    hasMoreDownloads ? (
                       <button
                         type="button"
-                        onClick={() => setShowAllDownloads((prev) => !prev)}
-                        className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-white transition hover:bg-white/10"
+                        onClick={() => void handleClaimDailyReward()}
+                        disabled={Boolean(dailyRewardStatus?.claimed || dailyRewardStatus?.alreadyClaimed || streakLoading)}
+                        className="mt-5 w-full rounded-2xl bg-amber-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {showAllDownloads ? "Show less" : `Show more (${downloadsHistory.length - 5})`}
+                        {streakLoading
+                          ? "Loading..."
+                          : dailyRewardStatus?.claimed || dailyRewardStatus?.alreadyClaimed
+                            ? "Already claimed today"
+                            : `Claim +${todayRewardCoins.toLocaleString()} JB Coins`}
                       </button>
-                    ) : null
-                  }
-                >
-                  {downloadsLoading ? (
-                    <div className="space-y-3">
-                      {Array.from({ length: 3 }).map((_, index) => (
-                        <div key={index} className="h-24 animate-pulse rounded-2xl border border-white/10 bg-slate-950" />
-                      ))}
-                    </div>
-                  ) : downloadsHistory.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950 p-6 text-sm font-semibold text-slate-400">
-                      No downloads yet. Once this user downloads files, they will appear here.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-                      {visibleDownloadsHistory.map((item, index) => {
-                        const cardContent = (
-                          <>
-                            <div className="relative aspect-[3/4] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.20),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.65),rgba(2,6,23,0.98))]">
-                              {item.preview ? (
-                                <img
-                                  src={item.preview}
-                                  alt={item.title}
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : (
-                                <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-4 text-center">
-                                  <div className="flex h-16 w-16 items-center justify-center rounded-[20px] border border-cyan-400/20 bg-cyan-500/10 text-3xl shadow-[0_0_30px_rgba(34,211,238,0.18)]">
-                                    ⬇️
-                                  </div>
-                                  <p className="line-clamp-3 text-sm font-black text-white">{item.title}</p>
-                                </div>
-                              )}
-                            </div>
 
-                            <div className="border-t border-white/10 px-4 py-3">
-                              <p className="line-clamp-2 text-sm font-black text-white">{item.title}</p>
-                            </div>
-                          </>
-                        )
+                      {dailyRewardStatus?.nextClaimDate ? (
+                        <p className="mt-3 text-xs text-slate-300">Next claim: {dailyRewardStatus.nextClaimDate}</p>
+                      ) : null}
+                    </div>
 
-                        return item.href ? (
-                          <Link
-                            key={`${item.id}-${index}`}
-                            href={item.href}
-                            className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.22)]"
-                          >
-                            {cardContent}
-                          </Link>
-                        ) : (
-                          <div
-                            key={`${item.id}-${index}`}
-                            className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.22)]"
-                          >
-                            {cardContent}
+                    <div className="rounded-[24px] border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(15,23,42,0.95))] p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">Account Redemption</p>
+                          <h3 className="mt-2 text-2xl font-black text-white">Upgrade with JB Coins</h3>
+                        </div>
+                        <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-black text-white">{jbPoints.toLocaleString()} 🪙</span>
+                      </div>
+
+                      <div className="mt-4 grid gap-3">
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-black text-white">Premium</p>
+                              <p className="mt-1 text-xs text-slate-300">3,000 coins</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void handleRedeem("premium")}
+                              disabled={redeemingPlan !== null || !canRedeemPremium}
+                              className="rounded-2xl bg-cyan-400 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {redeemingPlan === "premium" ? "Redeeming..." : canRedeemPremium ? "Redeem" : "Locked"}
+                            </button>
                           </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </SectionCard>
+                          {!canRedeemPremium ? (
+                            <p className="mt-2 text-xs text-slate-400">Need {premiumCoinsNeeded.toLocaleString()} more coins.</p>
+                          ) : null}
+                        </div>
 
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-black text-white">Platinum</p>
+                              <p className="mt-1 text-xs text-slate-300">4,000 coins</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void handleRedeem("platinum")}
+                              disabled={redeemingPlan !== null || !canRedeemPlatinum}
+                              className="rounded-2xl bg-white px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {redeemingPlan === "platinum" ? "Redeeming..." : canRedeemPlatinum ? "Redeem" : "Locked"}
+                            </button>
+                          </div>
+                          {!canRedeemPlatinum ? (
+                            <p className="mt-2 text-xs text-slate-400">Need {platinumCoinsNeeded.toLocaleString()} more coins.</p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[24px] border border-orange-400/20 bg-[linear-gradient(135deg,rgba(251,146,60,0.14),rgba(239,68,68,0.08),rgba(15,23,42,0.9))] p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.16em] text-orange-200">Daily Streak</p>
+                        <h3 className="mt-1 text-3xl font-black text-white">🔥 {streak} Day{streak === 1 ? "" : "s"}</h3>
+                      </div>
+                      {streakLoading ? <span className="text-xs font-bold text-orange-200">Loading...</span> : null}
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Base Daily Reward</p>
+                        <p className="mt-2 text-xl font-black text-amber-300">+{baseCoins} JB Coins</p>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Today's Streak Bonus</p>
+                        <p className="mt-2 text-xl font-black text-emerald-300">+{streakBonus} JB Coins</p>
+                      </div>
+                    </div>
+
+                    {nextMilestone?.target ? (
+                      <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Next Milestone</p>
+                        <p className="mt-2 text-base font-bold text-white">
+                          Reach {Number(nextMilestone.target).toLocaleString()} days to unlock +{Number(nextMilestone.bonus || 0).toLocaleString()} bonus coins.
+                        </p>
+                        <p className="mt-1 text-sm text-slate-300">
+                          Remaining: {Number(nextMilestone.remaining || 0).toLocaleString()} day(s)
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard
+                title="Downloads History"
+                action={
+                  hasMoreDownloads ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllDownloads((prev) => !prev)}
+                      className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-white transition hover:bg-white/10"
+                    >
+                      {showAllDownloads ? "Show less" : `Show more (${downloadsHistory.length - 5})`}
+                    </button>
+                  ) : null
+                }
+              >
+                {downloadsLoading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <div key={index} className="h-24 animate-pulse rounded-2xl border border-white/10 bg-slate-950" />
+                    ))}
+                  </div>
+                ) : downloadsHistory.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950 p-6 text-sm font-semibold text-slate-400">
+                    No downloads yet. Once this user downloads files, they will appear here.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+                    {visibleDownloadsHistory.map((item, index) => {
+                      const cardContent = (
+                        <>
+                          <div className="relative aspect-[3/4] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.20),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.65),rgba(2,6,23,0.98))]">
+                            {item.preview ? (
+                              <img
+                                src={item.preview}
+                                alt={item.title}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-4 text-center">
+                                <div className="flex h-16 w-16 items-center justify-center rounded-[20px] border border-cyan-400/20 bg-cyan-500/10 text-3xl shadow-[0_0_30px_rgba(34,211,238,0.18)]">
+                                  ⬇️
+                                </div>
+                                <p className="line-clamp-3 text-sm font-black text-white">{item.title}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="border-t border-white/10 px-4 py-3">
+                            <p className="line-clamp-2 text-sm font-black text-white">{item.title}</p>
+                          </div>
+                        </>
+                      )
+
+                      return item.href ? (
+                        <Link
+                          key={`${item.id}-${index}`}
+                          href={item.href}
+                          className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.22)]"
+                        >
+                          {cardContent}
+                        </Link>
+                      ) : (
+                        <div
+                          key={`${item.id}-${index}`}
+                          className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 transition duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(56,189,248,0.22)]"
+                        >
+                          {cardContent}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </SectionCard>
+
+              {/* Two Column Grid for Recent Coin Activity and Activity Feed */}
+              <div className="grid gap-6 lg:grid-cols-2">
                 <SectionCard
                   title="Recent Coin Activity"
-                  subtitle="Users feel the economy more when history is visible."
                   action={
                     coinHistory.length > 5 ? (
                       <button
@@ -2090,13 +1903,9 @@ export default function ProfilePageClient() {
                     </div>
                   )}
                 </SectionCard>
-              </div>
-
-              <div className="space-y-6">
 
                 <SectionCard
                   title="Activity Feed"
-                  subtitle="A social-style timeline gives the profile more life."
                   action={
                     activityFeed.length > 5 ? (
                       <button
@@ -2132,7 +1941,6 @@ export default function ProfilePageClient() {
                     </div>
                   )}
                 </SectionCard>
-
               </div>
             </div>
           ) : null}
@@ -2145,19 +1953,6 @@ export default function ProfilePageClient() {
                   <DetailCard label="Email">{displayEmail}</DetailCard>
                   <DetailCard label="Username">{profile?.username ? `@${profile.username}` : "Not set"}</DetailCard>
                   <DetailCard label="Bio">{profile?.bio || "No bio yet"}</DetailCard>
-                </div>
-              </SectionCard>
-
-              <SectionCard title="Profile Highlights" subtitle="This makes the page feel personal, not just technical.">
-                <div className="grid w-full gap-3">
-                  {achievementCards.map((item) => (
-                    <div
-                      key={item.label}
-                      className="rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm font-semibold text-white"
-                    >
-                      {item.icon} {item.label}: {item.value}
-                    </div>
-                  ))}
                 </div>
               </SectionCard>
 
@@ -2218,8 +2013,6 @@ export default function ProfilePageClient() {
                   >
                     {passwordLoading ? "Updating..." : "Update Password"}
                   </button>
-               
-                 
                 </div>
               </SectionCard>
             </div>

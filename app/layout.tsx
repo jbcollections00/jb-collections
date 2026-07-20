@@ -1,8 +1,9 @@
 import "./globals.css"
 import type { Metadata } from "next"
+import Script from "next/script" // 👈 Added Next.js Script import
 import LayoutShell from "./components/LayoutShell"
-import BackgroundAds from "@/app/components/BackgroundAds" // ✅ ADD THIS
-import ScriptElementGuard from "./components/ScriptElementGuard" // We will use a safe component variant
+import BackgroundAds from "@/app/components/BackgroundAds"
+import ScriptElementGuard from "./components/ScriptElementGuard"
 
 function getSiteUrl() {
   return (
@@ -69,13 +70,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* ✅ AdSense */}
-        <script
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6646475793737493"
-          crossOrigin="anonymous"
-        ></script>
-
         {/* icons */}
         <link rel="icon" href="/favicon.ico" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
@@ -86,12 +80,21 @@ export default function RootLayout({
       </head>
 
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
+        {/* ✅ Google AdSense (Next.js Optimized) */}
+        <Script
+          id="google-adsense"
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6646475793737493"
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+        />
+
         {/* 🛡️ Client-side safe guard component */}
         <ScriptElementGuard />
 
         <LayoutShell>{children}</LayoutShell>
 
-        {/* 🔥 THIS IS THE MONEY PART */}
+        {/* 🔥 Background & Popunder Ads */}
         <BackgroundAds />
       </body>
     </html>

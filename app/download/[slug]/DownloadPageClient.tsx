@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Script from "next/script"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
@@ -40,6 +41,50 @@ type RelatedFileRow = {
 type EventType = "gate_view" | "premium_auto_download" | "download_click"
 type RewardNoticeType = "success" | "info" | "error"
 
+function AdsterraBanner() {
+  const bannerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!bannerRef.current) return
+    bannerRef.current.innerHTML = ""
+
+    const container = document.createElement("div")
+
+    const scriptOptions = document.createElement("script")
+    scriptOptions.type = "text/javascript"
+    scriptOptions.text = `
+      atOptions = {
+        'key' : 'b34ceb41f59688ea67157fc3adaa80c5',
+        'format' : 'iframe',
+        'height' : 250,
+        'width' : 300,
+        'params' : {}
+      };
+    `
+
+    const scriptInvoke = document.createElement("script")
+    scriptInvoke.type = "text/javascript"
+    scriptInvoke.src =
+      "https://www.highperformanceformat.com/b34ceb41f59688ea67157fc3adaa80c5/invoke.js"
+
+    container.appendChild(scriptOptions)
+    container.appendChild(scriptInvoke)
+    bannerRef.current.appendChild(container)
+  }, [])
+
+  return (
+    <div className="mt-6 flex flex-col items-center justify-center">
+      <span className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        Advertisement
+      </span>
+      <div
+        ref={bannerRef}
+        className="flex min-h-[250px] min-w-[300px] items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"
+      />
+    </div>
+  )
+}
+
 function getDisplayName(file: FileRow | null) {
   if (!file) return "Download"
   return file.title?.trim() || "Untitled File"
@@ -64,9 +109,9 @@ function formatCount(value?: number | null) {
 }
 
 function formatDate(value?: string | null) {
-  if (!value) return "Recently added"
+  if (!value) return "Jul 15, 2026"
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Recently added"
+  if (Number.isNaN(date.getTime())) return "Jul 15, 2026"
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
@@ -75,7 +120,7 @@ function formatDate(value?: string | null) {
 }
 
 function inferExtension(file: FileRow | null) {
-  if (!file) return "FILE"
+  if (!file) return "DEV"
 
   const possibleValues = [file.file_type, file.title, file.file_url, file.thumbnail_url]
     .filter(Boolean)
@@ -84,7 +129,7 @@ function inferExtension(file: FileRow | null) {
   const match = possibleValues.match(/\.([a-z0-9]{2,5})(?:[\s?/#]|$)/i)
   if (match?.[1]) return match[1].toUpperCase()
 
-  return "FILE"
+  return file?.file_type?.toUpperCase() || "DEV"
 }
 
 function inferPreviewKind(file: FileRow | null) {
@@ -105,14 +150,6 @@ function getShortDescription(file: FileRow | null) {
   const raw = file?.description?.trim()
   if (!raw) return "Exclusive JB Collections download ready for instant access."
   return raw
-}
-
-function getVisibilityLabel(visibility?: string | null) {
-  const value = (visibility || "free").toLowerCase()
-  if (value === "platinum") return "Platinum File"
-  if (value === "premium") return "Premium File"
-  if (value === "private") return "Private File"
-  return "Free File"
 }
 
 function getDownloadCoinCost(level: MembershipLevel) {
@@ -173,7 +210,6 @@ export default function DownloadPageClient() {
   const previewAsset = useMemo(() => getPreviewAsset(file), [file])
   const previewKind = useMemo(() => inferPreviewKind(file), [file])
   const fileTypeLabel = useMemo(() => inferExtension(file), [file])
-  const downloadsLabel = useMemo(() => formatCount(file?.downloads_count), [file])
   const addedDateLabel = useMemo(
     () => formatDate(file?.updated_at || file?.created_at || null),
     [file]
@@ -649,27 +685,22 @@ export default function DownloadPageClient() {
 
   return (
     <>
+      {/* Adsterra Popunder Script */}
+      <Script
+        id="adsterra-popunder"
+        strategy="afterInteractive"
+        src="https://pl28932734.effectivecpmnetwork.com/c2/ff/ba/c2ffba00507c2aa8f81f4682763f669e.js"
+      />
+
       <div className="min-h-screen bg-slate-50 px-4 py-8 pb-16">
         <div className="mx-auto max-w-5xl">
-          
           {/* Main Clean Layout Card */}
           <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
-            
-            {/* Redesigned Integrated Single-Line Header Layout */}
+            {/* Clean Header Layout */}
             <div className="relative overflow-hidden bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-700 px-6 py-8 text-white sm:px-8 sm:py-10">
-              <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-6 w-full">
-                
-                {/* Primary Content and Display Details */}
+              <div className="relative flex w-full flex-col gap-6 md:flex-row md:items-center md:justify-between">
+                {/* Primary Title and Description */}
                 <div className="flex-1 space-y-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex px-2.5 py-0.5 text-[10px] font-semibold tracking-wider uppercase rounded-full bg-slate-950/40 text-sky-100">
-                      10/10 Category Experience
-                    </span>
-                    <span className="inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
-                      {getVisibilityLabel(file.visibility)}
-                    </span>
-                  </div>
-
                   <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
                     {getDisplayName(file)}
                   </h1>
@@ -677,40 +708,15 @@ export default function DownloadPageClient() {
                   <p className="max-w-2xl text-sm text-white/90">
                     {getShortDescription(file)}
                   </p>
-                  
-                  {/* Inline Stats Row positioned exactly underneath header data */}
-                  <div className="flex flex-wrap gap-2 text-xs pt-1">
-                    <span className="px-2.5 py-1 rounded-full bg-black/20 backdrop-blur-sm border border-white/10">{downloadsLabel}+ files available</span>
-                    <span className="px-2.5 py-1 rounded-full bg-black/20 backdrop-blur-sm border border-white/10">101 downloads</span>
-                    <span className="px-2.5 py-1 rounded-full bg-black/20 backdrop-blur-sm border border-white/10">97 new arrivals</span>
-                  </div>
                 </div>
-
-                {/* Grid Metadata Badge Rack */}
-                <div className="grid gap-2 grid-cols-3 md:flex md:flex-col text-xs shrink-0 min-w-[160px]">
-                  <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur-md">
-                    <span className="block text-sky-100/70 font-bold uppercase text-[9px] tracking-wider">File Type</span>
-                    <span className="mt-0.5 block font-bold text-sm truncate">{fileTypeLabel}</span>
-                  </div>
-                  <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur-md">
-                    <span className="block text-sky-100/70 font-bold uppercase text-[9px] tracking-wider">Updated</span>
-                    <span className="mt-0.5 block font-bold text-sm truncate">{addedDateLabel}</span>
-                  </div>
-                  <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur-md">
-                    <span className="block text-sky-100/70 font-bold uppercase text-[9px] tracking-wider">Access Cost</span>
-                    <span className="mt-0.5 block font-bold text-sm truncate">{estimatedCoinCost} Coins</span>
-                  </div>
-                </div>
-
               </div>
             </div>
 
             {/* Core Interaction Layer */}
-            <div className="p-6 sm:p-8 grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-              
+            <div className="grid grid-cols-1 items-start gap-8 p-6 sm:p-8 md:grid-cols-2">
               {/* Left Column: Visual Asset Display */}
               <div className="flex flex-col items-center">
-                <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 aspect-[4/5]">
+                <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
                   {previewAsset ? (
                     previewKind === "video" ? (
                       <video
@@ -741,7 +747,7 @@ export default function DownloadPageClient() {
                       <button
                         type="button"
                         onClick={() => setShowPreviewModal(true)}
-                        className="inline-flex items-center justify-center rounded-xl bg-black/50 text-white backdrop-blur-md px-3 py-1.5 text-xs font-bold shadow-sm transition hover:bg-black/70"
+                        className="inline-flex items-center justify-center rounded-xl bg-black/50 px-3 py-1.5 text-xs font-bold text-white shadow-sm backdrop-blur-md transition hover:bg-black/70"
                       >
                         Open Preview
                       </button>
@@ -750,24 +756,32 @@ export default function DownloadPageClient() {
                 </div>
               </div>
 
-              {/* Right Column: Dynamic Action Interface */}
-              <div className="space-y-6 flex flex-col justify-between h-full">
-                
-                {/* Clean State-Based Action Trigger */}
+              {/* Right Column: Download & Metadata Action Panel */}
+              <div className="flex flex-col justify-between space-y-6">
                 <div>
-                  <h3 className="text-base font-bold text-slate-800 mb-2">Get File Access</h3>
-                  
+                  <h3 className="mb-2 text-base font-bold text-slate-800">Get File Access</h3>
+
                   {step === "platinum-only" ? (
-                    <div className="bg-fuchsia-50 border border-fuchsia-100 p-4 rounded-xl">
-                      <p className="text-xs font-semibold text-fuchsia-800">This drop is exclusive to Platinum tier members.</p>
-                      <Link href="/upgrade" className="mt-3 inline-flex w-full justify-center rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 py-3 text-sm font-bold text-white shadow-sm hover:opacity-95 transition">
+                    <div className="rounded-xl border border-fuchsia-100 bg-fuchsia-50 p-4">
+                      <p className="text-xs font-semibold text-fuchsia-800">
+                        This drop is exclusive to Platinum tier members.
+                      </p>
+                      <Link
+                        href="/upgrade"
+                        className="mt-3 inline-flex w-full justify-center rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 py-3 text-sm font-bold text-white shadow-sm transition hover:opacity-95"
+                      >
                         Upgrade to Platinum
                       </Link>
                     </div>
                   ) : step === "premium-only" ? (
-                    <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl">
-                      <p className="text-xs font-semibold text-amber-800">Premium account authentication required for this asset.</p>
-                      <Link href="/upgrade" className="mt-3 inline-flex w-full justify-center rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 py-3 text-sm font-bold text-white shadow-sm hover:opacity-95 transition">
+                    <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
+                      <p className="text-xs font-semibold text-amber-800">
+                        Premium account authentication required for this asset.
+                      </p>
+                      <Link
+                        href="/upgrade"
+                        className="mt-3 inline-flex w-full justify-center rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 py-3 text-sm font-bold text-white shadow-sm transition hover:opacity-95"
+                      >
                         Upgrade to Premium
                       </Link>
                     </div>
@@ -778,7 +792,9 @@ export default function DownloadPageClient() {
                       disabled={startingDownload}
                       className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-500 px-6 py-4 text-sm font-black text-white shadow-md shadow-blue-500/10 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {startingDownload ? "Initializing Secure Link..." : `⬇ DOWNLOAD — ${estimatedCoinCost} JB COINS`}
+                      {startingDownload
+                        ? "Initializing Secure Link..."
+                        : `⬇ DOWNLOAD — ${estimatedCoinCost} JB COINS`}
                     </button>
                   )}
 
@@ -787,62 +803,110 @@ export default function DownloadPageClient() {
                       {downloadError}
                     </div>
                   )}
+
+                  {/* File Metadata Rack */}
+                  <div className="mt-6 space-y-3">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        FILE TYPE
+                      </p>
+                      <p className="mt-0.5 text-lg font-black uppercase text-slate-900">
+                        {fileTypeLabel}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        UPDATED
+                      </p>
+                      <p className="mt-0.5 text-lg font-black text-slate-900">
+                        {addedDateLabel}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        ACCESS COST
+                      </p>
+                      <p className="mt-0.5 text-lg font-black text-slate-900">
+                        {estimatedCoinCost} Coins
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Embedded Adsterra 300x250 Banner */}
+                  <AdsterraBanner />
                 </div>
 
-                {/* Streamlined Clean Social Distribution Rack */}
+                {/* Social Distribution Rack */}
                 <div className="border-t border-slate-100 pt-5">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">Distribution Actions</p>
+                  <p className="mb-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Distribution Actions
+                  </p>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={handleCopyLink}
-                      className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
+                      className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
                     >
                       {copied ? "Copied!" : "Copy URL"}
                     </button>
                     <button
                       type="button"
                       onClick={handleNativeShare}
-                      className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
+                      className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
                     >
                       Share Hub
                     </button>
                     <a
-                      href={shareUrl ? `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}` : "#"}
+                      href={
+                        shareUrl
+                          ? `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`
+                          : "#"
+                      }
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center justify-center rounded-xl bg-[#1877F2] py-2 text-xs font-bold text-white hover:opacity-90 transition"
+                      className="inline-flex items-center justify-center rounded-xl bg-[#1877F2] py-2 text-xs font-bold text-white transition hover:opacity-90"
                     >
                       Facebook
                     </a>
                     <a
-                      href={shareUrl ? `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}` : "#"}
+                      href={
+                        shareUrl
+                          ? `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}`
+                          : "#"
+                      }
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center justify-center rounded-xl bg-[#229ED9] py-2 text-xs font-bold text-white hover:opacity-90 transition"
+                      className="inline-flex items-center justify-center rounded-xl bg-[#229ED9] py-2 text-xs font-bold text-white transition hover:opacity-90"
                     >
                       Telegram
                     </a>
                   </div>
                 </div>
-
               </div>
             </div>
 
-            {/* Redesigned Related Items Grid Component Layout — Updated to 5 Columns */}
+            {/* Related Items Grid — 5 Columns */}
             {related.length > 0 && (
               <div className="border-t border-slate-100 bg-slate-50/50 p-6 sm:p-8">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Trending Drops</p>
-                    <h2 className="text-xl font-black text-slate-900">Users Also Downloaded</h2>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">
+                      Trending Drops
+                    </p>
+                    <h2 className="text-xl font-black text-slate-900">
+                      Users Also Downloaded
+                    </h2>
                   </div>
-                  <Link href="/categories" className="text-xs font-bold text-slate-500 bg-white border border-slate-200 rounded-xl px-3 py-1.5 hover:bg-slate-50">
+                  <Link
+                    href="/categories"
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-50"
+                  >
                     Browse All
                   </Link>
                 </div>
 
-                {/* Grid layout updated to show 5 elements cleanly across layout breaking changes */}
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                   {related.map((item) => (
                     <Link
@@ -852,50 +916,80 @@ export default function DownloadPageClient() {
                     >
                       <div className="relative aspect-[4/5] bg-slate-100">
                         {item.thumbnail_url ? (
-                          <img src={item.thumbnail_url} alt={item.title || "Related file"} className="h-full w-full object-cover group-hover:scale-[1.02] transition duration-300" />
+                          <img
+                            src={item.thumbnail_url}
+                            alt={item.title || "Related file"}
+                            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                          />
                         ) : (
-                          <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-slate-400">No Preview</div>
+                          <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-slate-400">
+                            No Preview
+                          </div>
                         )}
                       </div>
                       <div className="p-3">
-                        <p className="line-clamp-1 text-xs font-bold text-slate-800 group-hover:text-blue-600 transition">{item.title || "Untitled File"}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">{formatCount(item.downloads_count)} downloads</p>
+                        <p className="line-clamp-1 text-xs font-bold text-slate-800 transition group-hover:text-blue-600">
+                          {item.title || "Untitled File"}
+                        </p>
+                        <p className="mt-0.5 text-[10px] text-slate-400">
+                          {formatCount(item.downloads_count)} downloads
+                        </p>
                       </div>
                     </Link>
                   ))}
                 </div>
               </div>
             )}
-
           </div>
         </div>
       </div>
 
-      {/* Floating System Notices */}
+      {/* System Notices */}
       {rewardNotice && (
         <div className="fixed bottom-6 right-6 z-[9999]">
-          <div className={`rounded-xl border px-4 py-2.5 text-xs font-bold shadow-lg backdrop-blur-md ${
-            rewardNoticeType === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" :
-            rewardNoticeType === "info" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-red-200 bg-red-50 text-red-700"
-          }`}>
+          <div
+            className={`rounded-xl border px-4 py-2.5 text-xs font-bold shadow-lg backdrop-blur-md ${
+              rewardNoticeType === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : rewardNoticeType === "info"
+                ? "border-blue-200 bg-blue-50 text-blue-700"
+                : "border-red-200 bg-red-50 text-red-700"
+            }`}
+          >
             {rewardNotice}
           </div>
         </div>
       )}
 
-      {/* Modal Dialog Confirmations */}
+      {/* Modals */}
       {showCoinConfirm && (
         <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border border-slate-100 bg-white p-5 shadow-xl">
-            <h3 className="text-lg font-black text-slate-900 text-center">Confirm Spending</h3>
-            <p className="mt-1 text-xs text-slate-500 text-center">Confirm processing total asset value reduction from account wallet balance.</p>
-            <div className="my-4 rounded-xl bg-slate-50 border border-slate-100 p-3 flex justify-between items-center">
+            <h3 className="text-center text-lg font-black text-slate-900">Confirm Spending</h3>
+            <p className="mt-1 text-center text-xs text-slate-500">
+              Confirm processing total asset value reduction from account wallet balance.
+            </p>
+            <div className="my-4 flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-3">
               <span className="text-xs font-bold text-slate-600">Total Deducted</span>
-              <span className="text-sm font-black text-indigo-600">{estimatedCoinCost} Coins</span>
+              <span className="text-sm font-black text-indigo-600">
+                {estimatedCoinCost} Coins
+              </span>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setShowCoinConfirm(false)} className="rounded-xl border border-slate-200 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="button" onClick={handleDirectDownload} className="rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white hover:bg-slate-800">Confirm Use</button>
+              <button
+                type="button"
+                onClick={() => setShowCoinConfirm(false)}
+                className="rounded-xl border border-slate-200 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDirectDownload}
+                className="rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white hover:bg-slate-800"
+              >
+                Confirm Use
+              </button>
             </div>
           </div>
         </div>
@@ -904,29 +998,63 @@ export default function DownloadPageClient() {
       {showInsufficientCoins && (
         <div className="fixed inset-0 z-[10002] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border border-slate-100 bg-white p-5 shadow-xl">
-            <h3 className="text-lg font-black text-slate-900 text-center">Wallet Depleted</h3>
-            <div className="my-4 rounded-xl bg-red-50 border border-red-100 p-3 text-center text-xs text-red-700 font-semibold">
-              Current account balance of {currentCoins ?? 0} is insufficient for this {requiredCoins ?? estimatedCoinCost} coin asset unlock.
+            <h3 className="text-center text-lg font-black text-slate-900">Wallet Depleted</h3>
+            <div className="my-4 rounded-xl border border-red-100 bg-red-50 p-3 text-center text-xs font-semibold text-red-700">
+              Current account balance of {currentCoins ?? 0} is insufficient for this{" "}
+              {requiredCoins ?? estimatedCoinCost} coin asset unlock.
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setShowInsufficientCoins(false)} className="rounded-xl border border-slate-200 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Dismiss</button>
-              <Link href="/buy-coins" className="rounded-xl bg-amber-500 py-2.5 text-xs font-bold text-white text-center hover:bg-amber-600">Recharge Balance</Link>
+              <button
+                type="button"
+                onClick={() => setShowInsufficientCoins(false)}
+                className="rounded-xl border border-slate-200 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Dismiss
+              </button>
+              <Link
+                href="/buy-coins"
+                className="rounded-xl bg-amber-500 py-2.5 text-center text-xs font-bold text-white hover:bg-amber-600"
+              >
+                Recharge Balance
+              </Link>
             </div>
           </div>
         </div>
       )}
 
       {showPreviewModal && previewAsset && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm" onClick={() => setShowPreviewModal(false)}>
-          <div className="relative max-h-[85vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-black" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+          onClick={() => setShowPreviewModal(false)}
+        >
+          <div
+            className="relative max-h-[85vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-black"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="absolute top-4 right-4 z-10">
-              <button type="button" onClick={() => setShowPreviewModal(false)} className="rounded-xl bg-black/60 text-white border border-white/20 px-3 py-1 text-xs font-bold hover:bg-black/80">Close</button>
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="rounded-xl border border-white/20 bg-black/60 px-3 py-1 text-xs font-bold text-white hover:bg-black/80"
+              >
+                Close
+              </button>
             </div>
-            <div className="flex items-center justify-center p-2 bg-slate-950">
+            <div className="flex items-center justify-center bg-slate-950 p-2">
               {previewKind === "video" ? (
-                <video src={previewAsset} controls autoPlay playsInline className="max-h-[80vh] w-full object-contain" />
+                <video
+                  src={previewAsset}
+                  controls
+                  autoPlay
+                  playsInline
+                  className="max-h-[80vh] w-full object-contain"
+                />
               ) : (
-                <img src={previewAsset} alt={getDisplayName(file)} className="max-h-[80vh] w-auto max-w-full object-contain" />
+                <img
+                  src={previewAsset}
+                  alt={getDisplayName(file)}
+                  className="max-h-[80vh] w-auto max-w-full object-contain"
+                />
               )}
             </div>
           </div>

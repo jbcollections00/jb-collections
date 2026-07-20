@@ -2,6 +2,7 @@
 
 import { useEffect } from "react"
 import { usePathname } from "next/navigation"
+import Script from "next/script"
 
 declare global {
   interface Window {
@@ -24,9 +25,10 @@ function isExternalAdAllowed(pathname: string) {
 
 export default function BackgroundAds() {
   const pathname = usePathname() || ""
+  const allowed = isExternalAdAllowed(pathname)
 
   useEffect(() => {
-    if (!isExternalAdAllowed(pathname)) return
+    if (!allowed) return
 
     const src = process.env.NEXT_PUBLIC_ADSTERRA_SOCIAL_BAR_SRC || ""
 
@@ -38,7 +40,19 @@ export default function BackgroundAds() {
 
     document.body.appendChild(script)
     window.__jbSocialBarLoaded = true
-  }, [pathname])
+  }, [pathname, allowed])
 
-  return null
+  // Don't inject popunder on auth pages
+  if (!allowed) return null
+
+  return (
+    <>
+      {/* 🟢 Global Adsterra Popunder Script */}
+      <Script
+        id="adsterra-popunder-global"
+        strategy="afterInteractive"
+        src="https://pl28932734.effectivecpmnetwork.com/c2/ff/ba/c2ffba00507c2aa8f81f4682763f669e.js"
+      />
+    </>
+  )
 }

@@ -35,74 +35,12 @@ const floatingCoins = [
   },
 ]
 
-const features = [
-  {
-    title: "Premium Digital Library",
-    description:
-      "Access curated files, collections, and exclusive member-ready content in one clean platform.",
-  },
-  {
-    title: "JB Coin Rewards",
-    description:
-      "Earn, use, and track JB Coins across downloads, activity, and premium actions inside your account.",
-  },
-  {
-    title: "Fast Member Experience",
-    description:
-      "Smooth login, easy browsing, organized categories, and a more modern dashboard flow.",
-  },
-  {
-    title: "Exclusive Access",
-    description:
-      "Unlock premium-only materials, special releases, and high-value digital content for members.",
-  },
-]
-
-const previews = [
-  {
-    label: "Trending",
-    title: "Premium File Collections",
-    text: "Professionally arranged resources with a cleaner browsing experience.",
-  },
-  {
-    label: "Members",
-    title: "Exclusive Downloads",
-    text: "High-value content reserved for users who want more than a basic library.",
-  },
-  {
-    label: "Rewards",
-    title: "JB Coin System",
-    text: "A gamified experience that gives your users a reason to keep coming back.",
-  },
-]
-
-const trustItems = [
-  "Premium-style member platform",
-  "Clean dashboard and profile experience",
-  "JB Coin identity across the site",
-  "Built for repeat visits and engagement",
-]
-
-const reasons = [
-  {
-    title: "Strong brand identity",
-    text: "The JB Coin theme gives the platform a memorable look that feels unique instead of generic.",
-  },
-  {
-    title: "Designed for conversion",
-    text: "The page now explains what users get, why it matters, and what they can expect before signing up.",
-  },
-  {
-    title: "Ready to scale",
-    text: "The layout supports future additions like testimonials, featured categories, announcements, and offers.",
-  },
-]
-
 export default function HomePage() {
   return (
-    <div className="relative overflow-hidden bg-slate-950 text-white">
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white flex items-center justify-center">
       <div className="absolute inset-0 bg-[linear-gradient(135deg,#020617_0%,#0f172a_40%,#111827_100%)]" />
 
+      {/* Animated Glow Blobs */}
       <div className="absolute inset-0 opacity-90">
         <div className="animate-blob absolute -left-24 top-8 h-72 w-72 rounded-full bg-blue-500/25 blur-3xl" />
         <div
@@ -117,6 +55,7 @@ export default function HomePage() {
 
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.12)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.12)_1px,transparent_1px)] bg-[size:40px_40px] opacity-[0.06]" />
 
+      {/* Floating Coins Effect */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         {floatingCoins.map((coin, index) => (
           <img
@@ -131,213 +70,62 @@ export default function HomePage() {
         <img
           src="/jb-coin.png"
           alt="JB Coin"
-          className="absolute left-1/2 top-[18rem] w-40 sm:w-52 lg:w-64 -translate-x-1/2 opacity-20 animate-spin-slow drop-shadow-[0_0_40px_rgba(255,215,0,0.5)]"
+          className="absolute left-1/2 top-1/2 w-40 sm:w-52 lg:w-64 -translate-x-1/2 -translate-y-1/2 opacity-20 animate-spin-slow drop-shadow-[0_0_40px_rgba(255,215,0,0.5)]"
         />
       </div>
 
-      <main className="relative">
-        <section className="mx-auto flex min-h-screen w-full max-w-7xl items-center px-4 py-10 sm:px-6 lg:px-8">
-          <div className="grid w-full gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-            <div className="relative overflow-hidden rounded-[34px] border border-white/10 bg-white/10 p-6 shadow-[0_20px_100px_rgba(0,0,0,0.50)] backdrop-blur-xl sm:p-10 lg:p-16">
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
-                Premium Digital Platform
-              </div>
+      <main className="relative z-10 w-full max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="relative w-full overflow-hidden rounded-[34px] border border-white/10 bg-white/10 p-8 text-center shadow-[0_20px_100px_rgba(0,0,0,0.50)] backdrop-blur-xl sm:p-12 lg:p-16">
+          
+          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
+            Premium Digital Platform
+          </div>
 
-              <div className="mt-6 flex items-center gap-4">
-                <img
-                  src="/jb-logo.png"
-                  alt="JB Collections Logo"
-                  className="w-20 sm:w-24 drop-shadow-[0_10px_30px_rgba(59,130,246,0.35)]"
-                />
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.25em] text-slate-300">
-                    JB Collections
-                  </p>
-                  <p className="text-sm text-slate-400">Premium-ready file download platform</p>
-                </div>
-              </div>
-
-              <h1 className="mt-8 max-w-4xl text-[38px] font-black leading-[0.92] tracking-[-0.045em] text-white sm:text-[56px] lg:text-7xl">
-                Elevate Your Experience with{" "}
-                <span className="animate-gradient-x inline-block bg-gradient-to-r from-sky-300 via-cyan-300 to-blue-500 bg-[length:200%_200%] bg-clip-text text-transparent drop-shadow-[0_0_18px_rgba(56,189,248,0.35)]">
-                  JB Collections
-                </span>
-              </h1>
-
-              <p className="mt-6 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
-                Join a premium-looking digital hub where members can explore exclusive files,
-                unlock rewards, enjoy smoother access, and discover curated content built for repeat visits.
+          <div className="mt-8 flex flex-col items-center justify-center gap-3">
+            <img
+              src="/jb-logo.png"
+              alt="JB Collections Logo"
+              className="w-20 sm:w-24 drop-shadow-[0_10px_30px_rgba(59,130,246,0.35)]"
+            />
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.25em] text-slate-300">
+                JB Collections
               </p>
-
-              <div className="mt-8 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-2xl font-black text-white">Exclusive</p>
-                  <p className="mt-1 text-sm text-slate-400">Member-only digital collections</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-2xl font-black text-white">Rewards</p>
-                  <p className="mt-1 text-sm text-slate-400">JB Coin engagement system</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-2xl font-black text-white">Premium</p>
-                  <p className="mt-1 text-sm text-slate-400">Modern experience from landing to profile</p>
-                </div>
-              </div>
-
-              <div className="mt-10 flex flex-col gap-4 sm:flex-row">
-                <Link
-                  href="/signup"
-                  className="animate-gradient-x inline-flex h-14 w-full sm:w-auto items-center justify-center rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-500 to-indigo-600 bg-[length:200%_200%] px-9 text-base font-bold text-white shadow-[0_10px_30px_rgba(37,99,235,0.35)] transition duration-300 hover:scale-[1.03]"
-                >
-                  Create Account
-                </Link>
-
-                <Link
-                  href="/login"
-                  className="inline-flex h-14 w-full sm:w-auto items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-9 text-base font-bold text-white backdrop-blur-md transition duration-300 hover:scale-[1.03]"
-                >
-                  Login
-                </Link>
-              </div>
-            </div>
-
-            <div className="grid gap-5">
-              <div className="rounded-[28px] border border-white/10 bg-white/8 p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
-                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-200">What you get</p>
-                <div className="mt-5 space-y-4">
-                  {features.map((feature) => (
-                    <div
-                      key={feature.title}
-                      className="rounded-2xl border border-white/10 bg-white/5 p-4"
-                    >
-                      <h3 className="text-base font-bold text-white">{feature.title}</h3>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">{feature.description}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <p className="text-xs text-slate-400 sm:text-sm">
+                Premium-ready file download platform
+              </p>
             </div>
           </div>
-        </section>
 
-        <section className="mx-auto w-full max-w-7xl px-4 pb-8 sm:px-6 lg:px-8">
-          <div className="rounded-[32px] border border-white/10 bg-white/8 p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-8 lg:p-10">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-200">Content preview</p>
-                <h2 className="mt-3 text-3xl font-black tracking-[-0.03em] text-white sm:text-4xl">
-                  Show users what they are signing up for
-                </h2>
-                <p className="mt-3 max-w-2xl text-slate-300">
-                  Instead of only showing a hero, preview the value of the platform with real-looking cards.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm font-medium text-emerald-200">
-                Stronger conversion through visible value
-              </div>
-            </div>
+          <h1 className="mx-auto mt-8 max-w-3xl text-[38px] font-black leading-[0.95] tracking-[-0.045em] text-white sm:text-[56px] lg:text-7xl">
+            Elevate Your Experience with{" "}
+            <span className="animate-gradient-x inline-block bg-gradient-to-r from-sky-300 via-cyan-300 to-blue-500 bg-[length:200%_200%] bg-clip-text text-transparent drop-shadow-[0_0_18px_rgba(56,189,248,0.35)]">
+              JB Collections
+            </span>
+          </h1>
 
-            <div className="mt-8 grid gap-5 lg:grid-cols-3">
-              {previews.map((preview) => (
-                <div
-                  key={preview.title}
-                  className="group rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0.04))] p-5 transition duration-300 hover:-translate-y-1 hover:border-cyan-300/25"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">
-                      {preview.label}
-                    </span>
-                    <img src="/jb-coin.png" alt="JB Coin" className="h-9 w-9 animate-coin-shine" />
-                  </div>
-                  <h3 className="mt-5 text-xl font-bold text-white">{preview.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-slate-300">{preview.text}</p>
-                  <div className="mt-6 h-28 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
-                    <div className="h-3 w-24 rounded-full bg-cyan-300/40" />
-                    <div className="mt-3 space-y-2">
-                      <div className="h-2 rounded-full bg-white/10" />
-                      <div className="h-2 w-[90%] rounded-full bg-white/10" />
-                      <div className="h-2 w-[75%] rounded-full bg-white/10" />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <p className="mx-auto mt-6 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
+            Join a premium-looking digital hub where members can explore exclusive files,
+            unlock rewards, enjoy smoother access, and discover curated content built for repeat visits.
+          </p>
+
+          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <Link
+              href="/signup"
+              className="animate-gradient-x inline-flex h-14 w-full sm:w-auto items-center justify-center rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-500 to-indigo-600 bg-[length:200%_200%] px-10 text-base font-bold text-white shadow-[0_10px_30px_rgba(37,99,235,0.35)] transition duration-300 hover:scale-[1.03]"
+            >
+              Create Account
+            </Link>
+
+            <Link
+              href="/login"
+              className="inline-flex h-14 w-full sm:w-auto items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-10 text-base font-bold text-white backdrop-blur-md transition duration-300 hover:scale-[1.03]"
+            >
+              Login
+            </Link>
           </div>
-        </section>
 
-        <section className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-            <div className="rounded-[30px] border border-white/10 bg-white/8 p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-8">
-              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-200">Why choose JB Collections</p>
-              <h2 className="mt-3 text-3xl font-black tracking-[-0.03em] text-white sm:text-4xl">
-                More than a beautiful homepage
-              </h2>
-              <div className="mt-6 space-y-5">
-                {reasons.map((reason) => (
-                  <div key={reason.title} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <h3 className="text-lg font-bold text-white">{reason.title}</h3>
-                    <p className="mt-2 text-sm leading-6 text-slate-300">{reason.text}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-[30px] border border-white/10 bg-white/8 p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-8">
-              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-200">Trust signals</p>
-              <h2 className="mt-3 text-3xl font-black tracking-[-0.03em] text-white sm:text-4xl">
-                Give visitors confidence before they sign up
-              </h2>
-
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                {trustItems.map((item) => (
-                  <div
-                    key={item}
-                    className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm font-medium text-slate-200"
-                  >
-                    <span className="mr-2 text-cyan-300">✦</span>
-                    {item}
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-8 rounded-[28px] border border-cyan-300/15 bg-[linear-gradient(135deg,rgba(34,211,238,0.14),rgba(37,99,235,0.12))] p-6">
-                <p className="text-sm uppercase tracking-[0.18em] text-cyan-100">Suggested next trust upgrades</p>
-                <div className="mt-4 grid gap-3 text-sm text-slate-100 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">Add testimonials or member feedback</div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">Show featured categories or popular files</div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">Highlight premium plan benefits</div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">Add stats like users, files, or rewards claimed</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:pb-16">
-          <div className="rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(14,165,233,0.18),rgba(30,41,59,0.65),rgba(37,99,235,0.15))] p-8 text-center shadow-[0_20px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-10 lg:p-14">
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">Ready to join?</p>
-            <h2 className="mt-4 text-3xl font-black tracking-[-0.03em] text-white sm:text-5xl">
-              Explore premium content and start building with JB Collections
-            </h2>
-            <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
-              A stronger landing page should not only impress users visually. It should also guide them clearly toward creating an account.
-            </p>
-            <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <Link
-                href="/signup"
-                className="animate-gradient-x inline-flex h-14 w-full sm:w-auto items-center justify-center rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-500 to-indigo-600 bg-[length:200%_200%] px-9 text-base font-bold text-white shadow-[0_10px_30px_rgba(37,99,235,0.35)] transition duration-300 hover:scale-[1.03]"
-              >
-                Get Started
-              </Link>
-              <Link
-                href="/login"
-                className="inline-flex h-14 w-full sm:w-auto items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-9 text-base font-bold text-white backdrop-blur-md transition duration-300 hover:scale-[1.03]"
-              >
-                Member Login
-              </Link>
-            </div>
-          </div>
-        </section>
+        </div>
       </main>
 
       <style>{`
@@ -356,8 +144,8 @@ export default function HomePage() {
         }
 
         @keyframes spinSlow {
-          from { transform: translateX(-50%) rotate(0deg); }
-          to { transform: translateX(-50%) rotate(360deg); }
+          from { transform: translate(-50%, -50%) rotate(0deg); }
+          to { transform: translate(-50%, -50%) rotate(360deg); }
         }
 
         @keyframes blobMove {
@@ -386,10 +174,6 @@ export default function HomePage() {
 
         .animate-blob {
           animation: blobMove 14s ease-in-out infinite;
-        }
-
-        .animate-coin-shine {
-          animation: coinShine 3s ease-in-out infinite;
         }
       `}</style>
     </div>
