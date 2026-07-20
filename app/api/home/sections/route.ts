@@ -66,16 +66,6 @@ function isVisibleFile(file: FileRow) {
   return true
 }
 
-function sortByDownloadsDesc(a: ReturnType<typeof normalizeFile>, b: ReturnType<typeof normalizeFile>) {
-  return Number(b.downloads_count || 0) - Number(a.downloads_count || 0)
-}
-
-function sortByCreatedAtDesc(a: ReturnType<typeof normalizeFile>, b: ReturnType<typeof normalizeFile>) {
-  const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
-  const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
-  return bTime - aTime
-}
-
 function uniqueById(files: ReturnType<typeof normalizeFile>[]) {
   const seen = new Set<string>()
 
@@ -113,32 +103,48 @@ export async function GET() {
       return emptySections("Missing Supabase environment variables.")
     }
 
-    const { data, error } = await supabase
-      .from("files")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(120)
+    // Run parallel targeted queries across the entire database
+    const [latestRes, topRes] = await Promise.all([
+      // 1. Fetch 10 newest files across ALL database rows
+      supabase
+        .from("files")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(20),
 
-    if (error) {
-      console.error("Home sections files query error:", error)
-      return emptySections(error.message)
+      // 2. Fetch 10 most downloaded files (>0 downloads) across ALL database rows
+      supabase
+        .from("files")
+        .select("*")
+        .gt("downloads_count", 0)
+        .order("downloads_count", { ascending: false })
+        .limit(20),
+    ])
+
+    if (latestRes.error || topRes.error) {
+      const err = latestRes.error || topRes.error
+      console.error("Home sections files query error:", err)
+      return emptySections(err?.message)
     }
 
-    const files = ((data || []) as FileRow[])
+    const latestFiles = ((latestRes.data || []) as FileRow[])
       .filter(isVisibleFile)
       .map(normalizeFile)
 
-    const latest = uniqueById([...files].sort(sortByCreatedAtDesc)).slice(0, 10)
-    const top = uniqueById([...files].sort(sortByDownloadsDesc)).slice(0, 10)
+    const topFiles = ((topRes.data || []) as FileRow[])
+      .filter(isVisibleFile)
+      .map(normalizeFile)
+
+    const latest = uniqueById(latestFiles).slice(0, 10)
+    const top = uniqueById(topFiles).slice(0, 10)
+
     const trending = uniqueById([...top, ...latest])
       .sort((a, b) => {
         const downloadDiff = Number(b.downloads_count || 0) - Number(a.downloads_count || 0)
-
         if (downloadDiff !== 0) return downloadDiff
 
         const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
         const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
-
         return bTime - aTime
       })
       .slice(0, 10)
