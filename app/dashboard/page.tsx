@@ -5,7 +5,6 @@ import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import PresenceTracker from "@/app/components/PresenceTracker"
-import SiteHeader from "@/app/components/SiteHeader"
 import DailyRewardCard from "@/app/components/DailyRewardCard"
 
 type Category = {
@@ -448,56 +447,54 @@ function DashboardPageContent() {
   })
 
   useEffect(() => {
+    let isMounted = true
+
+    async function checkUserAndLoad() {
+      try {
+        setLoading(true)
+        setCheckingAuth(true)
+
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser()
+
+        if (!isMounted) return
+
+        if (userError || !user) {
+          router.replace("/login")
+          return
+        }
+
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("id, role, membership, is_premium, full_name, name, username, coins, avatar_url")
+          .eq("id", user.id)
+          .maybeSingle()
+
+        if (!isMounted) return
+
+        setCurrentUserProfile((profileData as CurrentUserProfile | null) || null)
+
+        await Promise.all([fetchDashboardData(), fetchHomeSections(), fetchLiveStats()])
+      } catch (error) {
+        console.error("Dashboard auth check failed:", error)
+        if (isMounted) router.replace("/login")
+      } finally {
+        if (isMounted) {
+          setCheckingAuth(false)
+          setLoading(false)
+          setSectionsLoading(false)
+        }
+      }
+    }
+
     checkUserAndLoad()
-  }, [])
-
-  useEffect(() => {
-    let intervalId: ReturnType<typeof setInterval> | null = null
-
-    fetchLiveStats()
-
-    intervalId = setInterval(() => {
-      fetchLiveStats()
-    }, 20000)
 
     return () => {
-      if (intervalId) clearInterval(intervalId)
+      isMounted = false
     }
-  }, [])
-
-  async function checkUserAndLoad() {
-    try {
-      setLoading(true)
-      setCheckingAuth(true)
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
-
-      if (userError || !user) {
-        router.replace("/login")
-        return
-      }
-
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("id, role, membership, is_premium, full_name, name, username, coins, avatar_url")
-        .eq("id", user.id)
-        .maybeSingle()
-
-      setCurrentUserProfile((profileData as CurrentUserProfile | null) || null)
-
-      await Promise.all([fetchDashboardData(), fetchHomeSections(), fetchLiveStats()])
-    } catch (error) {
-      console.error("Dashboard auth check failed:", error)
-      router.replace("/login")
-    } finally {
-      setCheckingAuth(false)
-      setLoading(false)
-      setSectionsLoading(false)
-    }
-  }
+  }, [supabase, router])
 
   async function fetchDashboardData() {
     const [{ data: categoriesData, error: categoriesError }, { data: filesData, error: filesError }] =
@@ -613,12 +610,11 @@ function DashboardPageContent() {
     <>
       <PresenceTracker />
 
-      <div className="min-h-screen bg-[#020617] text-white">
+      <div className="flex min-h-screen flex-col bg-[#020617] text-white">
         <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(99,102,241,0.18),_transparent_30%),linear-gradient(180deg,_#030712_0%,_#020617_45%,_#061229_100%)]" />
         <div className="fixed inset-0 -z-10 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] opacity-[0.08]" />
-        <SiteHeader />
 
-        <div className="mx-auto w-full max-w-[1800px] px-4 pb-8 pt-0 sm:px-6 sm:pb-10 lg:px-8">
+        <div className="mx-auto w-full max-w-[1800px] flex-1 px-4 pb-8 pt-4 sm:px-6 sm:pb-10 lg:px-8">
           <DailyRewardCard />
 
           <section className="mt-2 overflow-hidden rounded-[34px] border border-white/10 bg-white/[0.04] shadow-[0_25px_80px_rgba(0,0,0,0.35)] backdrop-blur-md">

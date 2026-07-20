@@ -302,7 +302,6 @@ export default function ProfilePageClient() {
   const [redeemingPlan, setRedeemingPlan] = useState<RedeemPlan | null>(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [streakLoading, setStreakLoading] = useState(false)
-  const [leaderboardLoading, setLeaderboardLoading] = useState(false)
   const [viewStatsLoading, setViewStatsLoading] = useState(false)
   const [downloadsLoading, setDownloadsLoading] = useState(false)
   const [showAllDownloads, setShowAllDownloads] = useState(false)
@@ -323,16 +322,16 @@ export default function ProfilePageClient() {
 
   const [coinHistory, setCoinHistory] = useState<CoinHistoryItem[]>([])
   const [dailyRewardStatus, setDailyRewardStatus] = useState<DailyRewardStatus | null>(null)
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
-  const [myLeaderboardRank, setMyLeaderboardRank] = useState<LeaderboardEntry | null>(null)
+  const [, setLeaderboard] = useState<LeaderboardEntry[]>([])
+  const [, setMyLeaderboardRank] = useState<LeaderboardEntry | null>(null)
   const [profileViewStats, setProfileViewStats] = useState<ProfileViewStats>({
     views: 0,
     visitors: 0,
   })
 
   const [coinToasts, setCoinToasts] = useState<CoinToast[]>([])
-  const [walletPulse, setWalletPulse] = useState(false)
-  const [walletShake, setWalletShake] = useState(false)
+  const [, setWalletPulse] = useState(false)
+  const [, setWalletShake] = useState(false)
 
   const [fullNameInput, setFullNameInput] = useState("")
   const [usernameInput, setUsernameInput] = useState("")
@@ -342,7 +341,7 @@ export default function ProfilePageClient() {
   const [confirmPasswordInput, setConfirmPasswordInput] = useState("")
   const [passwordLoading, setPasswordLoading] = useState(false)
 
-  const [socialReactions, setSocialReactions] = useState<SocialReaction[]>([
+  const [, setSocialReactions] = useState<SocialReaction[]>([
     { emoji: "👁", label: "Profile Views", count: 0 },
     { emoji: "🌐", label: "Unique Visitors", count: 0 },
     { emoji: "⬇️", label: "Downloads Recorded", count: 0 },
@@ -511,8 +510,6 @@ export default function ProfilePageClient() {
 
   const loadLeaderboard = useCallback(async () => {
     try {
-      setLeaderboardLoading(true)
-
       const response = await fetch("/api/leaderboard", {
         method: "GET",
         cache: "no-store",
@@ -529,8 +526,6 @@ export default function ProfilePageClient() {
       setMyLeaderboardRank(data.me || null)
     } catch (err) {
       console.error("Leaderboard fetch error:", err)
-    } finally {
-      setLeaderboardLoading(false)
     }
   }, [])
 

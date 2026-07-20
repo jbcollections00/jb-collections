@@ -4,10 +4,11 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect } from "react"
 import AdSlot from "@/app/components/AdSlot"
+import SiteHeader from "@/app/components/SiteHeader"
 
-// 🟢 Top Banner Code (300x250)
+// Top Banner Code (300x250)
 const TOP_AD = `
-  <div style="display:flex; justify-content:center; align-items:center;">
+  <div style="display:flex; justify-center; align-items:center;">
     <script type="text/javascript">
       atOptions = {
         'key' : 'b34ceb41f59688ea67157fc3adaa80c5',
@@ -21,9 +22,9 @@ const TOP_AD = `
   </div>
 `
 
-// 🟢 Bottom Banner Code (300x250)
+// Bottom Banner Code (300x250)
 const BOTTOM_AD = `
-  <div style="display:flex; justify-content:center; align-items:center;">
+  <div style="display:flex; justify-center; align-items:center;">
     <script type="text/javascript">
       atOptions = {
         'key' : 'b34ceb41f59688ea67157fc3adaa80c5',
@@ -43,6 +44,12 @@ export default function LayoutShell({
   children: React.ReactNode
 }) {
   const pathname = usePathname() ?? ""
+
+  // Hide navigation header on landing page, login, and signup pages
+  const hideHeader =
+    pathname === "/" ||
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/signup")
 
   const hideAds =
     pathname === "/" ||
@@ -69,33 +76,10 @@ export default function LayoutShell({
 
   return (
     <div className="flex min-h-screen flex-col bg-[#020617] text-white">
-      {/* 🟢 Sticky Top Navigation Header */}
-      <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#020617]/95 shadow-md backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <span className="text-xl font-black tracking-wider text-sky-400">
-              JB COLLECTIONS
-            </span>
-          </Link>
+      {/* Dynamic Blue Top Navigation Header with Coins & Menu */}
+      {!hideHeader && <SiteHeader />}
 
-          <nav className="flex items-center gap-4 text-xs font-bold text-slate-300">
-            <Link
-              href="/dashboard"
-              className="transition hover:text-sky-400"
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/buy-coins"
-              className="rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 px-4 py-2 text-white shadow-sm transition hover:opacity-90"
-            >
-              Recharge Coins
-            </Link>
-          </nav>
-        </div>
-      </header>
-
-      {/* 🟢 1. Header Banner Ad (Top) */}
+      {/* 1. Header Banner Ad (Top) */}
       {!hideAds && (
         <section className="w-full border-b border-slate-800/80 bg-[#070e20] py-3">
           <div className="mx-auto max-w-6xl px-4">
@@ -119,7 +103,7 @@ export default function LayoutShell({
         <footer className="mt-10 border-t border-white/10 bg-[#020617] py-6">
           <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 px-4 text-sm text-slate-300">
             
-            {/* 🟢 2. Footer Banner Ad (Bottom) */}
+            {/* 2. Footer Banner Ad (Bottom) */}
             {!hideAds && (
               <div className="w-full">
                 <div className="mb-1 text-center text-[10px] font-extrabold uppercase tracking-widest text-slate-500">
@@ -146,6 +130,9 @@ export default function LayoutShell({
               </Link>
               <Link href="/refund-policy" className="transition hover:text-white">
                 Refund Policy
+              </Link>
+              <Link href="/contact" className="transition hover:text-white">
+                 Contact Us
               </Link>
             </div>
 

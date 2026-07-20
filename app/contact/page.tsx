@@ -1,6 +1,5 @@
 import Link from "next/link"
 import SiteHeader from "@/app/components/SiteHeader"
-import SiteFooter from "@/app/components/SiteFooter"
 
 export const metadata = {
   title: "Contact Us | JB Collections",
@@ -197,8 +196,6 @@ export default function ContactPage() {
           </div>
         </section>
       </main>
-
-      <SiteFooter />
     </div>
   )
 }

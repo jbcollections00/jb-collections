@@ -2,8 +2,8 @@ import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
 export const runtime = "nodejs"
-export const dynamic = "force-dynamic"
-export const revalidate = 0
+// Caches response for 10 seconds on the server/CDN to prevent hammering the DB
+export const revalidate = 10 
 
 const ONLINE_WINDOW_MINUTES = 5
 const NEW_MEMBERS_LIMIT = 12
@@ -62,12 +62,7 @@ function fallbackResponse(message = "Live stats fallback response.") {
       newMembers: [],
       warning: message,
     },
-    {
-      status: 200,
-      headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-      },
-    },
+    { status: 200 }
   )
 }
 
@@ -97,47 +92,45 @@ export async function GET() {
     const memberFields =
       "id, email, full_name, name, username, role, membership, account_status, status, created_at, last_seen, is_premium, avatar_url"
 
-    const totalUsersResult = await supabase
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
+    // ⚡ SPEED FIX: Fire all 4 queries simultaneously using Promise.all
+    const [
+      totalUsersResult,
+      activeTodayResult,
+      onlineMembersResult,
+      newMembersResult,
+    ] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id", { count: "exact", head: true }),
 
-    if (totalUsersResult.error) {
-      console.error("Live stats total users error:", totalUsersResult.error)
-    }
+      supabase
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .not("last_seen", "is", null)
+        .gte("last_seen", startOfToday),
 
-    const activeTodayResult = await supabase
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .not("last_seen", "is", null)
-      .gte("last_seen", startOfToday)
+      supabase
+        .from("profiles")
+        .select(memberFields)
+        .not("last_seen", "is", null)
+        .gte("last_seen", onlineSince)
+        .order("last_seen", { ascending: false })
+        .limit(50),
 
-    if (activeTodayResult.error) {
-      console.error("Live stats active today error:", activeTodayResult.error)
-    }
+      supabase
+        .from("profiles")
+        .select(memberFields)
+        .not("created_at", "is", null)
+        .gte("created_at", startOfToday)
+        .order("created_at", { ascending: false })
+        .limit(NEW_MEMBERS_LIMIT),
+    ])
 
-    const onlineMembersResult = await supabase
-      .from("profiles")
-      .select(memberFields)
-      .not("last_seen", "is", null)
-      .gte("last_seen", onlineSince)
-      .order("last_seen", { ascending: false })
-      .limit(50)
-
-    if (onlineMembersResult.error) {
-      console.error("Live stats online members error:", onlineMembersResult.error)
-    }
-
-    const newMembersResult = await supabase
-      .from("profiles")
-      .select(memberFields)
-      .not("created_at", "is", null)
-      .gte("created_at", startOfToday)
-      .order("created_at", { ascending: false })
-      .limit(NEW_MEMBERS_LIMIT)
-
-    if (newMembersResult.error) {
-      console.error("Live stats new members error:", newMembersResult.error)
-    }
+    // Log errors if any individual query fails
+    if (totalUsersResult.error) console.error("Total users error:", totalUsersResult.error)
+    if (activeTodayResult.error) console.error("Active today error:", activeTodayResult.error)
+    if (onlineMembersResult.error) console.error("Online members error:", onlineMembersResult.error)
+    if (newMembersResult.error) console.error("New members error:", newMembersResult.error)
 
     const onlineMembers = Array.isArray(onlineMembersResult.data)
       ? (onlineMembersResult.data as ProfileRow[]).map(normalizeMember)
@@ -158,14 +151,15 @@ export async function GET() {
       {
         status: 200,
         headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          // Cache response on browser/CDN for 10 seconds, stale-while-revalidate for 30 seconds
+          "Cache-Control": "public, s-maxage=10, stale-while-revalidate=30",
         },
-      },
+      }
     )
   } catch (error) {
     console.error("Live stats API error:", error)
     return fallbackResponse(
-      error instanceof Error ? error.message : "Unknown live stats server error.",
+      error instanceof Error ? error.message : "Unknown live stats server error."
     )
   }
 }

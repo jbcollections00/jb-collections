@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import SiteHeader from "@/app/components/SiteHeader"
+import SiteFooter from "@/app/components/SiteFooter"
 
 type UserProfile = {
   id: string
@@ -79,7 +80,8 @@ export default function LeaderboardPage() {
           cache: "no-store",
         })
 
-        const data = (await response.json()) as LeaderboardResponse
+        const text = await response.text()
+        const data = (text ? JSON.parse(text) : {}) as LeaderboardResponse
 
         if (!response.ok) {
           setError(data.error || "Failed to load leaderboard.")
@@ -103,8 +105,8 @@ export default function LeaderboardPage() {
     <>
       <SiteHeader />
 
-      <div className="min-h-screen bg-slate-950 pt-28">
-        <div className="mx-auto max-w-5xl px-4 pb-10">
+      <div className="flex min-h-screen flex-col bg-slate-950 pt-28">
+        <div className="mx-auto w-full max-w-5xl flex-1 px-4 pb-10">
           <section className="overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.18),transparent_28%),radial-gradient(circle_at_top_right,rgba(99,102,241,0.18),transparent_30%),linear-gradient(135deg,#0f172a_0%,#111827_55%,#020617_100%)] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -225,6 +227,9 @@ export default function LeaderboardPage() {
             )}
           </section>
         </div>
+
+        {/* Global Footer with Contact Us Link */}
+        <SiteFooter />
       </div>
     </>
   )
