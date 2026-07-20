@@ -1,6 +1,6 @@
 import "./globals.css"
 import type { Metadata } from "next"
-import Script from "next/script" // 👈 Added Next.js Script import
+// ❌ Removed 'Script' import from "next/script"
 import LayoutShell from "./components/LayoutShell"
 import BackgroundAds from "@/app/components/BackgroundAds"
 import ScriptElementGuard from "./components/ScriptElementGuard"
@@ -80,13 +80,11 @@ export default function RootLayout({
       </head>
 
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
-        {/* ✅ Google AdSense (Next.js Optimized) */}
-        <Script
-          id="google-adsense"
+        {/* ✅ Standard HTML Script Tag (Prevents data-nscript warning) */}
+        <script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6646475793737493"
           crossOrigin="anonymous"
-          strategy="afterInteractive"
         />
 
         {/* 🛡️ Client-side safe guard component */}
