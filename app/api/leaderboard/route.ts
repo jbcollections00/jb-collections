@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js"
@@ -11,16 +12,18 @@ type LeaderboardProfileRow = {
   name?: string | null
   username?: string | null
   avatar_url?: string | null
-  coins?: number | null
+  jb_points?: number | null
   membership?: string | null
   role?: string | null
 }
 
 function requireEnv(name: string) {
   const value = process.env[name]
+
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`)
   }
+
   return value
 }
 
@@ -71,6 +74,7 @@ function getMembership(profile: LeaderboardProfileRow) {
   if (role === "admin") return "admin"
   if (membership === "platinum") return "platinum"
   if (membership === "premium") return "premium"
+
   return "standard"
 }
 
@@ -78,15 +82,20 @@ function getMembershipLabel(value: string) {
   if (value === "admin") return "Admin"
   if (value === "platinum") return "Platinum"
   if (value === "premium") return "Premium"
+
   return "Standard"
 }
 
 function getInitials(name: string) {
   const cleaned = name.trim()
+
   if (!cleaned) return "U"
 
   const parts = cleaned.split(/\s+/).filter(Boolean)
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase()
+  }
 
   return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase()
 }
@@ -111,16 +120,26 @@ export async function GET() {
 
     const { data: topProfiles, error: leaderboardError } = await adminDb
       .from("profiles")
-      .select("id, full_name, name, username, avatar_url, coins, membership, role")
-      .order("coins", { ascending: false, nullsFirst: false })
+      .select(
+        "id, full_name, name, username, avatar_url, jb_points, membership, role"
+      )
+      .order("jb_points", {
+        ascending: false,
+        nullsFirst: false,
+      })
       .limit(10)
 
     if (leaderboardError) {
       console.error("Leaderboard query error:", leaderboardError)
 
       return NextResponse.json(
-        { ok: false, error: "Failed to load leaderboard" },
-        { status: 500 }
+        {
+          ok: false,
+          error: "Failed to load leaderboard",
+        },
+        {
+          status: 500,
+        }
       )
     }
 
@@ -139,35 +158,51 @@ export async function GET() {
         username: profile.username || null,
         avatar_url: profile.avatar_url || null,
         initials: getInitials(displayName),
-        coins: Number(profile.coins || 0),
+
+        // IMPORTANT
+        coins: Number(profile.jb_points || 0),
+
         membership,
         membership_label: getMembershipLabel(membership),
-        is_current_user: currentUserId ? profile.id === currentUserId : false,
+        is_current_user: currentUserId
+          ? profile.id === currentUserId
+          : false,
       }
     })
 
     let me = null
 
     if (currentUserId) {
-      const { data: currentUserProfile, error: currentUserError } = await adminDb
-        .from("profiles")
-        .select("id, coins, full_name, name, username, avatar_url, membership, role")
-        .eq("id", currentUserId)
-        .maybeSingle()
+      const { data: currentUserProfile, error: currentUserError } =
+        await adminDb
+          .from("profiles")
+          .select(
+            "id, jb_points, full_name, name, username, avatar_url, membership, role"
+          )
+          .eq("id", currentUserId)
+          .maybeSingle()
 
       if (!currentUserError && currentUserProfile) {
         const safeCurrentUserProfile =
           currentUserProfile as LeaderboardProfileRow
 
-        const currentUserCoins = Number(safeCurrentUserProfile.coins || 0)
+        const currentUserCoins = Number(
+          safeCurrentUserProfile.jb_points || 0
+        )
 
         const { count: higherCount } = await adminDb
           .from("profiles")
-          .select("id", { count: "exact", head: true })
-          .gt("coins", currentUserCoins)
+          .select("id", {
+            count: "exact",
+            head: true,
+          })
+          .gt("jb_points", currentUserCoins)
 
-        const currentUserDisplayName = getDisplayName(safeCurrentUserProfile)
-        const currentUserMembership = getMembership(safeCurrentUserProfile)
+        const currentUserDisplayName =
+          getDisplayName(safeCurrentUserProfile)
+
+        const currentUserMembership =
+          getMembership(safeCurrentUserProfile)
 
         me = {
           id: currentUserId,
@@ -176,7 +211,10 @@ export async function GET() {
           username: safeCurrentUserProfile.username || null,
           avatar_url: safeCurrentUserProfile.avatar_url || null,
           initials: getInitials(currentUserDisplayName),
+
+          // IMPORTANT
           coins: currentUserCoins,
+
           membership: currentUserMembership,
           membership_label: getMembershipLabel(currentUserMembership),
         }
@@ -199,7 +237,9 @@ export async function GET() {
             ? error.message
             : "Failed to load leaderboard",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     )
   }
 }

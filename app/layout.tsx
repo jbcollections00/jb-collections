@@ -2,6 +2,7 @@ import "./globals.css"
 import type { Metadata } from "next"
 import LayoutShell from "./components/LayoutShell"
 import BackgroundAds from "@/app/components/BackgroundAds" // ✅ ADD THIS
+import ScriptElementGuard from "./components/ScriptElementGuard" // We will use a safe component variant
 
 function getSiteUrl() {
   return (
@@ -85,6 +86,9 @@ export default function RootLayout({
       </head>
 
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
+        {/* 🛡️ Client-side safe guard component */}
+        <ScriptElementGuard />
+
         <LayoutShell>{children}</LayoutShell>
 
         {/* 🔥 THIS IS THE MONEY PART */}

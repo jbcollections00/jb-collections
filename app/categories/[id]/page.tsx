@@ -47,14 +47,16 @@ type ProfileRow = {
 type FilterKey = "all" | "free" | "premium" | "platinum"
 type SortKey = "newest" | "downloads" | "name"
 
-const PAGE_SIZE = 20
+// Set to 25 to support a perfect 5x5 layout matrix
+const PAGE_SIZE = 25
 
 function slugify(value?: string | null) {
   return String(value || "")
     .trim()
     .toLowerCase()
     .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]+/g, "")
     .replace(/^-+|-+$/g, "")
 }
 
@@ -80,6 +82,7 @@ function isPdfFile(url?: string | null, mimeType?: string | null) {
   return /\.pdf(\?|$)/i.test(url)
 }
 
+// Fixed priority order for previews: Title metadata images -> fallback URL properties
 function getPreviewImage(file: FileItem) {
   if (file.cover_url) return file.cover_url
   if (file.thumbnail_url) return file.thumbnail_url
@@ -107,86 +110,23 @@ function getDisplayFileType(file: FileItem) {
   return getFileExtension(file.file_url)
 }
 
-function getFileIcon(type: string) {
-  const normalized = type.toUpperCase()
-
-  if (["PDF"].includes(normalized)) return "📕"
-  if (["DOC", "DOCX"].includes(normalized)) return "📘"
-  if (["XLS", "XLSX", "CSV"].includes(normalized)) return "📗"
-  if (["PPT", "PPTX"].includes(normalized)) return "📙"
-  if (["ZIP", "RAR", "7Z"].includes(normalized)) return "🗜️"
-  if (["JPG", "JPEG", "PNG", "WEBP", "GIF", "SVG", "IMAGE"].includes(normalized)) return "🖼️"
-  if (["MP4", "MOV", "AVI", "MKV", "VIDEO"].includes(normalized)) return "🎬"
-  if (["MP3", "WAV", "AAC", "AUDIO"].includes(normalized)) return "🎵"
-  if (["EXE", "MSI", "APK"].includes(normalized)) return "⚙️"
-  return "📄"
-}
-
 function formatNumber(value?: number | null) {
   return new Intl.NumberFormat().format(value || 0)
 }
 
-function formatFileSize(bytes?: number | null) {
-  const value = bytes || 0
-  if (!value) return "Unknown"
-  const units = ["B", "KB", "MB", "GB", "TB"]
-  let size = value
-  let unitIndex = 0
-
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex += 1
-  }
-
-  return `${size >= 10 || unitIndex === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unitIndex]}`
-}
-
 function getDisplayName(file: FileItem) {
-  return file.title || file.name || "Untitled File"
+  return file.title || file.name || "Untitled Resource"
 }
 
 function canPreviewInline(file: FileItem) {
   return !!getPreviewImage(file) || isVideoFile(file.file_url) || isPdfFile(file.file_url, file.mime_type)
 }
 
-
 function normalizeMembership(value?: string | null) {
   const membership = String(value || "").trim().toLowerCase()
   if (membership === "platinum") return "platinum"
   if (membership === "premium") return "premium"
   return "standard"
-}
-
-function getVisibilityLabel(file: FileItem) {
-  const visibility = (file.visibility || "free").toLowerCase()
-  if (visibility === "platinum") return "Platinum"
-  if (visibility === "premium") return "Premium"
-  if (visibility === "private") return "Private"
-  return "Free"
-}
-
-function getVisibilityBadgeClasses(file: FileItem) {
-  const visibility = (file.visibility || "free").toLowerCase()
-
-  if (visibility === "platinum") {
-    return "border-fuchsia-400/30 bg-fuchsia-500/90 text-white shadow-[0_0_24px_rgba(217,70,239,0.28)]"
-  }
-  if (visibility === "premium") {
-    return "border-amber-400/30 bg-amber-500/90 text-white shadow-[0_0_24px_rgba(245,158,11,0.24)]"
-  }
-  if (visibility === "private") {
-    return "border-red-400/30 bg-red-500/90 text-white shadow-[0_0_24px_rgba(239,68,68,0.24)]"
-  }
-  return "border-emerald-400/30 bg-emerald-500/90 text-white shadow-[0_0_24px_rgba(16,185,129,0.22)]"
-}
-
-function getCardBorderClasses(file: FileItem) {
-  const visibility = (file.visibility || "free").toLowerCase()
-
-  if (visibility === "platinum") return "border-fuchsia-400/20 hover:border-fuchsia-400/40"
-  if (visibility === "premium") return "border-amber-400/20 hover:border-amber-400/40"
-  if (visibility === "private") return "border-red-400/20 hover:border-red-400/40"
-  return "border-white/10 hover:border-sky-400/30"
 }
 
 function isNewFile(file: FileItem) {
@@ -196,6 +136,7 @@ function isNewFile(file: FileItem) {
   return createdAt > Date.now() - 10 * 24 * 60 * 60 * 1000
 }
 
+// Fallback logic for Category main banners
 function getCategoryHeroImage(category: Category | null, featuredFile: FileItem | null) {
   if (category?.thumbnail_url) return category.thumbnail_url
   if (featuredFile) return getPreviewImage(featuredFile)
@@ -233,7 +174,6 @@ export default function CategoryPage() {
     if (routeValue) {
       void checkUserAndLoad()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeValue])
 
   useEffect(() => {
@@ -315,19 +255,16 @@ export default function CategoryPage() {
       setCheckingAuth(true)
       setLoading(true)
 
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser()
+      const response = await supabase.auth.getUser()
 
-      if (error || !user) {
+      if (!response || response.error || !response.data?.user) {
         router.replace("/login")
         return
       }
 
-      await fetchCategoryPage(user.id)
+      await fetchCategoryPage(response.data.user.id)
     } catch (error) {
-      console.error("Category auth check failed:", error)
+      console.error("Category authentication check failure:", error)
       router.replace("/login")
     } finally {
       setCheckingAuth(false)
@@ -392,15 +329,6 @@ export default function CategoryPage() {
     }
   }
 
-  const membership = normalizeMembership(profile?.membership)
-  const isAdmin = profile?.role === "admin"
-  const isPremiumUser =
-    isAdmin ||
-    profile?.is_premium === true ||
-    membership === "premium" ||
-    membership === "platinum"
-  const isPlatinumUser = isAdmin || membership === "platinum"
-
   const featuredFile = useMemo(() => {
     if (files.length === 0) return null
     return [...files].sort((a, b) => {
@@ -455,58 +383,19 @@ export default function CategoryPage() {
   const totalPages = Math.max(1, Math.ceil(filteredFiles.length / PAGE_SIZE))
 
   const paginatedFiles = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE
+    const boundedPage = Math.min(currentPage, totalPages)
+    const start = (boundedPage - 1) * PAGE_SIZE
     const end = start + PAGE_SIZE
     return filteredFiles.slice(start, end)
-  }, [filteredFiles, currentPage])
+  }, [filteredFiles, currentPage, totalPages])
 
   const totalDownloads = useMemo(() => {
     return files.reduce((sum, file) => sum + (file.downloads_count || file.download_count || 0), 0)
   }, [files])
 
-  const freeCount = useMemo(() => {
-    return files.filter((file) => (file.visibility || "free").toLowerCase() === "free").length
-  }, [files])
-
-  const premiumCount = useMemo(() => {
-    return files.filter((file) => (file.visibility || "free").toLowerCase() === "premium").length
-  }, [files])
-
-  const platinumCount = useMemo(() => {
-    return files.filter((file) => (file.visibility || "free").toLowerCase() === "platinum").length
-  }, [files])
-
   const newestCount = useMemo(() => {
     return files.filter((file) => isNewFile(file)).length
   }, [files])
-
-  const imageCount = useMemo(() => {
-    return files.filter((file) => getDisplayFileType(file) === "IMAGE" || isImageFile(file.file_url)).length
-  }, [files])
-
-  const videoCount = useMemo(() => {
-    return files.filter((file) => getDisplayFileType(file) === "VIDEO" || isVideoFile(file.file_url)).length
-  }, [files])
-
-  const topDownloads = useMemo(() => {
-    return [...files]
-      .sort((a, b) => (b.downloads_count || b.download_count || 0) - (a.downloads_count || a.download_count || 0))
-      .slice(0, 4)
-  }, [files])
-
-  const relatedFiles = useMemo(() => {
-    return [...files]
-      .sort((a, b) => {
-        const aDownloads = a.downloads_count || a.download_count || 0
-        const bDownloads = b.downloads_count || b.download_count || 0
-        if (bDownloads !== aDownloads) return bDownloads - aDownloads
-        const aTime = new Date(a.created_at || "").getTime() || 0
-        const bTime = new Date(b.created_at || "").getTime() || 0
-        return bTime - aTime
-      })
-      .filter((file) => file.id !== featuredFile?.id)
-      .slice(0, 5)
-  }, [files, featuredFile])
 
   const previewableFiles = useMemo(() => {
     return filteredFiles.filter((file) => canPreviewInline(file))
@@ -516,11 +405,6 @@ export default function CategoryPage() {
     if (!previewFile) return -1
     return previewableFiles.findIndex((file) => file.id === previewFile.id)
   }, [previewFile, previewableFiles])
-
-  function openPreview(file: FileItem) {
-    setPreviewZoom(1)
-    setPreviewFile(file)
-  }
 
   function openNextPreview() {
     if (!previewableFiles.length || currentPreviewIndex === -1) return
@@ -536,37 +420,19 @@ export default function CategoryPage() {
     setPreviewFile(previewableFiles[prevIndex])
   }
 
-  function handlePreviewTouchStart(clientX: number) {
-    setTouchStartX(clientX)
-  }
-
-  function handlePreviewTouchEnd(clientX: number) {
-    if (touchStartX === null) return
-    const deltaX = clientX - touchStartX
-
-    if (Math.abs(deltaX) >= 60) {
-      if (deltaX < 0) {
-        openNextPreview()
-      } else {
-        openPrevPreview()
-      }
-    }
-
-    setTouchStartX(null)
-  }
-
   function goToPage(page: number) {
     if (page < 1 || page > totalPages) return
     setCurrentPage(page)
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  function handleDownload(file: FileItem) {
-    window.location.href = `/download/${file.id}`
-  }
-
   function handleBackToTop() {
     window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  // Links directly to your unique server routes
+  function handleDownload(fileId: string) {
+    window.location.href = `/download/${fileId}`
   }
 
   function clearFilters() {
@@ -576,7 +442,7 @@ export default function CategoryPage() {
   }
 
   function toggleFavorite(fileId: string) {
-    const fileName = getDisplayName(files.find((file) => file.id === fileId) || { title: "File" } as FileItem)
+    const fileName = getDisplayName(files.find((file) => file.id === fileId) || ({ title: "File" } as FileItem))
     setFavorites((prev) => {
       const exists = prev.includes(fileId)
       setFavoriteToast(exists ? `Removed ${fileName} from favorites` : `Saved ${fileName} to favorites`)
@@ -588,8 +454,8 @@ export default function CategoryPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
         <div className="rounded-3xl border border-white/10 bg-slate-900 px-8 py-6 text-center shadow-sm">
-          <p className="text-lg font-semibold text-white">Checking your account...</p>
-          <p className="mt-2 text-sm text-slate-400">Please wait.</p>
+          <p className="text-lg font-semibold text-white">Verifying account access...</p>
+          <p className="mt-2 text-sm text-slate-400">Please wait a moment.</p>
         </div>
       </div>
     )
@@ -601,20 +467,11 @@ export default function CategoryPage() {
         <SiteHeader />
         <div className="mx-auto w-full max-w-[1900px] px-4 pb-8 pt-24 sm:px-6 sm:pt-28 lg:px-8">
           <div className="mb-6 h-64 animate-pulse rounded-[34px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
-          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <div key={index} className="h-24 animate-pulse rounded-[24px] border border-white/10 bg-slate-900/80" />
-            ))}
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+          {/* Skeleton loading matching our 5-column parameters */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {Array.from({ length: 10 }).map((_, index) => (
               <div key={index} className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-900/80 shadow-sm ring-1 ring-white/5">
                 <div className="aspect-[3/4] animate-pulse bg-slate-800" />
-                <div className="space-y-3 p-3">
-                  <div className="mx-auto h-4 w-3/4 animate-pulse rounded bg-slate-700" />
-                  <div className="h-4 w-full animate-pulse rounded bg-slate-700" />
-                  <div className="h-10 w-full animate-pulse rounded-xl bg-slate-700" />
-                </div>
               </div>
             ))}
           </div>
@@ -627,8 +484,7 @@ export default function CategoryPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
         <div className="rounded-3xl border border-white/10 bg-slate-900 px-8 py-6 text-center shadow-sm">
-          <p className="text-lg font-semibold text-white">Redirecting to categories...</p>
-          <p className="mt-2 text-sm text-slate-400">Please wait.</p>
+          <p className="text-lg font-semibold text-white">Navigating back to categories...</p>
         </div>
       </div>
     )
@@ -642,285 +498,136 @@ export default function CategoryPage() {
   const heroImage = getCategoryHeroImage(category, featuredFile)
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-[#050814] text-white">
       <SiteHeader />
 
       <div className="mx-auto w-full max-w-[1900px] px-4 pb-10 pt-24 sm:px-6 sm:pt-28 lg:px-8">
-        <div className="mb-8 overflow-hidden rounded-[36px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.22),transparent_28%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.18),transparent_25%),linear-gradient(135deg,#020617_0%,#0f172a_50%,#111827_100%)] shadow-[0_25px_80px_rgba(0,0,0,0.45)]">
-          <div className="relative">
-            {heroImage ? (
-              <>
-                <img src={heroImage} alt={category.name} className="absolute inset-0 h-full w-full object-cover opacity-20" />
-                <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/85 to-slate-900/40" />
-              </>
-            ) : null}
+        
+        {/* HERO HEADER REGION */}
+        <div className="mb-8 overflow-hidden rounded-[36px] border border-white/10 bg-gradient-to-r from-sky-600/90 via-blue-700/80 to-indigo-950 p-6 md:p-8 shadow-2xl relative">
+          {heroImage ? (
+            <>
+              <img src={heroImage} alt={category.name} className="absolute inset-0 h-full w-full object-cover opacity-15" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#050814] via-[#050814]/70 to-transparent" />
+            </>
+          ) : null}
 
-            <div className="relative z-10 px-5 py-6 sm:px-6 lg:px-8 lg:py-8">
-              <div className="mb-5 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-300">
-                <Link href="/categories" className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 transition hover:bg-white/10">
-                  All Categories
-                </Link>
-                <span className="text-slate-500">/</span>
-                <span className="rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1.5 text-sky-300">
-                  {category.name}
+          <div className="relative z-10">
+            {/* Breadcrumbs */}
+            <div className="mb-4 flex items-center gap-2 text-xs font-semibold text-slate-300">
+              <Link href="/categories" className="rounded-full border border-white/10 bg-black/30 px-3 py-1">
+                All Categories
+              </Link>
+              <span className="text-slate-400">/</span>
+              <span className="rounded-full border border-sky-400/30 bg-blue-500/30 px-3 py-1 font-bold text-sky-200">
+                {category.name}
+              </span>
+            </div>
+
+            {/* Title Block & Statistics */}
+            <div className="mb-6 space-y-2">
+              <span className="inline-block rounded-full border border-sky-400/20 bg-slate-950/50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-widest text-sky-300">
+                Premium Vault Explorer
+              </span>
+              <h1 className="text-4xl font-black text-white tracking-tight md:text-5xl">
+                {category.name}
+              </h1>
+              <p className="max-w-2xl text-sm text-slate-200 md:text-base">
+                {category.description || "Browse custom, high-definition assets available below."}
+              </p>
+
+              <div className="flex flex-wrap gap-2 pt-2">
+                <span className="rounded-full border border-white/10 bg-slate-950/50 px-3 py-1 text-xs font-bold text-slate-200">
+                  {formatNumber(files.length)} files
+                </span>
+                <span className="rounded-full border border-white/10 bg-slate-950/50 px-3 py-1 text-xs font-bold text-slate-200">
+                  {formatNumber(totalDownloads)} downloads
+                </span>
+                <span className="rounded-full border border-white/10 bg-slate-950/50 px-3 py-1 text-xs font-bold text-slate-200">
+                  {formatNumber(newestCount)} new arrivals
                 </span>
               </div>
+            </div>
 
-              <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
-                <div>
-                  <div className="inline-flex items-center rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-sky-200 backdrop-blur-sm">
-                    10/10 Category Experience
-                  </div>
-
-                  <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
-                    {category.name}
-                  </h1>
-
-                  <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-                    {category.description || "Explore a polished collection page with fast browsing, strong visuals, better filtering, and high-conversion file cards."}
-                  </p>
-
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm">
-                      {formatNumber(files.length)} files
-                    </div>
-                    <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm">
-                      {formatNumber(totalDownloads)} downloads
-                    </div>
-                    <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm">
-                      {formatNumber(newestCount)} new arrivals
-                    </div>
-                  </div>
-
-                  {featuredFile && (
-                    <div className="mt-6 rounded-[26px] border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-                      <div className="mb-2 inline-flex rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-sky-200">
-                        Featured Pick
-                      </div>
-                      <h2 className="text-lg font-black sm:text-xl">{getDisplayName(featuredFile)}</h2>
-                      <p className="mt-2 line-clamp-2 text-sm text-slate-300">
-                        {featuredFile.description || "Top performing file in this category."}
-                      </p>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <div className={`rounded-full border px-3 py-1.5 text-xs font-bold ${getVisibilityBadgeClasses(featuredFile)}`}>
-                          {getVisibilityLabel(featuredFile)}
-                        </div>
-                        <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white">
-                          {getDisplayFileType(featuredFile)}
-                        </div>
-                        <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white">
-                          {formatNumber(featuredFile.downloads_count || featuredFile.download_count || 0)} downloads
-                        </div>
-                      </div>
-                      <div className="mt-5 flex flex-wrap gap-3">
-                        <button
-                          type="button"
-                          onClick={() => handleDownload(featuredFile)}
-                          className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-900 transition hover:bg-slate-200"
-                        >
-                          Download Featured
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openPreview(featuredFile)}
-                          className="inline-flex items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-bold text-white backdrop-blur-sm transition hover:bg-white/15"
-                        >
-                          Quick Preview
-                        </button>
-                      </div>
-                    </div>
-                  )}
+            {/* HORIZONTAL CONTROLS COMPONENT BAR */}
+            <div className="w-full rounded-2xl border border-white/10 bg-slate-950/60 p-3 md:p-4 shadow-2xl backdrop-blur-md">
+              <div className="flex flex-col xl:flex-row items-center justify-between gap-4">
+                
+                {/* Search Parameter */}
+                <div className="flex flex-col w-full xl:w-72">
+                  <span className="mb-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    Search inside category
+                  </span>
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={`Search in ${category.name}...`}
+                    className="w-full rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
 
-                <div className="space-y-3">
-                  <div className="rounded-[26px] border border-white/10 bg-white/10 p-3 backdrop-blur-md">
-                    <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-slate-300">
-                      Search inside category
-                    </label>
-                    <input
-                      type="text"
-                      placeholder={`Search in ${category.name}...`}
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                      className="w-full rounded-[18px] border border-white/10 bg-white px-4 py-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500"
-                    />
+                {/* Category Navigation Dropdown */}
+                <div className="flex flex-col w-full xl:w-72">
+                  <div className="mb-1 flex justify-between items-center">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      Browse Categories
+                    </span>
+                    <Link href="/categories" className="text-[10px] font-bold text-sky-400 hover:underline">
+                      View all
+                    </Link>
                   </div>
+                  <select
+                    value={category.id}
+                    onChange={(e) => {
+                      const targetItem = allCategories.find((item) => item.id === e.target.value)
+                      if (targetItem) router.push(getCategoryHref(targetItem))
+                    }}
+                    className="w-full rounded-xl bg-white px-4 py-2 text-xs font-extrabold uppercase text-slate-900 focus:outline-none cursor-pointer"
+                  >
+                    {allCategories.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                  <div className="sticky top-24 z-30 rounded-[26px] border border-white/10 bg-white/10 p-4 backdrop-blur-md shadow-[0_14px_35px_rgba(0,0,0,0.28)]">
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-300">Browse Categories</span>
-                      <Link href="/categories" className="text-xs font-semibold text-sky-300 hover:text-sky-200">
-                        View all
-                      </Link>
-                    </div>
-                    <div className="flex max-h-[160px] flex-wrap gap-2 overflow-auto pr-1">
-                      {allCategories.map((item) => {
-                        const active = item.id === category.id
-                        return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => router.push(getCategoryHref(item))}
-                            className={`rounded-full border px-4 py-2 text-xs font-bold transition ${
-                              active
-                                ? "border-white bg-white text-slate-900"
-                                : "border-white/10 bg-white/5 text-white hover:bg-white/10"
-                            }`}
-                          >
-                            {item.name}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="rounded-[26px] border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-                    <div className="mb-3 flex flex-wrap gap-2">
-                      {[
-                        { key: "all", label: "ALL" },
-                        { key: "free", label: "FREE" },
-                        { key: "premium", label: "PREMIUM" },
-                        { key: "platinum", label: "PLATINUM" },
-                      ].map((item) => (
-                        <button
-                          key={item.key}
-                          type="button"
-                          onClick={() => setFilter(item.key as FilterKey)}
-                          className={`rounded-full border px-4 py-2 text-xs font-bold tracking-[0.14em] transition ${
-                            filter === item.key
-                              ? "border-white bg-white text-slate-900"
-                              : "border-white/10 bg-white/5 text-white hover:bg-white/10"
-                          }`}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Sort</span>
-                      <select
-                        value={sortBy}
-                        onChange={(event) => setSortBy(event.target.value as SortKey)}
-                        className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white outline-none"
+                {/* Filter and Sorting Group */}
+                <div className="flex flex-wrap items-end justify-between xl:justify-end gap-3 w-full xl:w-auto">
+                  
+                  {/* Access Level Controls */}
+                  <div className="flex items-center gap-1.5 rounded-xl border border-white/5 bg-slate-900/80 p-1">
+                    {(["all", "free", "premium", "platinum"] as const).map((itemKey) => (
+                      <button
+                        key={itemKey}
+                        type="button"
+                        onClick={() => setFilter(itemKey)}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-black uppercase transition-all ${
+                          filter === itemKey
+                            ? "bg-white text-slate-950 shadow-md"
+                            : "text-slate-400 hover:text-white"
+                        }`}
                       >
-                        <option value="newest" className="text-slate-900">Newest</option>
-                        <option value="downloads" className="text-slate-900">Most Downloaded</option>
-                        <option value="name" className="text-slate-900">Name A-Z</option>
-                      </select>
-
-                      {(search || filter !== "all" || sortBy !== "newest") && (
-                        <button
-                          type="button"
-                          onClick={clearFilters}
-                          className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
-                        >
-                          Reset
-                        </button>
-                      )}
-                    </div>
+                        {itemKey}
+                      </button>
+                    ))}
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        <div className="hidden mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-          {[
-            { label: "Total Files", value: formatNumber(files.length) },
-            { label: "Downloads", value: formatNumber(totalDownloads) },
-            { label: "Free", value: formatNumber(freeCount) },
-            { label: "Premium", value: formatNumber(premiumCount) },
-            { label: "Platinum", value: formatNumber(platinumCount) },
-            { label: "New This Week", value: formatNumber(newestCount) },
-          ].map((item) => (
-            <div key={item.label} className="rounded-[24px] border border-white/10 bg-slate-900/80 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{item.label}</p>
-              <p className="mt-2 text-2xl font-black text-white">{item.value}</p>
-            </div>
-          ))}
-        </div>
+                  {/* Ordering Sequence */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-extrabold uppercase text-slate-400">Sort</span>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as SortKey)}
+                      className="rounded-xl bg-white px-4 py-2 text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
+                    >
+                      <option value="newest">Newest</option>
+                      <option value="downloads">Most Downloaded</option>
+                      <option value="name">Name A-Z</option>
+                    </select>
+                  </div>
 
-        <div className="hidden mb-8 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(0,0,0,0.24)]">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-xl font-black tracking-tight text-white">🔥 Popular Now</h3>
-                <p className="mt-1 text-sm text-slate-400">Quick access to the hottest files in this category</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {topDownloads.length > 0 ? (
-                topDownloads.map((file, index) => {
-                  const previewImage = getPreviewImage(file)
-                  return (
-                    <div key={file.id} className={`group w-full overflow-hidden rounded-[24px] border bg-slate-950/60 shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-all duration-300 hover:-translate-y-1.5 hover:scale-[1.01] hover:shadow-[0_20px_45px_rgba(0,0,0,0.34)] ${index === 0 ? "border-amber-400/50 ring-1 ring-amber-300/30 shadow-[0_0_0_1px_rgba(251,191,36,0.18),0_20px_45px_rgba(0,0,0,0.34)]" : "border-white/10 hover:border-sky-400/40"}`}>
-                      <div className="relative aspect-[3/4] overflow-hidden bg-slate-800">
-                        {previewImage ? (
-                          <>
-                            <img src={previewImage} alt={getDisplayName(file)} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent" />
-                          </>
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-4xl">{getFileIcon(getDisplayFileType(file))}</div>
-                        )}
-                        <div className={`absolute left-3 top-3 rounded-full border px-3 py-1.5 text-sm font-black text-white backdrop-blur-sm shadow-[0_10px_30px_rgba(0,0,0,0.28)] ${index === 0 ? "border-amber-300/40 bg-amber-500/90" : "border-white/10 bg-black/55"}`}>#{index + 1}</div>
-                      </div>
-                        {index === 0 && (
-                          <div className="absolute right-3 bottom-3 rounded-full border border-amber-300/35 bg-amber-500/90 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-[0_10px_25px_rgba(245,158,11,0.35)]">
-                            Top Pick
-                          </div>
-                        )}
-                      <div className="p-4">
-                        <h4 className="line-clamp-1 text-sm font-black text-white">{getDisplayName(file)}</h4>
-                        <p className="mt-1 text-xs text-slate-400">{formatNumber(file.downloads_count || file.download_count || 0)} downloads</p>
-                        <p className="mt-1 text-xs text-slate-400">Size: {formatFileSize(file.file_size || file.size)}</p>
-                        <div className="mt-3 flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openPreview(file)}
-                            className="inline-flex flex-1 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/10"
-                          >
-                            Preview
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDownload(file)}
-                            className="inline-flex flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-3 py-2 text-xs font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
-                          >
-                            Download
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })
-              ) : (
-                <div className="col-span-full rounded-[22px] border border-dashed border-white/10 bg-white/[0.03] p-6 text-sm text-slate-400">
-                  No popular files yet in this category.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="rounded-[28px] border border-white/10 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(0,0,0,0.24)]">
-              <h3 className="text-lg font-black text-white">Category Insights</h3>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Images</p>
-                  <p className="mt-2 text-2xl font-black">{formatNumber(imageCount)}</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Videos</p>
-                  <p className="mt-2 text-2xl font-black">{formatNumber(videoCount)}</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 col-span-2">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Access Level</p>
-                  <p className="mt-2 text-sm font-semibold text-slate-200">
-                    {isPlatinumUser ? "You can access free, premium, and platinum files." : isPremiumUser ? "You can access free and premium files." : "You currently have access to free files only."}
-                  </p>
                 </div>
               </div>
             </div>
@@ -933,24 +640,22 @@ export default function CategoryPage() {
         </div>
 
         {filteredFiles.length === 0 ? (
-          <>
-            <div className="rounded-[28px] border border-dashed border-white/15 bg-slate-900/70 px-6 py-20 text-center shadow-sm">
-              <div className="mx-auto max-w-md">
-                <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-white/5 text-3xl">🔎</div>
-                <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">No files found</h2>
-                <p className="mt-3 text-slate-400">No file matched your search or selected filter in {category.name}.</p>
-                <div className="mt-6">
-                  <button
-                    type="button"
-                    onClick={clearFilters}
-                    className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-900 transition hover:bg-slate-200"
-                  >
-                    Clear Search & Filters
-                  </button>
-                </div>
+          <div className="rounded-[28px] border border-dashed border-white/15 bg-slate-900/70 px-6 py-20 text-center shadow-sm">
+            <div className="mx-auto max-w-md">
+              <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-white/5 text-3xl">🔎</div>
+              <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">No files found</h2>
+              <p className="mt-3 text-slate-400">No resources matched your current filter combinations.</p>
+              <div className="mt-6">
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-900 transition hover:bg-slate-200"
+                >
+                  Reset Parameters
+                </button>
               </div>
             </div>
-          </>
+          </div>
         ) : (
           <>
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -958,152 +663,107 @@ export default function CategoryPage() {
                 <h2 className="text-2xl font-black tracking-tight text-white">Browse Files</h2>
                 <p className="mt-1 text-sm text-slate-400">Showing {startItem} to {endItem} of {formatNumber(filteredFiles.length)} files</p>
               </div>
-              <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300">Page {currentPage} of {totalPages}</div>
+              <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300">
+                Page {currentPage} of {totalPages}
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
-              {paginatedFiles.map((file) => {
+            {/* FIXED 5-COLUMN GRID SPECIFYING PICTURE DETAILS & DIRECT DOWNLOAD TRIGGER */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {paginatedFiles.map((file, fileIdx) => {
                 const previewImage = getPreviewImage(file)
                 const type = getDisplayFileType(file)
-                const icon = getFileIcon(type)
-                const visibility = (file.visibility || "free").toLowerCase()
-                const isPremiumLocked = visibility === "premium"
-                const isPlatinumLocked = visibility === "platinum"
-                const isLocked = (isPremiumLocked && !isPremiumUser) || (isPlatinumLocked && !isPlatinumUser)
-                const canPreview = canPreviewInline(file)
+                const fileTitle = getDisplayName(file)
+                const dlCount = file.downloads_count || file.download_count || 0
 
                 return (
                   <div
                     key={file.id}
-                    className={`group overflow-hidden rounded-[26px] border bg-slate-900/90 shadow-[0_12px_35px_rgba(0,0,0,0.28)] ring-1 ring-white/5 transition-all duration-300 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_24px_60px_rgba(0,0,0,0.42)] ${getCardBorderClasses(file)}`}
-                    style={{ animation: `fadeUp 0.45s ease ${Math.min((currentPage - 1) * 0, 0) + (paginatedFiles.findIndex((entry) => entry.id === file.id) * 0.035)}s both` }}
+                    className="group relative overflow-hidden rounded-[24px] border border-slate-800 bg-slate-900/40 shadow-xl transition-all duration-300 hover:-translate-y-1 hover:border-slate-700"
+                    style={{ animation: `fadeUp 0.45s ease ${fileIdx * 0.025}s both` }}
                   >
-                    <div className="relative overflow-hidden bg-slate-800">
-                      <div className="aspect-[3/4] overflow-hidden">
-                        {previewImage ? (
-                          <>
-                            <img
-                              src={previewImage}
-                              alt={getDisplayName(file)}
-                              loading="lazy"
-                              decoding="async"
-                              className={`h-full w-full object-cover transition duration-500 group-hover:scale-110 ${isLocked ? "brightness-90" : ""}`}
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent" />
-                            <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent_0%,rgba(255,255,255,0.08)_45%,transparent_70%)] opacity-0 transition duration-500 group-hover:opacity-100" />
-                          </>
-                        ) : (
-                          <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-                            <div className="mb-3 text-5xl">{icon}</div>
-                            <p className="px-4 text-center text-sm font-semibold text-slate-400">No preview available</p>
-                          </div>
-                        )}
-
-                        <div className="absolute left-3 top-3 flex flex-wrap gap-2">
-                          <div className={`rounded-full border px-3 py-1.5 text-[11px] font-bold backdrop-blur-md ${getVisibilityBadgeClasses(file)}`}>
-                            {getVisibilityLabel(file)}
-                          </div>
-                          <div className="rounded-full border border-white/10 bg-black/45 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur-md">{type}</div>
+                    <div className="relative aspect-[3/4] w-full overflow-hidden bg-slate-950">
+                      {previewImage ? (
+                        <img
+                          src={previewImage}
+                          alt={fileTitle}
+                          loading="lazy"
+                          className="h-full w-full object-cover transition duration-500 group-hover:scale-102"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-900 to-slate-950 text-xs text-slate-600">
+                          Placeholder Graphic
                         </div>
+                      )}
 
-                        <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => toggleFavorite(file.id)}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/45 text-lg text-white backdrop-blur-md transition hover:scale-110 hover:bg-black/60"
-                            aria-label={favorites.includes(file.id) ? "Remove from favorites" : "Add to favorites"}
-                          >
-                            {favorites.includes(file.id) ? "❤️" : "🤍"}
-                          </button>
-                          {(file.downloads_count || file.download_count || 0) >= 500 && (
-                            <div className="rounded-full border border-red-400/30 bg-red-500/95 px-2.5 py-1 text-[10px] font-bold text-white shadow-[0_0_20px_rgba(239,68,68,0.30)]">🔥 TRENDING</div>
-                          )}
-                          {isNewFile(file) && (
-                            <div className="rounded-full border border-sky-400/30 bg-sky-500/95 px-2.5 py-1 text-[10px] font-bold text-white shadow-[0_0_20px_rgba(14,165,233,0.25)]">NEW</div>
-                          )}
-                        </div>
-
-                        {isPremiumLocked && !isPremiumUser && (
-                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-amber-900/85 via-amber-800/30 to-transparent px-3 pb-3 pt-10">
-                            <div className="text-center text-[11px] font-bold uppercase tracking-[0.18em] text-amber-100">Premium Access</div>
-                          </div>
-                        )}
-
-                        {isPlatinumLocked && !isPlatinumUser && (
-                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-fuchsia-900/85 via-violet-800/30 to-transparent px-3 pb-3 pt-10">
-                            <div className="text-center text-[11px] font-bold uppercase tracking-[0.18em] text-fuchsia-100">Platinum Exclusive</div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-3 px-3 pb-3 pt-3">
-                      <h3 className="line-clamp-2 min-h-[40px] text-sm font-extrabold leading-tight text-white" title={getDisplayName(file)}>
-                        {getDisplayName(file)}
-                      </h3>
-
-                      <p className="line-clamp-2 min-h-[38px] text-xs leading-5 text-slate-400">
-                        {file.description || "Fresh collection available for quick preview and download."}
-                      </p>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Downloads</p>
-                          <p className="mt-1 text-sm font-black text-white">{formatNumber(file.downloads_count || file.download_count || 0)}</p>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Size</p>
-                          <p className="mt-1 text-sm font-black text-white">{formatFileSize(file.file_size || file.size)}</p>
-                        </div>
+                      {/* Pill Tier Tags */}
+                      <div className="absolute left-3 top-3 z-10 flex items-center gap-1.5">
+                        <span className="rounded-full bg-emerald-500 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-950 shadow">
+                          {file.visibility || "Free"}
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-slate-900/80 px-2.5 py-0.5 text-[9px] font-bold uppercase text-white backdrop-blur-md">
+                          {type}
+                        </span>
                       </div>
 
-                      <div className="flex gap-2">
-                        {canPreview ? (
-                          <button
-                            type="button"
-                            onClick={() => openPreview(file)}
-                            className="inline-flex flex-1 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-white/10"
-                          >
-                            Preview
-                          </button>
-                        ) : (
-                          <div className="inline-flex flex-1 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-bold text-slate-500">
-                            No Preview
-                          </div>
-                        )}
+                      {/* Favorite Button Overlay Trigger */}
+                      <button
+                        type="button"
+                        onClick={() => toggleFavorite(file.id)}
+                        className="absolute right-3 top-3 z-10 rounded-full border border-white/10 bg-slate-900/60 p-2 text-slate-300 backdrop-blur-md transition hover:bg-slate-800"
+                      >
+                        <svg className={`h-3.5 w-3.5 fill-current ${favorites.includes(file.id) ? "text-red-500" : "text-slate-300"}`} viewBox="0 0 24 24">
+                          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                        </svg>
+                      </button>
 
-                        {isPlatinumLocked && !isPlatinumUser ? (
-                          <Link href="/upgrade" className="inline-flex flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-3 py-2.5 text-sm font-bold text-white transition hover:opacity-90">
-                            Unlock
-                          </Link>
-                        ) : isPremiumLocked && !isPremiumUser ? (
-                          <Link href="/upgrade" className="inline-flex flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-2.5 text-sm font-bold text-white transition hover:opacity-90">
-                            Unlock
-                          </Link>
-                        ) : (
+                      {/* New Upload Arrival Badge */}
+                      {isNewFile(file) && (
+                        <div className="absolute bottom-3 right-3 z-10">
+                          <span className="rounded-full bg-sky-500 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-white shadow-md">
+                            NEW
+                          </span>
+                        </div>
+                      )}
+
+                      {/* METADATA OVERLAY (Name, Downloads, and Direct Link Callout) */}
+                      <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent p-3 pt-8 transform transition-transform duration-300">
+                        <p className="line-clamp-1 text-xs font-black tracking-tight text-white drop-shadow">
+                          {fileTitle}
+                        </p>
+                        
+                        <div className="mt-1 flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
+                            📥 {formatNumber(dlCount)} DLs
+                          </span>
+                          
                           <button
                             type="button"
-                            onClick={() => handleDownload(file)}
-                            className="inline-flex flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-3 py-2.5 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownload(file.id);
+                            }}
+                            className="rounded-lg bg-blue-600 px-2 py-1 text-[9px] font-extrabold uppercase tracking-wide text-white transition hover:bg-blue-500 shadow"
                           >
                             Download
                           </button>
-                        )}
+                        </div>
                       </div>
+
                     </div>
                   </div>
                 )
               })}
             </div>
 
-
+            {/* Pagination Segment */}
             <div className="mt-8 flex flex-col items-center gap-4 pb-24 sm:mt-10">
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <button
                   type="button"
                   onClick={() => goToPage(currentPage - 1)}
                   disabled={currentPage === 1}
-                  className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Prev
                 </button>
@@ -1112,7 +772,7 @@ export default function CategoryPage() {
                     key={page}
                     type="button"
                     onClick={() => goToPage(page)}
-                    className={`min-w-[48px] rounded-2xl border px-4 py-3 text-sm font-semibold shadow-sm transition ${
+                    className={`min-w-[48px] rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
                       currentPage === page
                         ? "border-white bg-white text-slate-900"
                         : "border-white/10 bg-slate-900 text-slate-200 hover:bg-slate-800"
@@ -1125,7 +785,7 @@ export default function CategoryPage() {
                   type="button"
                   onClick={() => goToPage(currentPage + 1)}
                   disabled={currentPage === totalPages}
-                  className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Next
                 </button>
@@ -1134,21 +794,17 @@ export default function CategoryPage() {
               <button
                 type="button"
                 onClick={handleBackToTop}
-                className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-200"
+                className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-200"
               >
                 ↑ Back to Top
               </button>
-
-              <div className="flex justify-center pt-3">
-                <AdSlot code={IN_CONTENT_AD} className="text-center" />
-              </div>
             </div>
           </>
         )}
       </div>
 
       {favoriteToast && (
-        <div className="fixed bottom-6 left-1/2 z-[120] -translate-x-1/2 rounded-2xl border border-white/10 bg-slate-900/95 px-4 py-3 text-sm font-semibold text-white shadow-[0_20px_50px_rgba(0,0,0,0.38)] backdrop-blur-md">
+        <div className="fixed bottom-6 left-1/2 z-[120] -translate-x-1/2 rounded-2xl border border-white/10 bg-slate-900/95 px-4 py-3 text-sm font-semibold text-white shadow-2xl backdrop-blur-md">
           {favoriteToast}
         </div>
       )}
@@ -1158,14 +814,14 @@ export default function CategoryPage() {
           <button
             type="button"
             onClick={handleBackToTop}
-            className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-3 text-sm font-bold text-white shadow-[0_14px_35px_rgba(0,0,0,0.32)] backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-slate-800"
+            className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-3 text-sm font-bold text-white backdrop-blur-md transition hover:bg-slate-800"
           >
             ↑ Top
           </button>
           <button
             type="button"
             onClick={clearFilters}
-            className="inline-flex items-center justify-center rounded-2xl border border-sky-400/20 bg-sky-500/90 px-4 py-3 text-sm font-bold text-white shadow-[0_14px_35px_rgba(14,165,233,0.32)] transition hover:-translate-y-0.5 hover:bg-sky-500"
+            className="inline-flex items-center justify-center rounded-2xl border border-sky-400/20 bg-sky-500/90 px-4 py-3 text-sm font-bold text-white transition hover:bg-sky-500"
           >
             Reset Filters
           </button>
@@ -1176,7 +832,7 @@ export default function CategoryPage() {
         @keyframes fadeUp {
           from {
             opacity: 0;
-            transform: translateY(18px);
+            transform: translateY(14px);
           }
           to {
             opacity: 1;
@@ -1184,229 +840,6 @@ export default function CategoryPage() {
           }
         }
       `}</style>
-
-      {previewFile && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 px-3 py-4 backdrop-blur-md sm:px-4 sm:py-6"
-          onClick={() => {
-            setPreviewFile(null)
-            setPreviewZoom(1)
-          }}
-        >
-          <div
-            className="relative flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 shadow-[0_25px_90px_rgba(0,0,0,0.55)]"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(2,6,23,0.98))] px-4 py-4 sm:px-6">
-              <div className="min-w-0">
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <div className={`rounded-full border px-3 py-1.5 text-[11px] font-bold ${getVisibilityBadgeClasses(previewFile)}`}>
-                    {getVisibilityLabel(previewFile)}
-                  </div>
-                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold text-white">
-                    {getDisplayFileType(previewFile)}
-                  </div>
-                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold text-white">
-                    {formatFileSize(previewFile.file_size || previewFile.size)}
-                  </div>
-                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold text-white">
-                    {formatNumber(previewFile.downloads_count || previewFile.download_count || 0)} downloads
-                  </div>
-                </div>
-                <h3 className="truncate text-lg font-black text-white sm:text-2xl">{getDisplayName(previewFile)}</h3>
-                <p className="mt-1 text-sm text-slate-400">
-                  Swipe to browse on mobile. Use arrow keys on desktop.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={openPrevPreview}
-                  disabled={previewableFiles.length <= 1}
-                  className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  ← Prev
-                </button>
-                <button
-                  type="button"
-                  onClick={openNextPreview}
-                  disabled={previewableFiles.length <= 1}
-                  className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Next →
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewZoom((prev) => Math.max(1, Number((prev - 0.25).toFixed(2))))}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg font-bold text-white transition hover:bg-white/10"
-                >
-                  −
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewZoom(1)}
-                  className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-bold text-white transition hover:bg-white/10"
-                >
-                  {Math.round(previewZoom * 100)}%
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewZoom((prev) => Math.min(3, Number((prev + 0.25).toFixed(2))))}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg font-bold text-white transition hover:bg-white/10"
-                >
-                  +
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPreviewFile(null)
-                    setPreviewZoom(1)
-                  }}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg font-bold text-white transition hover:bg-white/10"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-
-            <div
-              className="relative flex-1 overflow-hidden bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.12),transparent_25%),linear-gradient(180deg,#020617_0%,#0f172a_100%)]"
-              onTouchStart={(event) => handlePreviewTouchStart(event.changedTouches[0]?.clientX ?? 0)}
-              onTouchEnd={(event) => handlePreviewTouchEnd(event.changedTouches[0]?.clientX ?? 0)}
-            >
-              <div className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-24 bg-gradient-to-r from-black/35 to-transparent lg:block" />
-              <div className="pointer-events-none absolute inset-y-0 right-0 z-10 hidden w-24 bg-gradient-to-l from-black/35 to-transparent lg:block" />
-
-              {previewableFiles.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={openPrevPreview}
-                    className="absolute left-3 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/45 text-xl font-black text-white backdrop-blur-md transition hover:scale-105 hover:bg-black/60 lg:inline-flex"
-                  >
-                    ‹
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openNextPreview}
-                    className="absolute right-3 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/45 text-xl font-black text-white backdrop-blur-md transition hover:scale-105 hover:bg-black/60 lg:inline-flex"
-                  >
-                    ›
-                  </button>
-                </>
-              )}
-
-              <div className="flex h-full max-h-[68vh] min-h-[360px] items-center justify-center overflow-auto px-3 py-3 sm:px-6 sm:py-6">
-                {getPreviewImage(previewFile) ? (
-                  <img
-                    src={getPreviewImage(previewFile) || ""}
-                    alt={getDisplayName(previewFile)}
-                    className="max-h-[64vh] w-auto max-w-full rounded-2xl object-contain transition-transform duration-300"
-                    style={{ transform: `scale(${previewZoom})`, transformOrigin: "center center" }}
-                  />
-                ) : isVideoFile(previewFile.file_url) ? (
-                  <video
-                    src={previewFile.file_url ?? undefined}
-                    controls
-                    autoPlay
-                    muted
-                    playsInline
-                    className="max-h-[64vh] w-full max-w-5xl rounded-2xl bg-black object-contain"
-                  />
-                ) : isPdfFile(previewFile.file_url, previewFile.mime_type) ? (
-                  <iframe
-                    src={previewFile.file_url ?? undefined}
-                    title={getDisplayName(previewFile)}
-                    className="h-[64vh] w-full rounded-2xl bg-white"
-                  />
-                ) : (
-                  <div className="flex min-h-[420px] flex-col items-center justify-center px-6 text-center">
-                    <div className="mb-4 text-6xl">{getFileIcon(getDisplayFileType(previewFile))}</div>
-                    <h4 className="text-xl font-black text-white">Preview not available</h4>
-                    <p className="mt-2 max-w-md text-sm text-slate-400">This file type does not support inline preview. You can still download it below.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="border-t border-white/10 bg-slate-950/95 px-4 py-4 sm:px-6">
-              {previewableFiles.length > 0 && (
-                <div className="mb-4 overflow-x-auto pb-1">
-                  <div className="flex gap-3">
-                    {previewableFiles.slice(0, 12).map((file) => {
-                      const thumb = getPreviewImage(file)
-                      const isActive = file.id === previewFile.id
-
-                      return (
-                        <button
-                          key={file.id}
-                          type="button"
-                          onClick={() => openPreview(file)}
-                          className={`group relative h-24 w-20 shrink-0 overflow-hidden rounded-2xl border transition ${
-                            isActive
-                              ? "border-sky-400 ring-2 ring-sky-400/40"
-                              : "border-white/10 hover:border-sky-300/40"
-                          }`}
-                        >
-                          {thumb ? (
-                            <img
-                              src={thumb}
-                              alt={getDisplayName(file)}
-                              className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-slate-900 text-2xl">
-                              {getFileIcon(getDisplayFileType(file))}
-                            </div>
-                          )}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                          <div className="absolute inset-x-1 bottom-1 line-clamp-2 text-left text-[10px] font-bold leading-tight text-white">
-                            {getDisplayName(file)}
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-slate-400">
-                  {currentPreviewIndex >= 0 ? `Preview ${currentPreviewIndex + 1} of ${previewableFiles.length}` : "Preview"}
-                </p>
-
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={() => toggleFavorite(previewFile.id)}
-                    className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
-                  >
-                    {favorites.includes(previewFile.id) ? "❤️ Saved" : "🤍 Save"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPreviewFile(null)
-                      setPreviewZoom(1)
-                    }}
-                    className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
-                  >
-                    Close
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDownload(previewFile)}
-                    className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700"
-                  >
-                    Download File
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

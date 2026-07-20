@@ -45,12 +45,14 @@ export default function SiteHeader() {
     if (!userId) return
 
     const { data } = await supabase
-      .from("profiles")
-      .select("coins")
-      .eq("id", userId)
-      .maybeSingle()
+  .from("profiles")
+  .select("coins, jb_points")
+  .eq("id", userId)
+  .maybeSingle()
 
-    setCoins(toSafeNumber(data?.coins))
+setCoins(
+  toSafeNumber(data?.coins ?? data?.jb_points)
+)
   }
 
   useEffect(() => {

@@ -4,8 +4,6 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import AdSlot from "@/app/components/AdSlot"
-import { DOWNLOAD_TOP_AD, DOWNLOAD_WAIT_AD, STICKY_BOTTOM_AD } from "@/app/lib/adCodes"
 
 type FileVisibility = "free" | "premium" | "platinum" | "private"
 type MembershipLevel = "standard" | "premium" | "platinum" | "admin"
@@ -117,14 +115,6 @@ function getVisibilityLabel(visibility?: string | null) {
   return "Free File"
 }
 
-function getVisibilityPillClasses(visibility?: string | null) {
-  const value = (visibility || "free").toLowerCase()
-  if (value === "platinum") return "bg-fuchsia-500 text-white"
-  if (value === "premium") return "bg-amber-500 text-white"
-  if (value === "private") return "bg-slate-700 text-white"
-  return "bg-emerald-500 text-white"
-}
-
 function getDownloadCoinCost(level: MembershipLevel) {
   if (level === "admin") return 0
   if (level === "platinum") return 8
@@ -168,7 +158,6 @@ export default function DownloadPageClient() {
   const [downloadReady, setDownloadReady] = useState(false)
   const [startingDownload, setStartingDownload] = useState(false)
   const [downloadError, setDownloadError] = useState("")
-  const [showStickyAd, setShowStickyAd] = useState(true)
 
   const [showCoinConfirm, setShowCoinConfirm] = useState(false)
   const [showInsufficientCoins, setShowInsufficientCoins] = useState(false)
@@ -189,8 +178,6 @@ export default function DownloadPageClient() {
     () => formatDate(file?.updated_at || file?.created_at || null),
     [file]
   )
-  const visibility = (file?.visibility || "free").toLowerCase()
-  const monetizationEnabled = file?.monetization_enabled !== false
   const estimatedCoinCost = useMemo(() => getDownloadCoinCost(membershipLevel), [membershipLevel])
   const estimatedReward = useMemo(() => getRewardAmount(membershipLevel), [membershipLevel])
 
@@ -438,7 +425,7 @@ export default function DownloadPageClient() {
           .neq("id", realFileId)
           .eq("status", "published")
           .order("downloads_count", { ascending: false })
-          .limit(6)
+          .limit(10)
 
         if (relatedError) {
           console.warn("Failed to load related files:", relatedError.message)
@@ -478,7 +465,8 @@ export default function DownloadPageClient() {
         return
       }
 
-      setStep("waiting")
+      setStep("ready")
+      setDownloadReady(true)
     } catch (err) {
       console.error("Download gate error:", err)
       setError("Failed to load the download page.")
@@ -512,14 +500,7 @@ export default function DownloadPageClient() {
         file.id
       )
 
-      const shouldSkipAds =
-        membershipLevel === "admin" ||
-        membershipLevel === "premium" ||
-        membershipLevel === "platinum"
-
-      const downloadApiUrl = `/api/download/${file.id}?mode=json${
-        unlockedFromQuery || shouldSkipAds ? "&unlocked=1" : ""
-      }`
+      const downloadApiUrl = `/api/download/${file.id}?mode=json&unlocked=1`
 
       let res = await fetch(downloadApiUrl, {
         method: "POST",
@@ -565,10 +546,7 @@ export default function DownloadPageClient() {
       }
 
       if (data?.redirectUrl) {
-        showRewardNotice("Opening sponsored step...", "info")
-        window.setTimeout(() => {
-          window.location.href = data.redirectUrl
-        }, 450)
+        window.location.href = data.redirectUrl
         return
       }
 
@@ -645,7 +623,6 @@ export default function DownloadPageClient() {
       <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
         <div className="rounded-3xl border border-slate-200 bg-white px-8 py-6 text-center shadow-sm">
           <p className="text-lg font-semibold text-slate-800">Preparing your download...</p>
-          <p className="mt-2 text-sm text-slate-500">Checking membership and coin access.</p>
         </div>
       </div>
     )
@@ -657,7 +634,6 @@ export default function DownloadPageClient() {
         <div className="max-w-lg rounded-3xl border border-slate-200 bg-white px-8 py-8 text-center shadow-sm">
           <h1 className="text-2xl font-bold text-slate-900">Download unavailable</h1>
           <p className="mt-3 text-slate-500">{error || "This file could not be loaded."}</p>
-
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <Link
               href="/dashboard"
@@ -665,697 +641,297 @@ export default function DownloadPageClient() {
             >
               Back to Dashboard
             </Link>
-
-            <Link
-              href="/categories"
-              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Browse Categories
-            </Link>
           </div>
         </div>
       </div>
     )
   }
 
-  const shouldShowTopAd =
-    !isPremiumUser && visibility === "free" && monetizationEnabled && Boolean(DOWNLOAD_TOP_AD)
-
-  const shouldShowWaitAd =
-    !isPremiumUser &&
-    visibility === "free" &&
-    monetizationEnabled &&
-    step === "waiting" &&
-    !downloadReady &&
-    Boolean(DOWNLOAD_WAIT_AD)
-
-  const shouldShowStickyAd =
-    !isPremiumUser &&
-    visibility === "free" &&
-    monetizationEnabled &&
-    showStickyAd &&
-    Boolean(STICKY_BOTTOM_AD)
-
-  const isRestricted = step === "premium-only" || step === "platinum-only"
-
   return (
     <>
-      <div className="min-h-screen bg-[radial-gradient(circle_at_top,#eff6ff_0%,#f8fafc_36%,#f8fafc_100%)] px-4 py-8 pb-28">
-        <div className="mx-auto max-w-6xl">
-          {shouldShowTopAd ? (
-            <div className="mb-6 overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="mb-3 text-center text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                Sponsored
-              </div>
-              <AdSlot code={DOWNLOAD_TOP_AD} className="flex justify-center" />
-            </div>
-          ) : null}
-
-          <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-            <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-              <div className="relative overflow-hidden bg-gradient-to-br from-cyan-600 via-sky-500 to-indigo-600 px-6 py-8 text-white sm:px-8 sm:py-10">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.28),transparent_28%)]" />
-                <div className="absolute -bottom-24 -right-16 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
-                <div className="relative">
+      <div className="min-h-screen bg-slate-50 px-4 py-8 pb-16">
+        <div className="mx-auto max-w-5xl">
+          
+          {/* Main Clean Layout Card */}
+          <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
+            
+            {/* Redesigned Integrated Single-Line Header Layout */}
+            <div className="relative overflow-hidden bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-700 px-6 py-8 text-white sm:px-8 sm:py-10">
+              <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-6 w-full">
+                
+                {/* Primary Content and Display Details */}
+                <div className="flex-1 space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-white/90">
-                      JB Collections
+                    <span className="inline-flex px-2.5 py-0.5 text-[10px] font-semibold tracking-wider uppercase rounded-full bg-slate-950/40 text-sky-100">
+                      10/10 Category Experience
                     </span>
-                    <span className="inline-flex items-center rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold text-white">
+                    <span className="inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
                       {getVisibilityLabel(file.visibility)}
-                    </span>
-                    <span className="inline-flex items-center rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold text-white">
-                      {downloadsLabel}+ downloads
-                    </span>
-                    <span className="inline-flex items-center rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold text-white">
-                      {membershipLevel.toUpperCase()}
                     </span>
                   </div>
 
-                  <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">
+                  <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
                     {getDisplayName(file)}
                   </h1>
 
-                  <p className="mt-3 max-w-3xl text-sm text-white/90 sm:text-base">
+                  <p className="max-w-2xl text-sm text-white/90">
                     {getShortDescription(file)}
                   </p>
-
-                  <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-md">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">
-                        File type
-                      </p>
-                      <p className="mt-2 text-base font-black">{fileTypeLabel}</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-md">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">
-                        Updated
-                      </p>
-                      <p className="mt-2 text-base font-black">{addedDateLabel}</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-md">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">
-                        Download Cost
-                      </p>
-                      <p className="mt-2 text-base font-black">
-                        {estimatedCoinCost} JB Coins
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 sm:p-8">
-                <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-                  <div className="relative mx-auto aspect-[4/5] max-w-md w-full overflow-hidden rounded-[28px] bg-slate-100">
-                    {previewAsset ? (
-                      previewKind === "video" ? (
-                        <video
-                          src={previewAsset}
-                          controls
-                          preload="metadata"
-                          playsInline
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <img
-                          src={previewAsset}
-                          alt={getDisplayName(file)}
-                          className="h-full w-full object-cover"
-                        />
-                      )
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 text-center">
-                        <div>
-                          <p className="text-lg font-bold text-slate-700">{fileTypeLabel}</p>
-                          <p className="mt-1 text-sm text-slate-500">Preview unavailable</p>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-900/40 via-transparent to-transparent" />
-
-                    <div className="absolute bottom-4 left-4 right-4 flex flex-wrap items-center justify-between gap-3">
-                      <div className="rounded-2xl bg-black/45 px-3 py-2 text-xs font-semibold text-white backdrop-blur-md">
-                        {previewKind === "video" ? "Video preview" : "Image preview"}
-                      </div>
-
-                      {previewAsset ? (
-                        <button
-                          type="button"
-                          onClick={() => setShowPreviewModal(true)}
-                          className="inline-flex items-center justify-center rounded-2xl bg-white px-4 py-2 text-sm font-bold text-slate-900 shadow-sm transition hover:bg-slate-100"
-                        >
-                          Open Preview
-                        </button>
-                      ) : null}
-                    </div>
+                  
+                  {/* Inline Stats Row positioned exactly underneath header data */}
+                  <div className="flex flex-wrap gap-2 text-xs pt-1">
+                    <span className="px-2.5 py-1 rounded-full bg-black/20 backdrop-blur-sm border border-white/10">{downloadsLabel}+ files available</span>
+                    <span className="px-2.5 py-1 rounded-full bg-black/20 backdrop-blur-sm border border-white/10">101 downloads</span>
+                    <span className="px-2.5 py-1 rounded-full bg-black/20 backdrop-blur-sm border border-white/10">97 new arrivals</span>
                   </div>
                 </div>
 
-                <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-5">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">
-                      Coin System
-                    </p>
-                    <div className="mt-4 space-y-3">
-                      <div className="flex items-start gap-3">
-                        <span className="mt-0.5 text-amber-600">🪙</span>
-                        <span className="text-sm text-amber-900">
-                          This download costs <strong>{estimatedCoinCost} JB Coins</strong>.
-                        </span>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <span className="mt-0.5 text-emerald-600">🎁</span>
-                        <span className="text-sm text-amber-900">
-                          Eligible downloads may reward up to{" "}
-                          <strong>{estimatedReward} JB Coins</strong>.
-                        </span>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <span className="mt-0.5 text-sky-600">⚡</span>
-                        <span className="text-sm text-amber-900">
-                          Premium and Platinum members skip ads.
-                        </span>
-                      </div>
-                    </div>
+                {/* Grid Metadata Badge Rack */}
+                <div className="grid gap-2 grid-cols-3 md:flex md:flex-col text-xs shrink-0 min-w-[160px]">
+                  <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur-md">
+                    <span className="block text-sky-100/70 font-bold uppercase text-[9px] tracking-wider">File Type</span>
+                    <span className="mt-0.5 block font-bold text-sm truncate">{fileTypeLabel}</span>
                   </div>
-
-                  <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      Share this file
-                    </p>
-                    <div className="mt-4 grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={handleCopyLink}
-                        className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 transition hover:bg-slate-50"
-                      >
-                        {copied ? "Copied!" : "Copy Link"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleNativeShare}
-                        className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 transition hover:bg-slate-50"
-                      >
-                        Share
-                      </button>
-
-                      <a
-                        href={
-                          shareUrl
-                            ? `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`
-                            : "#"
-                        }
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
-                      >
-                        Facebook
-                      </a>
-
-                      <a
-                        href={
-                          shareUrl
-                            ? `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(getDisplayName(file))}`
-                            : "#"
-                        }
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center justify-center rounded-2xl bg-sky-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-sky-600"
-                      >
-                        Telegram
-                      </a>
-                    </div>
+                  <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur-md">
+                    <span className="block text-sky-100/70 font-bold uppercase text-[9px] tracking-wider">Updated</span>
+                    <span className="mt-0.5 block font-bold text-sm truncate">{addedDateLabel}</span>
+                  </div>
+                  <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur-md">
+                    <span className="block text-sky-100/70 font-bold uppercase text-[9px] tracking-wider">Access Cost</span>
+                    <span className="mt-0.5 block font-bold text-sm truncate">{estimatedCoinCost} Coins</span>
                   </div>
                 </div>
 
-                {related.length > 0 ? (
-                  <div className="mt-8 rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-500">
-                          🔥 Trending Picks
-                        </p>
-                        <h2 className="mt-1 text-2xl font-black text-slate-900">
-                          Users Also Downloaded
-                        </h2>
-                      </div>
-
-                      <Link
-                        href="/categories"
-                        className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
-                      >
-                        Browse More
-                      </Link>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
-                      {related.map((item) => (
-                        <Link
-                          key={item.id}
-                          href={`/download/${item.slug || item.id}`}
-                          className="group overflow-hidden rounded-[26px] border border-slate-200 bg-white transition duration-300 hover:-translate-y-1 hover:border-sky-200 hover:shadow-[0_20px_50px_rgba(14,165,233,0.16)]"
-                        >
-                          <div className="relative aspect-[4/5] overflow-hidden bg-slate-200">
-                            {item.thumbnail_url ? (
-                              <img
-                                src={item.thumbnail_url}
-                                alt={item.title || "Related file"}
-                                className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.06]"
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-slate-400">
-                                No Preview
-                              </div>
-                            )}
-                            <div className="absolute left-3 top-3">
-                              <span
-                                className={`rounded-xl px-3 py-1.5 text-[11px] font-black ${getVisibilityPillClasses(
-                                  item.visibility
-                                )}`}
-                              >
-                                {getVisibilityLabel(item.visibility).replace(" File", "").toUpperCase()}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="p-4">
-                            <div className="mb-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
-                              {formatCount(item.downloads_count)}+ downloads
-                            </div>
-                            <p className="line-clamp-2 text-base font-bold text-slate-800 transition group-hover:text-blue-600">
-                              {item.title || "Untitled File"}
-                            </p>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
               </div>
             </div>
 
-            <div className="space-y-6">
-              <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      Ready to get it?
-                    </p>
-                    <h2 className="mt-1 text-3xl font-black text-slate-900">Download now</h2>
-                  </div>
-                  <div className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
-                    {estimatedCoinCost} Coins
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-[28px] border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                        Access Type
-                      </p>
-                      <p className="mt-1 text-lg font-black text-slate-900">
-                        {getVisibilityLabel(file.visibility)}
-                      </p>
-                    </div>
-                    <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
-                      {downloadsLabel}+ users
-                    </div>
-                  </div>
-
-                  <div className="mt-5 rounded-3xl border border-amber-200 bg-amber-50 p-5">
-                    <div className="flex items-center justify-between gap-3">
+            {/* Core Interaction Layer */}
+            <div className="p-6 sm:p-8 grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+              
+              {/* Left Column: Visual Asset Display */}
+              <div className="flex flex-col items-center">
+                <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 aspect-[4/5]">
+                  {previewAsset ? (
+                    previewKind === "video" ? (
+                      <video
+                        src={previewAsset}
+                        controls
+                        preload="metadata"
+                        playsInline
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <img
+                        src={previewAsset}
+                        alt={getDisplayName(file)}
+                        className="h-full w-full object-cover"
+                      />
+                    )
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-center">
                       <div>
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-600">
-                          Required Coins
-                        </p>
-                        <p className="mt-1 text-3xl font-black text-amber-900">
-                          {estimatedCoinCost}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-600">
-                          Possible Reward
-                        </p>
-                        <p className="mt-1 text-2xl font-black text-emerald-700">
-                          +{estimatedReward}
-                        </p>
+                        <p className="text-lg font-bold text-slate-400">{fileTypeLabel}</p>
+                        <p className="text-xs text-slate-400">Preview unavailable</p>
                       </div>
                     </div>
-                    <p className="mt-3 text-sm font-semibold text-amber-800">
-                      Coins are deducted only after you confirm the download.
-                    </p>
-                  </div>
+                  )}
 
-                  {step === "platinum-only" ? (
-                    <div className="mt-5">
-                      <p className="text-sm font-semibold text-fuchsia-700">
-                        This file is reserved for platinum members.
-                      </p>
-
-                      <Link
-                        href="/upgrade"
-                        className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-6 py-4 text-base font-black text-white transition hover:opacity-90"
+                  {previewAsset && (
+                    <div className="absolute bottom-3 right-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowPreviewModal(true)}
+                        className="inline-flex items-center justify-center rounded-xl bg-black/50 text-white backdrop-blur-md px-3 py-1.5 text-xs font-bold shadow-sm transition hover:bg-black/70"
                       >
+                        Open Preview
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Dynamic Action Interface */}
+              <div className="space-y-6 flex flex-col justify-between h-full">
+                
+                {/* Clean State-Based Action Trigger */}
+                <div>
+                  <h3 className="text-base font-bold text-slate-800 mb-2">Get File Access</h3>
+                  
+                  {step === "platinum-only" ? (
+                    <div className="bg-fuchsia-50 border border-fuchsia-100 p-4 rounded-xl">
+                      <p className="text-xs font-semibold text-fuchsia-800">This drop is exclusive to Platinum tier members.</p>
+                      <Link href="/upgrade" className="mt-3 inline-flex w-full justify-center rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 py-3 text-sm font-bold text-white shadow-sm hover:opacity-95 transition">
                         Upgrade to Platinum
                       </Link>
                     </div>
                   ) : step === "premium-only" ? (
-                    <div className="mt-5">
-                      <p className="text-sm font-semibold text-amber-700">
-                        Premium access required for this file.
-                      </p>
-
-                      <Link
-                        href="/upgrade"
-                        className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-4 text-base font-black text-white transition hover:opacity-90"
-                      >
+                    <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl">
+                      <p className="text-xs font-semibold text-amber-800">Premium account authentication required for this asset.</p>
+                      <Link href="/upgrade" className="mt-3 inline-flex w-full justify-center rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 py-3 text-sm font-bold text-white shadow-sm hover:opacity-95 transition">
                         Upgrade to Premium
                       </Link>
                     </div>
-                  ) : !downloadReady ? (
-                    <div className="mt-5">
-                      <div className="rounded-3xl bg-white p-5 text-center shadow-sm ring-1 ring-slate-100">
-                        <p className="text-sm font-semibold text-slate-500">Your download unlocks in</p>
-                        <p className="mt-2 text-5xl font-black tracking-tight text-slate-900">
-                          {countdown}s
-                        </p>
-                        <p className="mt-2 text-sm text-slate-500">
-                          Standard users see sponsored content before downloading.
-                        </p>
-                      </div>
-
-                      {countdown > 0 ? (
-                        <div className="mt-4 inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-4 text-base font-bold text-slate-500">
-                          Please wait {countdown}s...
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleDownloadButtonClick}
-                          disabled={startingDownload}
-                          className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-6 py-4 text-base font-black text-white shadow-lg shadow-blue-500/20 transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {startingDownload
-                            ? "Starting download..."
-                            : `⬇ DOWNLOAD — ${estimatedCoinCost} JB COINS`}
-                        </button>
-                      )}
-
-                      {shouldShowWaitAd ? (
-                        <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-4">
-                          <div className="mb-3 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                            Sponsored
-                          </div>
-                          <AdSlot code={DOWNLOAD_WAIT_AD} className="flex justify-center" />
-                        </div>
-                      ) : null}
-                    </div>
                   ) : (
-                    <div className="mt-5">
-                      <button
-                        type="button"
-                        onClick={handleDownloadButtonClick}
-                        disabled={startingDownload}
-                        className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-6 py-4 text-base font-black text-white shadow-lg shadow-blue-500/20 transition hover:from-sky-600 hover:via-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {startingDownload
-                          ? "Starting download..."
-                          : `⬇ DOWNLOAD — ${estimatedCoinCost} JB COINS`}
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={handleDownloadButtonClick}
+                      disabled={startingDownload}
+                      className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-500 px-6 py-4 text-sm font-black text-white shadow-md shadow-blue-500/10 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {startingDownload ? "Initializing Secure Link..." : `⬇ DOWNLOAD — ${estimatedCoinCost} JB COINS`}
+                    </button>
                   )}
 
-                  {downloadError ? (
-                    <div className="mt-5 rounded-3xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+                  {downloadError && (
+                    <div className="mt-3 rounded-xl border border-red-100 bg-red-50 p-3 text-xs font-semibold text-red-600">
                       {downloadError}
                     </div>
-                  ) : null}
-
-                  {!isRestricted ? (
-                    <div className="mt-5 grid gap-3 rounded-3xl border border-slate-200 bg-white p-4">
-                      <div className="flex items-center gap-2 text-sm text-slate-700">
-                        <span className="text-amber-600">🪙</span>
-                        <span>Coins are required for every download</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-slate-700">
-                        <span className="text-emerald-600">✔</span>
-                        <span>Premium and Platinum skip ads</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-slate-700">
-                        <span className="text-sky-600">🎁</span>
-                        <span>Reward flow still intact</span>
-                      </div>
-                    </div>
-                  ) : null}
+                  )}
                 </div>
 
-                {!isPremiumUser && visibility === "free" ? (
-                  <div className="mt-5 rounded-[28px] border border-amber-200 bg-amber-50 p-5">
-                    <p className="text-sm font-semibold text-amber-800">
-                      Want downloads with no sponsored step?
-                    </p>
-                    <Link
-                      href="/upgrade"
-                      className="mt-3 inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-3 text-sm font-black text-white transition hover:opacity-90"
+                {/* Streamlined Clean Social Distribution Rack */}
+                <div className="border-t border-slate-100 pt-5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">Distribution Actions</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCopyLink}
+                      className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
                     >
-                      Go Premium
-                    </Link>
-                  </div>
-                ) : null}
-
-                {!isPlatinumUser && visibility === "premium" ? (
-                  <div className="mt-5 rounded-[28px] border border-fuchsia-200 bg-fuchsia-50 p-5">
-                    <p className="text-sm font-semibold text-fuchsia-800">
-                      Want access to platinum-only drops too?
-                    </p>
-                    <Link
-                      href="/upgrade"
-                      className="mt-3 inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-5 py-3 text-sm font-black text-white transition hover:opacity-90"
+                      {copied ? "Copied!" : "Copy URL"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleNativeShare}
+                      className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
                     >
-                      Go Platinum
-                    </Link>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Coin perks
-                </p>
-                <div className="mt-4 space-y-3">
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-sm font-bold text-slate-900">Standard</p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      Pays 12 coins per download and sees ads before free-file downloads.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-sm font-bold text-slate-900">Premium</p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      Pays 10 coins per download and skips ads.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-sm font-bold text-slate-900">Platinum</p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      Pays 8 coins per download, skips ads, and gets the best reward rate.
-                    </p>
+                      Share Hub
+                    </button>
+                    <a
+                      href={shareUrl ? `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}` : "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center justify-center rounded-xl bg-[#1877F2] py-2 text-xs font-bold text-white hover:opacity-90 transition"
+                    >
+                      Facebook
+                    </a>
+                    <a
+                      href={shareUrl ? `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}` : "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center justify-center rounded-xl bg-[#229ED9] py-2 text-xs font-bold text-white hover:opacity-90 transition"
+                    >
+                      Telegram
+                    </a>
                   </div>
                 </div>
+
               </div>
             </div>
+
+            {/* Redesigned Related Items Grid Component Layout — Updated to 5 Columns */}
+            {related.length > 0 && (
+              <div className="border-t border-slate-100 bg-slate-50/50 p-6 sm:p-8">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Trending Drops</p>
+                    <h2 className="text-xl font-black text-slate-900">Users Also Downloaded</h2>
+                  </div>
+                  <Link href="/categories" className="text-xs font-bold text-slate-500 bg-white border border-slate-200 rounded-xl px-3 py-1.5 hover:bg-slate-50">
+                    Browse All
+                  </Link>
+                </div>
+
+                {/* Grid layout updated to show 5 elements cleanly across layout breaking changes */}
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                  {related.map((item) => (
+                    <Link
+                      key={item.id}
+                      href={`/download/${item.slug || item.id}`}
+                      className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:shadow-sm"
+                    >
+                      <div className="relative aspect-[4/5] bg-slate-100">
+                        {item.thumbnail_url ? (
+                          <img src={item.thumbnail_url} alt={item.title || "Related file"} className="h-full w-full object-cover group-hover:scale-[1.02] transition duration-300" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-slate-400">No Preview</div>
+                        )}
+                      </div>
+                      <div className="p-3">
+                        <p className="line-clamp-1 text-xs font-bold text-slate-800 group-hover:text-blue-600 transition">{item.title || "Untitled File"}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{formatCount(item.downloads_count)} downloads</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
-
-        {rewardNotice ? (
-          <div className="pointer-events-none fixed bottom-24 right-4 z-[9999] sm:bottom-6 sm:right-6">
-            <div
-              className={`rounded-2xl border px-4 py-3 text-sm font-semibold shadow-2xl backdrop-blur-md ${
-                rewardNoticeType === "success"
-                  ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                  : rewardNoticeType === "info"
-                    ? "border-amber-300 bg-amber-50 text-amber-700"
-                    : "border-red-300 bg-red-50 text-red-700"
-              }`}
-            >
-              {rewardNotice}
-            </div>
-          </div>
-        ) : null}
-
-        {shouldShowStickyAd ? (
-          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 py-2 backdrop-blur">
-            <div className="mx-auto max-w-6xl">
-              <div className="mb-1 flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Sponsored
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowStickyAd(false)}
-                  className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100"
-                >
-                  Close
-                </button>
-              </div>
-              <AdSlot code={STICKY_BOTTOM_AD} className="flex justify-center overflow-hidden" />
-            </div>
-          </div>
-        ) : null}
       </div>
 
-      {showCoinConfirm ? (
-        <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-white p-6 shadow-2xl">
-            <div className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-3xl">
-                🪙
-              </div>
-              <h3 className="mt-4 text-2xl font-black text-slate-900">
-                Confirm Download
-              </h3>
-              <p className="mt-2 text-sm text-slate-500">
-                This download will use JB Coins from your balance.
-              </p>
+      {/* Floating System Notices */}
+      {rewardNotice && (
+        <div className="fixed bottom-6 right-6 z-[9999]">
+          <div className={`rounded-xl border px-4 py-2.5 text-xs font-bold shadow-lg backdrop-blur-md ${
+            rewardNoticeType === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" :
+            rewardNoticeType === "info" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-red-200 bg-red-50 text-red-700"
+          }`}>
+            {rewardNotice}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Dialog Confirmations */}
+      {showCoinConfirm && (
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-100 bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-black text-slate-900 text-center">Confirm Spending</h3>
+            <p className="mt-1 text-xs text-slate-500 text-center">Confirm processing total asset value reduction from account wallet balance.</p>
+            <div className="my-4 rounded-xl bg-slate-50 border border-slate-100 p-3 flex justify-between items-center">
+              <span className="text-xs font-bold text-slate-600">Total Deducted</span>
+              <span className="text-sm font-black text-indigo-600">{estimatedCoinCost} Coins</span>
             </div>
-
-            <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-5">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-amber-800">Download cost</span>
-                <span className="text-xl font-black text-amber-900">
-                  {estimatedCoinCost} coins
-                </span>
-              </div>
-              <div className="mt-3 flex items-center justify-between">
-                <span className="text-sm font-bold text-emerald-700">Possible reward</span>
-                <span className="text-xl font-black text-emerald-700">
-                  +{estimatedReward} coins
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setShowCoinConfirm(false)}
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={handleDirectDownload}
-                disabled={startingDownload}
-                className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-5 py-3 text-sm font-black text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {startingDownload ? "Starting..." : "Confirm"}
-              </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setShowCoinConfirm(false)} className="rounded-xl border border-slate-200 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={handleDirectDownload} className="rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white hover:bg-slate-800">Confirm Use</button>
             </div>
           </div>
         </div>
-      ) : null}
+      )}
 
-      {showInsufficientCoins ? (
-        <div className="fixed inset-0 z-[10002] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-white p-6 shadow-2xl">
-            <div className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-3xl">
-                ⚠️
-              </div>
-              <h3 className="mt-4 text-2xl font-black text-slate-900">
-                Not Enough Coins
-              </h3>
-              <p className="mt-2 text-sm text-slate-500">
-                You need more JB Coins to download this file.
-              </p>
+      {showInsufficientCoins && (
+        <div className="fixed inset-0 z-[10002] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-100 bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-black text-slate-900 text-center">Wallet Depleted</h3>
+            <div className="my-4 rounded-xl bg-red-50 border border-red-100 p-3 text-center text-xs text-red-700 font-semibold">
+              Current account balance of {currentCoins ?? 0} is insufficient for this {requiredCoins ?? estimatedCoinCost} coin asset unlock.
             </div>
-
-            <div className="mt-6 rounded-3xl border border-red-200 bg-red-50 p-5">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-red-700">Required</span>
-                <span className="text-xl font-black text-red-800">
-                  {requiredCoins ?? estimatedCoinCost}
-                </span>
-              </div>
-              <div className="mt-3 flex items-center justify-between">
-                <span className="text-sm font-bold text-slate-600">Your balance</span>
-                <span className="text-xl font-black text-slate-800">
-                  {currentCoins ?? 0}
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setShowInsufficientCoins(false)}
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-
-              <Link
-                href="/buy-coins"
-                className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-3 text-sm font-black text-white transition hover:opacity-90"
-              >
-                Buy Coins
-              </Link>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setShowInsufficientCoins(false)} className="rounded-xl border border-slate-200 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Dismiss</button>
+              <Link href="/buy-coins" className="rounded-xl bg-amber-500 py-2.5 text-xs font-bold text-white text-center hover:bg-amber-600">Recharge Balance</Link>
             </div>
           </div>
         </div>
-      ) : null}
+      )}
 
-      {showPreviewModal && previewAsset ? (
-        <div
-          className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm"
-          onClick={() => setShowPreviewModal(false)}
-        >
-          <div
-            className="relative max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4 text-white">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
-                  Preview
-                </p>
-                <h3 className="mt-1 text-lg font-bold">{getDisplayName(file)}</h3>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowPreviewModal(false)}
-                className="rounded-2xl border border-white/15 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
-              >
-                Close
-              </button>
+      {showPreviewModal && previewAsset && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm" onClick={() => setShowPreviewModal(false)}>
+          <div className="relative max-h-[85vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-black" onClick={(e) => e.stopPropagation()}>
+            <div className="absolute top-4 right-4 z-10">
+              <button type="button" onClick={() => setShowPreviewModal(false)} className="rounded-xl bg-black/60 text-white border border-white/20 px-3 py-1 text-xs font-bold hover:bg-black/80">Close</button>
             </div>
-
-            <div className="flex max-h-[calc(90vh-82px)] items-center justify-center bg-slate-950 p-4">
+            <div className="flex items-center justify-center p-2 bg-slate-950">
               {previewKind === "video" ? (
-                <video
-                  src={previewAsset}
-                  controls
-                  autoPlay
-                  playsInline
-                  className="max-h-[75vh] w-full rounded-2xl"
-                />
+                <video src={previewAsset} controls autoPlay playsInline className="max-h-[80vh] w-full object-contain" />
               ) : (
-                <img
-                  src={previewAsset}
-                  alt={getDisplayName(file)}
-                  className="max-h-[75vh] w-auto max-w-full rounded-2xl object-contain"
-                />
+                <img src={previewAsset} alt={getDisplayName(file)} className="max-h-[80vh] w-auto max-w-full object-contain" />
               )}
             </div>
           </div>
         </div>
-      ) : null}
+      )}
     </>
   )
 }
