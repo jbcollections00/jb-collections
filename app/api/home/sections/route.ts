@@ -1,172 +1,106 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-
-export const runtime = "nodejs"
-export const dynamic = "force-dynamic"
-export const revalidate = 0
-
-type FileRow = Record<string, any>
-
-function createSupabaseAdminClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SERVICE_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    return null
-  }
-
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
-}
-
-function normalizeFile(file: FileRow) {
-  return {
-    id: file.id ?? null,
-    title: file.title ?? file.name ?? file.file_name ?? "Untitled",
-    name: file.name ?? file.title ?? file.file_name ?? "Untitled",
-    slug: file.slug ?? null,
-    description: file.description ?? file.short_description ?? "",
-    thumbnail_url:
-      file.thumbnail_url ??
-      file.thumbnail ??
-      file.preview_url ??
-      file.image_url ??
-      file.cover_url ??
-      null,
-    cover_url: file.cover_url ?? file.image_url ?? file.thumbnail_url ?? null,
-    image_url: file.image_url ?? file.cover_url ?? file.thumbnail_url ?? null,
-    downloads_count: Number(
-      file.downloads_count ??
-        file.download_count ??
-        file.downloads ??
-        file.total_downloads ??
-        0,
-    ),
-    created_at: file.created_at ?? null,
-    visibility: file.visibility ?? file.access_type ?? "free",
-    status: file.status ?? null,
-  }
-}
-
-function isVisibleFile(file: FileRow) {
-  const status = String(file.status ?? "published").toLowerCase()
-  const visibility = String(file.visibility ?? file.access_type ?? "free").toLowerCase()
-
-  if (file.deleted_at || file.is_deleted === true) return false
-  if (visibility === "private") return false
-  if (["deleted", "disabled", "inactive", "rejected", "blocked"].includes(status)) return false
-
-  return true
-}
-
-function uniqueById(files: ReturnType<typeof normalizeFile>[]) {
-  const seen = new Set<string>()
-
-  return files.filter((file) => {
-    const id = String(file.id || "")
-    if (!id || seen.has(id)) return false
-    seen.add(id)
-    return true
-  })
-}
-
-function emptySections(warning?: string) {
-  return NextResponse.json(
-    {
-      trending: [],
-      top: [],
-      latest: [],
-      warning: warning ?? null,
-    },
-    {
-      status: 200,
-      headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-      },
-    },
-  )
-}
+import { createClient } from "@/lib/supabase/server"
 
 export async function GET() {
   try {
-    const supabase = createSupabaseAdminClient()
+    const supabase = await createClient()
 
-    if (!supabase) {
-      console.error("Missing Supabase environment variables for homepage sections.")
-      return emptySections("Missing Supabase environment variables.")
+    // 1. Fetch Top 5 Downloaded Files
+    const { data: topFiles, error: topError } = await supabase
+      .from("files")
+      .select("*")
+      .order("downloads_count", { ascending: false })
+      .limit(5)
+
+    if (topError) console.error("Error fetching top files:", topError)
+
+    // 2. Fetch Latest 5 Uploads
+    const { data: latestFiles, error: latestError } = await supabase
+      .from("files")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(5)
+
+    if (latestError) console.error("Error fetching latest files:", latestError)
+
+    // 3. Fetch Trending Files
+    const { data: trendingFiles, error: trendingError } = await supabase
+      .from("files")
+      .select("*")
+      .order("downloads_count", { ascending: false })
+      .limit(5)
+
+    if (trendingError) console.error("Error fetching trending files:", trendingError)
+
+    // 4. Fetch Recent Downloads Activity (using 'download_unlocks')
+    let recentDownloads: any[] = []
+
+    const { data: logsData, error: logsError } = await supabase
+      .from("download_unlocks")
+      .select(`
+        id,
+        created_at,
+        files (
+          id,
+          title,
+          name,
+          slug,
+          description,
+          thumbnail_url,
+          cover_url,
+          image_url,
+          downloads_count,
+          visibility
+        ),
+        profiles (
+          full_name,
+          name,
+          username
+        )
+      `)
+      .order("created_at", { ascending: false })
+      .limit(5)
+
+    if (logsError) {
+      console.error("Error fetching recent downloads activity:", logsError)
+    } else if (logsData && logsData.length > 0) {
+      recentDownloads = logsData
+        .filter((log: any) => log.files) // Ensure attached file record exists
+        .map((log: any) => ({
+          id: log.files.id,
+          title: log.files.title || log.files.name,
+          thumbnail_url: log.files.thumbnail_url,
+          cover_url: log.files.cover_url,
+          image_url: log.files.image_url,
+          downloads_count: log.files.downloads_count,
+          visibility: log.files.visibility,
+          description: log.files.description,
+          user_name:
+            log.profiles?.full_name ||
+            log.profiles?.name ||
+            log.profiles?.username ||
+            "Community Member",
+        }))
     }
-
-    // Run parallel targeted queries across the entire database
-    const [latestRes, topRes] = await Promise.all([
-      // 1. Fetch 10 newest files across ALL database rows
-      supabase
-        .from("files")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(20),
-
-      // 2. Fetch 10 most downloaded files (>0 downloads) across ALL database rows
-      supabase
-        .from("files")
-        .select("*")
-        .gt("downloads_count", 0)
-        .order("downloads_count", { ascending: false })
-        .limit(20),
-    ])
-
-    if (latestRes.error || topRes.error) {
-      const err = latestRes.error || topRes.error
-      console.error("Home sections files query error:", err)
-      return emptySections(err?.message)
-    }
-
-    const latestFiles = ((latestRes.data || []) as FileRow[])
-      .filter(isVisibleFile)
-      .map(normalizeFile)
-
-    const topFiles = ((topRes.data || []) as FileRow[])
-      .filter(isVisibleFile)
-      .map(normalizeFile)
-
-    const latest = uniqueById(latestFiles).slice(0, 10)
-    const top = uniqueById(topFiles).slice(0, 10)
-
-    const trending = uniqueById([...top, ...latest])
-      .sort((a, b) => {
-        const downloadDiff = Number(b.downloads_count || 0) - Number(a.downloads_count || 0)
-        if (downloadDiff !== 0) return downloadDiff
-
-        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
-        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
-        return bTime - aTime
-      })
-      .slice(0, 10)
 
     return NextResponse.json(
       {
-        trending,
-        top,
-        latest,
+        top: topFiles || [],
+        latest: latestFiles || [],
+        trending: trendingFiles || [],
+        recent_downloads: recentDownloads,
       },
       {
-        status: 200,
         headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          "Cache-Control": "no-store, max-age=0",
         },
-      },
+      }
     )
   } catch (error) {
-    console.error("Home sections API error:", error)
-
-    return emptySections(
-      error instanceof Error ? error.message : "Unknown homepage sections error.",
+    console.error("Server Error in /api/home/sections:", error)
+    return NextResponse.json(
+      { top: [], latest: [], trending: [], recent_downloads: [] },
+      { status: 500 }
     )
   }
 }
