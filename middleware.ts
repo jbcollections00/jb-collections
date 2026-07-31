@@ -48,12 +48,7 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/dashboard/:path*",
-    "/profile/:path*",
-    "/messages/:path*",
-    "/upgrade/:path*",
-    "/contact/:path*",
-    "/categories/:path*",
-    "/admin/:path*",
+    // Skip Next.js internals, static files, and API routes to prevent HTML interception
+    "/((?!_next/static|_next/image|favicon.ico|api/).*)",
   ],
 }

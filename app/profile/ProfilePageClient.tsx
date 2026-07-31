@@ -302,7 +302,7 @@ export default function ProfilePageClient() {
   const [redeemingPlan, setRedeemingPlan] = useState<RedeemPlan | null>(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [streakLoading, setStreakLoading] = useState(false)
-  const [viewStatsLoading, setViewStatsLoading] = useState(false)
+  const [, setViewStatsLoading] = useState(false)
   const [downloadsLoading, setDownloadsLoading] = useState(false)
   const [showAllDownloads, setShowAllDownloads] = useState(false)
   const [showAllCoinActivity, setShowAllCoinActivity] = useState(false)
@@ -340,6 +340,10 @@ export default function ProfilePageClient() {
   const [newPasswordInput, setNewPasswordInput] = useState("")
   const [confirmPasswordInput, setConfirmPasswordInput] = useState("")
   const [passwordLoading, setPasswordLoading] = useState(false)
+
+  // Danger Zone Actions State
+  const [accountActionLoading, setAccountActionLoading] = useState(false)
+  const [accountActionError, setAccountActionError] = useState("")
 
   const [, setSocialReactions] = useState<SocialReaction[]>([
     { emoji: "👁", label: "Profile Views", count: 0 },
@@ -1122,6 +1126,70 @@ export default function ProfilePageClient() {
     } catch (err) {
       console.error("Daily reward claim error:", err)
       setSaveError("Failed to claim daily reward.")
+    }
+  }
+
+  // Self-Deactivate Account Handler
+  async function handleDeactivateAccount() {
+    const confirmed = window.confirm(
+      "Are you sure you want to deactivate your account? You will be logged out and can reactivate it later by contacting support or logging back in."
+    )
+    if (!confirmed) return
+
+    try {
+      setAccountActionLoading(true)
+      setAccountActionError("")
+
+      const res = await fetch("/api/user/deactivate", {
+        method: "POST",
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setAccountActionError(data?.error || "Failed to deactivate account.")
+        return
+      }
+
+      await supabase.auth.signOut()
+      router.push("/login?message=account_deactivated")
+    } catch (err) {
+      console.error("Deactivation error:", err)
+      setAccountActionError("An unexpected error occurred during deactivation.")
+    } finally {
+      setAccountActionLoading(false)
+    }
+  }
+
+  // Self-Delete Account Handler
+  async function handleDeleteAccount() {
+    const confirmed = window.confirm(
+      "Are you sure you want to permanently delete your account? This action CANNOT be undone and all your data will be permanently removed."
+    )
+    if (!confirmed) return
+
+    try {
+      setAccountActionLoading(true)
+      setAccountActionError("")
+
+      const res = await fetch("/api/user/delete", {
+        method: "DELETE",
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setAccountActionError(data?.error || "Failed to delete account.")
+        return
+      }
+
+      await supabase.auth.signOut()
+      router.push("/?message=account_deleted")
+    } catch (err) {
+      console.error("Deletion error:", err)
+      setAccountActionError("An unexpected error occurred during account deletion.")
+    } finally {
+      setAccountActionLoading(false)
     }
   }
 
@@ -2008,6 +2076,50 @@ export default function ProfilePageClient() {
                   >
                     {passwordLoading ? "Updating..." : "Update Password"}
                   </button>
+                </div>
+              </SectionCard>
+
+              {/* Danger Zone: Deactivate & Delete Account Options */}
+              <SectionCard
+                title="Danger Zone"
+                subtitle="Deactivate or permanently remove your account."
+              >
+                <div className="space-y-4">
+                  {accountActionError && (
+                    <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-3 text-xs font-semibold text-red-300">
+                      {accountActionError}
+                    </div>
+                  )}
+
+                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
+                    <h4 className="text-sm font-black text-amber-300">Deactivate Account</h4>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Temporarily disable your account. You can reactivate it later by contacting support or logging back in.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeactivateAccount()}
+                      disabled={accountActionLoading}
+                      className="mt-3 w-full rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs font-black text-amber-300 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {accountActionLoading ? "Processing..." : "Deactivate Account"}
+                    </button>
+                  </div>
+
+                  <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
+                    <h4 className="text-sm font-black text-red-400">Delete Account</h4>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Permanently delete your account and all associated profile data. This action cannot be undone.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteAccount()}
+                      disabled={accountActionLoading}
+                      className="mt-3 w-full rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-xs font-black text-red-400 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {accountActionLoading ? "Processing..." : "Delete Account"}
+                    </button>
+                  </div>
                 </div>
               </SectionCard>
             </div>
