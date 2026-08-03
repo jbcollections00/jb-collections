@@ -5,13 +5,19 @@ import { useEffect, useRef } from "react"
 type AdSlotProps = {
   code: string
   className?: string
+  userRole?: string | null
+  isAdmin?: boolean
 }
 
-export default function AdSlot({ code, className }: AdSlotProps) {
+export default function AdSlot({ code, className, userRole, isAdmin }: AdSlotProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
 
+  // System check kung admin ang nakatingin
+  const hideForAdmin = isAdmin || userRole?.toLowerCase() === "admin"
+
   useEffect(() => {
-    if (!containerRef.current || !code) return
+    // Kapag admin o walang code, wag iproseso ang scripts
+    if (!containerRef.current || !code || hideForAdmin) return
 
     containerRef.current.innerHTML = ""
 
@@ -46,9 +52,10 @@ export default function AdSlot({ code, className }: AdSlotProps) {
         containerRef.current.innerHTML = ""
       }
     }
-  }, [code])
+  }, [code, hideForAdmin])
 
-  if (!code) return null
+  // Wag mag-render ng kahit anong HTML kapag Admin
+  if (!code || hideForAdmin) return null
 
   return <div ref={containerRef} className={className} />
 }
