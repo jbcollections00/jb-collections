@@ -47,7 +47,6 @@ type ProfileRow = {
 type FilterKey = "all" | "free" | "premium" | "platinum"
 type SortKey = "newest" | "downloads" | "name"
 
-// Set to 25 to support a perfect 5x5 layout matrix
 const PAGE_SIZE = 25
 
 function slugify(value?: string | null) {
@@ -82,12 +81,11 @@ function isPdfFile(url?: string | null, mimeType?: string | null) {
   return /\.pdf(\?|$)/i.test(url)
 }
 
-// Fixed priority order for previews: Title metadata images -> fallback URL properties
 function getPreviewImage(file: FileItem) {
   if (file.cover_url) return file.cover_url
   if (file.thumbnail_url) return file.thumbnail_url
   if (file.image_url) return file.image_url
-  if (isImageFile(file.file_url)) return file.file_url || null
+  if (isImageFile(file.file_url) || file.mime_type?.startsWith("image/")) return file.file_url || null
   return null
 }
 
@@ -122,13 +120,6 @@ function canPreviewInline(file: FileItem) {
   return !!getPreviewImage(file) || isVideoFile(file.file_url) || isPdfFile(file.file_url, file.mime_type)
 }
 
-function normalizeMembership(value?: string | null) {
-  const membership = String(value || "").trim().toLowerCase()
-  if (membership === "platinum") return "platinum"
-  if (membership === "premium") return "premium"
-  return "standard"
-}
-
 function isNewFile(file: FileItem) {
   if (!file.created_at) return false
   const createdAt = new Date(file.created_at).getTime()
@@ -136,7 +127,6 @@ function isNewFile(file: FileItem) {
   return createdAt > Date.now() - 10 * 24 * 60 * 60 * 1000
 }
 
-// Fallback logic for Category main banners
 function getCategoryHeroImage(category: Category | null, featuredFile: FileItem | null) {
   if (category?.thumbnail_url) return category.thumbnail_url
   if (featuredFile) return getPreviewImage(featuredFile)
@@ -165,10 +155,9 @@ export default function CategoryPage() {
   const [sortBy, setSortBy] = useState<SortKey>("newest")
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null)
   const [previewZoom, setPreviewZoom] = useState(1)
-  const [touchStartX, setTouchStartX] = useState<number | null>(null)
   const [favorites, setFavorites] = useState<string[]>([])
   const [favoriteToast, setFavoriteToast] = useState<string | null>(null)
-  const [showQuickBar, setShowQuickBar] = useState(false)
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (routeValue) {
@@ -217,15 +206,6 @@ export default function CategoryPage() {
     window.addEventListener("keydown", handleKeydown)
     return () => window.removeEventListener("keydown", handleKeydown)
   }, [previewFile])
-
-  useEffect(() => {
-    function handleScroll() {
-      setShowQuickBar(window.scrollY > 520)
-    }
-
-    window.addEventListener("scroll", handleScroll, { passive: true })
-    return () => window.removeEventListener("scroll", handleScroll)
-  }, [])
 
   useEffect(() => {
     if (!favoriteToast) return
@@ -389,14 +369,6 @@ export default function CategoryPage() {
     return filteredFiles.slice(start, end)
   }, [filteredFiles, currentPage, totalPages])
 
-  const totalDownloads = useMemo(() => {
-    return files.reduce((sum, file) => sum + (file.downloads_count || file.download_count || 0), 0)
-  }, [files])
-
-  const newestCount = useMemo(() => {
-    return files.filter((file) => isNewFile(file)).length
-  }, [files])
-
   const previewableFiles = useMemo(() => {
     return filteredFiles.filter((file) => canPreviewInline(file))
   }, [filteredFiles])
@@ -430,7 +402,6 @@ export default function CategoryPage() {
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  // Links directly to your unique server routes
   function handleDownload(fileId: string) {
     window.location.href = `/download/${fileId}`
   }
@@ -450,6 +421,10 @@ export default function CategoryPage() {
     })
   }
 
+  function handleImageError(fileId: string) {
+    setFailedImages((prev) => ({ ...prev, [fileId]: true }))
+  }
+
   if (checkingAuth) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
@@ -465,9 +440,8 @@ export default function CategoryPage() {
     return (
       <div className="min-h-screen bg-slate-950">
         <SiteHeader />
-        <div className="mx-auto w-full max-w-[1900px] px-4 pb-8 pt-24 sm:px-6 sm:pt-28 lg:px-8">
-          <div className="mb-6 h-64 animate-pulse rounded-[34px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
-          {/* Skeleton loading matching our 5-column parameters */}
+        <div className="mx-auto w-full max-w-[1900px] px-4 pb-8 pt-16 sm:px-6 sm:pt-20 lg:px-8">
+          <div className="mb-6 h-48 animate-pulse rounded-[34px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {Array.from({ length: 10 }).map((_, index) => (
               <div key={index} className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-900/80 shadow-sm ring-1 ring-white/5">
@@ -501,52 +475,29 @@ export default function CategoryPage() {
     <div className="min-h-screen bg-[#050814] text-white">
       <SiteHeader />
 
-      <div className="mx-auto w-full max-w-[1900px] px-4 pb-10 pt-24 sm:px-6 sm:pt-28 lg:px-8">
+      {/* TIGHTENED MAIN CONTAINER TOP PADDING (pt-16 sm:pt-20) */}
+      <div className="mx-auto w-full max-w-[1900px] px-4 pb-10 pt-16 sm:px-6 sm:pt-20 lg:px-8">
         
         {/* HERO HEADER REGION */}
-        <div className="mb-8 overflow-hidden rounded-[36px] border border-white/10 bg-gradient-to-r from-sky-600/90 via-blue-700/80 to-indigo-950 p-6 md:p-8 shadow-2xl relative">
-          {heroImage ? (
+        <div className="mb-6 overflow-hidden rounded-[36px] border border-white/10 bg-gradient-to-r from-sky-600/90 via-blue-700/80 to-indigo-950 p-6 md:p-8 shadow-2xl relative">
+          {heroImage && !failedImages[`category-${category.id}`] ? (
             <>
-              <img src={heroImage} alt={category.name} className="absolute inset-0 h-full w-full object-cover opacity-15" />
+              <img 
+                src={heroImage} 
+                alt="" 
+                onError={() => handleImageError(`category-${category.id}`)}
+                className="absolute inset-0 h-full w-full object-cover opacity-15" 
+              />
               <div className="absolute inset-0 bg-gradient-to-t from-[#050814] via-[#050814]/70 to-transparent" />
             </>
           ) : null}
 
           <div className="relative z-10">
-            {/* Breadcrumbs */}
-            <div className="mb-4 flex items-center gap-2 text-xs font-semibold text-slate-300">
-              <Link href="/categories" className="rounded-full border border-white/10 bg-black/30 px-3 py-1">
-                All Categories
-              </Link>
-              <span className="text-slate-400">/</span>
-              <span className="rounded-full border border-sky-400/30 bg-blue-500/30 px-3 py-1 font-bold text-sky-200">
-                {category.name}
-              </span>
-            </div>
-
-            {/* Title Block & Statistics */}
-            <div className="mb-6 space-y-2">
-              <span className="inline-block rounded-full border border-sky-400/20 bg-slate-950/50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-widest text-sky-300">
-                Premium Vault Explorer
-              </span>
-              <h1 className="text-4xl font-black text-white tracking-tight md:text-5xl">
+            {/* Title Block */}
+            <div className="mb-4">
+              <h1 className="text-3xl font-black text-white tracking-tight md:text-4xl">
                 {category.name}
               </h1>
-              <p className="max-w-2xl text-sm text-slate-200 md:text-base">
-                {category.description || "Browse custom, high-definition assets available below."}
-              </p>
-
-              <div className="flex flex-wrap gap-2 pt-2">
-                <span className="rounded-full border border-white/10 bg-slate-950/50 px-3 py-1 text-xs font-bold text-slate-200">
-                  {formatNumber(files.length)} files
-                </span>
-                <span className="rounded-full border border-white/10 bg-slate-950/50 px-3 py-1 text-xs font-bold text-slate-200">
-                  {formatNumber(totalDownloads)} downloads
-                </span>
-                <span className="rounded-full border border-white/10 bg-slate-950/50 px-3 py-1 text-xs font-bold text-slate-200">
-                  {formatNumber(newestCount)} new arrivals
-                </span>
-              </div>
             </div>
 
             {/* HORIZONTAL CONTROLS COMPONENT BAR */}
@@ -593,50 +544,24 @@ export default function CategoryPage() {
                   </select>
                 </div>
 
-                {/* Filter and Sorting Group */}
-                <div className="flex flex-wrap items-end justify-between xl:justify-end gap-3 w-full xl:w-auto">
-                  
-                  {/* Access Level Controls */}
-                  <div className="flex items-center gap-1.5 rounded-xl border border-white/5 bg-slate-900/80 p-1">
-                    {(["all", "free", "premium", "platinum"] as const).map((itemKey) => (
-                      <button
-                        key={itemKey}
-                        type="button"
-                        onClick={() => setFilter(itemKey)}
-                        className={`rounded-lg px-3 py-1.5 text-xs font-black uppercase transition-all ${
-                          filter === itemKey
-                            ? "bg-white text-slate-950 shadow-md"
-                            : "text-slate-400 hover:text-white"
-                        }`}
-                      >
-                        {itemKey}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Ordering Sequence */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-extrabold uppercase text-slate-400">Sort</span>
-                    <select
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as SortKey)}
-                      className="rounded-xl bg-white px-4 py-2 text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
-                    >
-                      <option value="newest">Newest</option>
-                      <option value="downloads">Most Downloaded</option>
-                      <option value="name">Name A-Z</option>
-                    </select>
-                  </div>
-
+                {/* Sorting Dropdown */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold uppercase text-slate-400">Sort</span>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as SortKey)}
+                    className="rounded-xl bg-white px-4 py-2 text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
+                  >
+                    <option value="newest">Newest</option>
+                    <option value="downloads">Most Downloaded</option>
+                    <option value="name">Name A-Z</option>
+                  </select>
                 </div>
+
               </div>
             </div>
 
           </div>
-        </div>
-
-        <div className="mb-6 flex justify-center">
-          <AdSlot code={IN_CONTENT_AD} className="text-center" />
         </div>
 
         {filteredFiles.length === 0 ? (
@@ -644,14 +569,14 @@ export default function CategoryPage() {
             <div className="mx-auto max-w-md">
               <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-white/5 text-3xl">🔎</div>
               <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">No files found</h2>
-              <p className="mt-3 text-slate-400">No resources matched your current filter combinations.</p>
+              <p className="mt-3 text-slate-400">No resources matched your search criteria.</p>
               <div className="mt-6">
                 <button
                   type="button"
                   onClick={clearFilters}
                   className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-900 transition hover:bg-slate-200"
                 >
-                  Reset Parameters
+                  Reset Search
                 </button>
               </div>
             </div>
@@ -668,48 +593,48 @@ export default function CategoryPage() {
               </div>
             </div>
 
-            {/* FIXED 5-COLUMN GRID SPECIFYING PICTURE DETAILS & DIRECT DOWNLOAD TRIGGER */}
+            {/* GRID OF CARDS */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               {paginatedFiles.map((file, fileIdx) => {
-                const previewImage = getPreviewImage(file)
-                const type = getDisplayFileType(file)
+                const rawPreviewImage = getPreviewImage(file)
+                const isImageBroken = !rawPreviewImage || failedImages[file.id]
                 const fileTitle = getDisplayName(file)
                 const dlCount = file.downloads_count || file.download_count || 0
 
                 return (
                   <div
                     key={file.id}
-                    className="group relative overflow-hidden rounded-[24px] border border-slate-800 bg-slate-900/40 shadow-xl transition-all duration-300 hover:-translate-y-1 hover:border-slate-700"
+                    onClick={() => handleDownload(file.id)}
+                    className="group relative cursor-pointer overflow-hidden rounded-[24px] border border-slate-800 bg-slate-900/40 shadow-xl transition-all duration-300 hover:-translate-y-1 hover:border-slate-700 flex flex-col justify-between"
                     style={{ animation: `fadeUp 0.45s ease ${fileIdx * 0.025}s both` }}
                   >
                     <div className="relative aspect-[3/4] w-full overflow-hidden bg-slate-950">
-                      {previewImage ? (
+                      {!isImageBroken ? (
                         <img
-                          src={previewImage}
-                          alt={fileTitle}
+                          src={rawPreviewImage}
+                          alt=""
                           loading="lazy"
-                          className="h-full w-full object-cover transition duration-500 group-hover:scale-102"
+                          onError={() => handleImageError(file.id)}
+                          className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                         />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-900 to-slate-950 text-xs text-slate-600">
-                          Placeholder Graphic
+                        <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-4 text-center">
+                          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-2xl text-slate-500 shadow-inner">
+                            🖼️
+                          </div>
+                          <span className="text-[11px] font-semibold text-slate-500 line-clamp-1">
+                            No Preview Available
+                          </span>
                         </div>
                       )}
 
-                      {/* Pill Tier Tags */}
-                      <div className="absolute left-3 top-3 z-10 flex items-center gap-1.5">
-                        <span className="rounded-full bg-emerald-500 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-950 shadow">
-                          {file.visibility || "Free"}
-                        </span>
-                        <span className="rounded-full border border-white/10 bg-slate-900/80 px-2.5 py-0.5 text-[9px] font-bold uppercase text-white backdrop-blur-md">
-                          {type}
-                        </span>
-                      </div>
-
-                      {/* Favorite Button Overlay Trigger */}
+                      {/* Favorite Button Overlay */}
                       <button
                         type="button"
-                        onClick={() => toggleFavorite(file.id)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleFavorite(file.id)
+                        }}
                         className="absolute right-3 top-3 z-10 rounded-full border border-white/10 bg-slate-900/60 p-2 text-slate-300 backdrop-blur-md transition hover:bg-slate-800"
                       >
                         <svg className={`h-3.5 w-3.5 fill-current ${favorites.includes(file.id) ? "text-red-500" : "text-slate-300"}`} viewBox="0 0 24 24">
@@ -717,7 +642,7 @@ export default function CategoryPage() {
                         </svg>
                       </button>
 
-                      {/* New Upload Arrival Badge */}
+                      {/* New Upload Badge */}
                       {isNewFile(file) && (
                         <div className="absolute bottom-3 right-3 z-10">
                           <span className="rounded-full bg-sky-500 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-white shadow-md">
@@ -725,35 +650,42 @@ export default function CategoryPage() {
                           </span>
                         </div>
                       )}
-
-                      {/* METADATA OVERLAY (Name, Downloads, and Direct Link Callout) */}
-                      <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent p-3 pt-8 transform transition-transform duration-300">
-                        <p className="line-clamp-1 text-xs font-black tracking-tight text-white drop-shadow">
-                          {fileTitle}
-                        </p>
-                        
-                        <div className="mt-1 flex items-center justify-between gap-2">
-                          <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
-                            📥 {formatNumber(dlCount)} DLs
-                          </span>
-                          
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDownload(file.id);
-                            }}
-                            className="rounded-lg bg-blue-600 px-2 py-1 text-[9px] font-extrabold uppercase tracking-wide text-white transition hover:bg-blue-500 shadow"
-                          >
-                            Download
-                          </button>
-                        </div>
-                      </div>
-
                     </div>
+
+                    {/* CENTERED BOTTOM METADATA & ACTIONS */}
+                    <div className="p-3 bg-slate-900/90 flex flex-col items-center text-center gap-2">
+                      {/* Centered Name */}
+                      <p className="line-clamp-1 text-xs font-black tracking-tight text-white drop-shadow w-full text-center">
+                        {fileTitle}
+                      </p>
+                      
+                      {/* Centered Download Button & DL Counter */}
+                      <div className="flex flex-col items-center justify-center w-full gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDownload(file.id)
+                          }}
+                          className="w-full rounded-lg bg-blue-600 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wide text-white transition hover:bg-blue-500 shadow"
+                        >
+                          Download
+                        </button>
+                        
+                        <span className="text-[10px] font-medium text-slate-400 flex items-center justify-center gap-1 mt-0.5">
+                          📥 {formatNumber(dlCount)} DLs
+                        </span>
+                      </div>
+                    </div>
+
                   </div>
                 )
               })}
+            </div>
+
+            {/* AD SLOT AT BOTTOM */}
+            <div className="mt-10 flex justify-center">
+              <AdSlot code={IN_CONTENT_AD} className="text-center" />
             </div>
 
             {/* Pagination Segment */}
@@ -806,25 +738,6 @@ export default function CategoryPage() {
       {favoriteToast && (
         <div className="fixed bottom-6 left-1/2 z-[120] -translate-x-1/2 rounded-2xl border border-white/10 bg-slate-900/95 px-4 py-3 text-sm font-semibold text-white shadow-2xl backdrop-blur-md">
           {favoriteToast}
-        </div>
-      )}
-
-      {showQuickBar && (
-        <div className="fixed bottom-6 right-6 z-[110] flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleBackToTop}
-            className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-3 text-sm font-bold text-white backdrop-blur-md transition hover:bg-slate-800"
-          >
-            ↑ Top
-          </button>
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="inline-flex items-center justify-center rounded-2xl border border-sky-400/20 bg-sky-500/90 px-4 py-3 text-sm font-bold text-white transition hover:bg-sky-500"
-          >
-            Reset Filters
-          </button>
         </div>
       )}
 

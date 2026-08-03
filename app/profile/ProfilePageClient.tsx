@@ -151,19 +151,6 @@ function getMembershipLabel(level: string) {
   return "Standard User"
 }
 
-function getMembershipBadgeClasses(level: string) {
-  if (level === "admin") {
-    return "inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-2 text-sm font-bold text-white shadow-[0_0_30px_rgba(99,102,241,0.35)]"
-  }
-  if (level === "platinum") {
-    return "inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-fuchsia-600 to-pink-600 px-4 py-2 text-sm font-bold text-white shadow-[0_0_30px_rgba(217,70,239,0.35)]"
-  }
-  if (level === "premium") {
-    return "inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-sm font-bold text-white shadow-[0_0_30px_rgba(16,185,129,0.35)]"
-  }
-  return "inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow-[0_0_30px_rgba(255,255,255,0.08)]"
-}
-
 function getInitials(name: string) {
   const cleaned = name.trim()
   if (!cleaned) return "U"
@@ -1222,7 +1209,6 @@ export default function ProfilePageClient() {
   const displayEmail = profile?.email || authEmail || "No email"
   const membershipLevel = normalizeMembership(profile)
   const displayMembership = getMembershipLabel(membershipLevel)
-  const membershipBadgeClasses = getMembershipBadgeClasses(membershipLevel)
   const displayStatus = profile?.account_status || profile?.status || "Active"
   const initials = getInitials(displayName)
 
@@ -1339,7 +1325,7 @@ export default function ProfilePageClient() {
     return (
       <>
         <SiteHeader />
-        <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 pt-24 sm:pt-28">
+        <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 pt-4 sm:pt-6">
           <div className="mx-auto w-full max-w-md px-3 pb-10 sm:max-w-2xl sm:px-4 lg:max-w-7xl">
             <div className="h-56 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
             <div className="-mt-14 h-72 animate-pulse rounded-[32px] border border-white/10 bg-slate-900/80 ring-1 ring-white/5" />
@@ -1474,10 +1460,10 @@ export default function ProfilePageClient() {
         }
       `}</style>
 
-      <div className="min-h-screen bg-slate-950 pt-28">
+      <div className="min-h-screen bg-slate-950 pt-4 sm:pt-6">
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.15),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(139,92,246,0.15),transparent_30%)]" />
 
-        <div className="pointer-events-none fixed inset-x-0 top-28 z-50 flex justify-center">
+        <div className="pointer-events-none fixed inset-x-0 top-16 z-50 flex justify-center">
           <div className="relative mx-auto w-full max-w-full px-3 sm:max-w-2xl sm:px-4 lg:max-w-7xl">
             {coinToasts.map((toast) => (
               <div
@@ -1551,14 +1537,7 @@ export default function ProfilePageClient() {
                   </div>
 
                   <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className={membershipBadgeClasses}>{displayMembership}</div>
-                      <div className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-white/90">
-                        {gamerTitle}
-                      </div>
-                    </div>
-
-                    <h1 className="mt-3 truncate text-3xl font-black text-white sm:text-4xl">{displayName}</h1>
+                    <h1 className="truncate text-3xl font-black text-white sm:text-4xl">{displayName}</h1>
                     <p className="mt-1 text-sm font-semibold text-cyan-100">{displayEmail}</p>
                     <p className="mt-1 text-xs uppercase tracking-[0.2em] text-cyan-100/70">{displayStatus}</p>
                   </div>
@@ -1572,23 +1551,6 @@ export default function ProfilePageClient() {
                   className="rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-900 transition hover:scale-[1.02]"
                 >
                   {editOpen ? "Close Edit Profile" : "Edit Profile"}
-                </button>
-
-                {profile?.username ? (
-                  <Link
-                    href={`/u/${profile.username}`}
-                    className="rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-black text-white transition hover:bg-white/15"
-                  >
-                    View Public Profile
-                  </Link>
-                ) : null}
-
-                <button
-                  type="button"
-                  onClick={() => navigator.clipboard.writeText(referralLink)}
-                  className="rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-black text-white transition hover:bg-white/15"
-                >
-                  Copy Referral Link
                 </button>
               </div>
             </div>
@@ -1726,87 +1688,85 @@ export default function ProfilePageClient() {
               </SectionCard>
 
               <SectionCard title="JB Coins Engine">
-                <div className="grid gap-4 lg:grid-cols-[1.05fr,0.95fr]">
-                  <div className="space-y-4">
-                    <div className="rounded-[24px] border border-amber-400/20 bg-[linear-gradient(135deg,rgba(251,191,36,0.18),rgba(15,23,42,0.92))] p-5">
-                      <p className="text-xs uppercase tracking-[0.16em] text-amber-200">Daily Reward</p>
-                      <h3 className="mt-2 text-3xl font-black text-white">+{todayRewardCoins.toLocaleString()} JB Coins</h3>
-                      <p className="mt-2 text-sm text-amber-100/80">
-                        Base reward: +{baseCoins.toLocaleString()} • Streak bonus: +{streakBonus.toLocaleString()}
-                      </p>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-[24px] border border-amber-400/20 bg-[linear-gradient(135deg,rgba(251,191,36,0.18),rgba(15,23,42,0.92))] p-5">
+                    <p className="text-xs uppercase tracking-[0.16em] text-amber-200">Daily Reward</p>
+                    <h3 className="mt-2 text-3xl font-black text-white">+{todayRewardCoins.toLocaleString()} JB Coins</h3>
+                    <p className="mt-2 text-sm text-amber-100/80">
+                      Base reward: +{baseCoins.toLocaleString()} • Streak bonus: +{streakBonus.toLocaleString()}
+                    </p>
 
-                      <button
-                        type="button"
-                        onClick={() => void handleClaimDailyReward()}
-                        disabled={Boolean(dailyRewardStatus?.claimed || dailyRewardStatus?.alreadyClaimed || streakLoading)}
-                        className="mt-5 w-full rounded-2xl bg-amber-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {streakLoading
-                          ? "Loading..."
-                          : dailyRewardStatus?.claimed || dailyRewardStatus?.alreadyClaimed
-                            ? "Already claimed today"
-                            : `Claim +${todayRewardCoins.toLocaleString()} JB Coins`}
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleClaimDailyReward()}
+                      disabled={Boolean(dailyRewardStatus?.claimed || dailyRewardStatus?.alreadyClaimed || streakLoading)}
+                      className="mt-5 w-full rounded-2xl bg-amber-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {streakLoading
+                        ? "Loading..."
+                        : dailyRewardStatus?.claimed || dailyRewardStatus?.alreadyClaimed
+                          ? "Already claimed today"
+                          : `Claim +${todayRewardCoins.toLocaleString()} JB Coins`}
+                    </button>
 
-                      {dailyRewardStatus?.nextClaimDate ? (
-                        <p className="mt-3 text-xs text-slate-300">Next claim: {dailyRewardStatus.nextClaimDate}</p>
-                      ) : null}
+                    {dailyRewardStatus?.nextClaimDate ? (
+                      <p className="mt-3 text-xs text-slate-300">Next claim: {dailyRewardStatus.nextClaimDate}</p>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-[24px] border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(15,23,42,0.95))] p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">Account Redemption</p>
+                        <h3 className="mt-2 text-2xl font-black text-white">Upgrade with JB Coins</h3>
+                      </div>
+                      <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-black text-white">{jbPoints.toLocaleString()} 🪙</span>
                     </div>
 
-                    <div className="rounded-[24px] border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(15,23,42,0.95))] p-5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">Account Redemption</p>
-                          <h3 className="mt-2 text-2xl font-black text-white">Upgrade with JB Coins</h3>
+                    <div className="mt-4 grid gap-3">
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-black text-white">Premium</p>
+                            <p className="mt-1 text-xs text-slate-300">3,000 coins</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => void handleRedeem("premium")}
+                            disabled={redeemingPlan !== null || !canRedeemPremium}
+                            className="rounded-2xl bg-cyan-400 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {redeemingPlan === "premium" ? "Redeeming..." : canRedeemPremium ? "Redeem" : "Locked"}
+                          </button>
                         </div>
-                        <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-black text-white">{jbPoints.toLocaleString()} 🪙</span>
+                        {!canRedeemPremium ? (
+                          <p className="mt-2 text-xs text-slate-400">Need {premiumCoinsNeeded.toLocaleString()} more coins.</p>
+                        ) : null}
                       </div>
 
-                      <div className="mt-4 grid gap-3">
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-black text-white">Premium</p>
-                              <p className="mt-1 text-xs text-slate-300">3,000 coins</p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => void handleRedeem("premium")}
-                              disabled={redeemingPlan !== null || !canRedeemPremium}
-                              className="rounded-2xl bg-cyan-400 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {redeemingPlan === "premium" ? "Redeeming..." : canRedeemPremium ? "Redeem" : "Locked"}
-                            </button>
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-black text-white">Platinum</p>
+                            <p className="mt-1 text-xs text-slate-300">4,000 coins</p>
                           </div>
-                          {!canRedeemPremium ? (
-                            <p className="mt-2 text-xs text-slate-400">Need {premiumCoinsNeeded.toLocaleString()} more coins.</p>
-                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => void handleRedeem("platinum")}
+                            disabled={redeemingPlan !== null || !canRedeemPlatinum}
+                            className="rounded-2xl bg-white px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {redeemingPlan === "platinum" ? "Redeeming..." : canRedeemPlatinum ? "Redeem" : "Locked"}
+                          </button>
                         </div>
-
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-black text-white">Platinum</p>
-                              <p className="mt-1 text-xs text-slate-300">4,000 coins</p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => void handleRedeem("platinum")}
-                              disabled={redeemingPlan !== null || !canRedeemPlatinum}
-                              className="rounded-2xl bg-white px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {redeemingPlan === "platinum" ? "Redeeming..." : canRedeemPlatinum ? "Redeem" : "Locked"}
-                            </button>
-                          </div>
-                          {!canRedeemPlatinum ? (
-                            <p className="mt-2 text-xs text-slate-400">Need {platinumCoinsNeeded.toLocaleString()} more coins.</p>
-                          ) : null}
-                        </div>
+                        {!canRedeemPlatinum ? (
+                          <p className="mt-2 text-xs text-slate-400">Need {platinumCoinsNeeded.toLocaleString()} more coins.</p>
+                        ) : null}
                       </div>
                     </div>
                   </div>
 
-                  <div className="rounded-[24px] border border-orange-400/20 bg-[linear-gradient(135deg,rgba(251,146,60,0.14),rgba(239,68,68,0.08),rgba(15,23,42,0.9))] p-5">
+                  <div className="rounded-[24px] border border-orange-400/20 bg-[linear-gradient(135deg,rgba(251,146,60,0.14),rgba(239,68,68,0.08),rgba(15,23,42,0.9))] p-5 lg:col-span-2">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-xs uppercase tracking-[0.16em] text-orange-200">Daily Streak</p>

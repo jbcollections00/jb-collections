@@ -1,47 +1,60 @@
-import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
 
-const supabaseAdmin = createClient(
+// Initialize Supabase Admin client with Service Role Key to bypass RLS
+const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+);
 
-export async function GET(req: Request) {
+// Helper to validate standard Supabase UUID format
+function isValidUUID(uuid: string) {
+  const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return regex.test(uuid);
+}
+
+export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(req.url)
+    const { searchParams } = new URL(request.url);
 
-    const userId = searchParams.get("userId") || searchParams.get("subId")
-    const reward = Number(searchParams.get("reward") || searchParams.get("amount") || 0)
-    const secret = searchParams.get("secret")
-    const status = searchParams.get("status") // Monlix passes 1 for success, 2 for chargeback/revocation
+    // Monlix postback parameters
+    const userId = searchParams.get('userId') || searchParams.get('user_id') || searchParams.get('custom');
+    const rewardValue = searchParams.get('rewardValue') || searchParams.get('amount');
+    const transactionId = searchParams.get('transactionId') || searchParams.get('id');
+    const status = searchParams.get('status'); // '1' = completed, '2' = revoked
 
-    // 1. Verify Secret Key
-    if (!secret || secret !== process.env.MONLIX_WEBHOOK_SECRET) {
-      return NextResponse.json({ error: "Unauthorized: Invalid secret" }, { status: 401 })
+    // 1. Validate mandatory fields
+    if (!userId || !rewardValue) {
+      return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
-    // 2. Validate user and reward
-    if (!userId || reward <= 0) {
-      return NextResponse.json({ error: "Invalid userId or reward" }, { status: 400 })
+    // Safely parse decimals (e.g. 10.50 -> 11)
+    const coinsToCredit = Math.round(parseFloat(rewardValue));
+
+    // 2. Pass dashboard test ping (e.g. test_user or invalid UUIDs)
+    if (!isValidUUID(userId)) {
+      console.log(`[Monlix Webhook] Test user ID detected (${userId}). Returning 200 OK.`);
+      return NextResponse.json({ success: true, message: 'Test postback OK' }, { status: 200 });
     }
 
-    // 3. Process Reward (or chargeback if status === 2)
-    const coinsToAdd = status === "2" ? -Math.round(reward) : Math.round(reward)
+    // 3. Process coin credit in Supabase if status is '1' (or not explicitly revoked)
+    if ((!status || status === '1') && coinsToCredit > 0) {
+      const { error } = await supabase.rpc('credit_user_coins', {
+        user_id_input: userId,
+        amount_input: coinsToCredit,
+        source_type_input: 'monlix_offer',
+        description_input: `Completed Monlix Offer #${transactionId || ''} (+${coinsToCredit} JB Coins)`,
+      });
 
-    const { error } = await supabaseAdmin.rpc("credit_user_coins", {
-      user_id_input: userId,
-      amount_input: coinsToAdd,
-    })
-
-    if (error) {
-      console.error("[Monlix Webhook Error]:", error.message)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      if (error) {
+        console.error('Supabase RPC Error:', error);
+        return NextResponse.json({ error: 'Database update failed' }, { status: 500 });
+      }
     }
 
-    console.log(`[Monlix Success]: Processed ${coinsToAdd} JB Coins for user ${userId}`)
-    return NextResponse.json({ success: true, coinsCredited: coinsToAdd })
+    return NextResponse.json({ success: true }, { status: 200 });
   } catch (err) {
-    console.error("[Monlix Webhook Error]:", err)
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+    console.error('Monlix Webhook Exception:', err);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

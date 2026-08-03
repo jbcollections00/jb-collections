@@ -112,42 +112,6 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat().format(value)
 }
 
-function AnimatedNumber({
-  value,
-  duration = 900,
-  className = "",
-}: {
-  value: number
-  duration?: number
-  className?: string
-}) {
-  const [displayValue, setDisplayValue] = useState(0)
-
-  useEffect(() => {
-    const target = Number.isFinite(value) ? Math.max(0, value) : 0
-    let startTimestamp: number | null = null
-    let frame = 0
-
-    function step(timestamp: number) {
-      if (startTimestamp === null) startTimestamp = timestamp
-      const progress = Math.min((timestamp - startTimestamp) / duration, 1)
-      const eased = 1 - Math.pow(1 - progress, 3)
-      setDisplayValue(Math.round(target * eased))
-
-      if (progress < 1) {
-        frame = window.requestAnimationFrame(step)
-      }
-    }
-
-    setDisplayValue(0)
-    frame = window.requestAnimationFrame(step)
-
-    return () => window.cancelAnimationFrame(frame)
-  }, [value, duration])
-
-  return <span className={className}>{formatNumber(displayValue)}</span>
-}
-
 function formatShortDate(value?: string | null) {
   if (!value) return "Recently joined"
 
@@ -185,40 +149,33 @@ function getInitials(name: string) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
-function getMembershipLabel(membership: string | null | undefined, isPremium: boolean | null | undefined) {
-  if (!membership && !isPremium) return "Free Explorer"
-  const val = String(membership || "").toLowerCase()
-  if (val === "premium" || isPremium) return "Premium Member"
-  if (val === "platinum") return "Platinum Elite"
-  if (val === "admin") return "Administrator"
-  return "Premium Member"
-}
-
-function getMembershipTone(membership: string | null | undefined, isPremium: boolean | null | undefined) {
-  if (!membership && !isPremium) return "bg-slate-500/10 text-slate-300 border-white/10"
-  const val = String(membership || "").toLowerCase()
-  if (val === "admin") return "bg-red-500/10 text-red-300 border-red-500/20"
-  if (val === "platinum") return "bg-indigo-500/10 text-indigo-300 border-indigo-500/20"
-  return "bg-cyan-500/10 text-cyan-200 border-cyan-400/20"
-}
-
-function getLevelInfo(coins: number) {
-  if (coins < 25) return { level: "Bronze I", badge: "🥉", currentMin: 0, nextMin: 25, accent: "from-amber-600 to-amber-800" }
-  if (coins < 75) return { level: "Bronze II", badge: "🥉", currentMin: 25, nextMin: 75, accent: "from-amber-600 to-amber-800" }
-  if (coins < 150) return { level: "Silver I", badge: "🥈", currentMin: 75, nextMin: 150, accent: "from-slate-400 to-slate-600" }
-  if (coins < 300) return { level: "Silver II", badge: "🥈", currentMin: 150, nextMin: 300, accent: "from-slate-400 to-slate-600" }
-  if (coins < 600) return { level: "Gold I", badge: "🥇", currentMin: 300, nextMin: 600, accent: "from-yellow-500 to-amber-500" }
-  if (coins < 1200) return { level: "Gold II", badge: "🥇", currentMin: 600, nextMin: 1200, accent: "from-yellow-500 to-amber-500" }
-  if (coins < 2500) return { level: "Diamond I", badge: "💎", currentMin: 1200, nextMin: 2500, accent: "from-cyan-400 to-blue-600" }
-  return { level: "Diamond II Exclusive", badge: "👑", currentMin: 2500, nextMin: 99999, accent: "from-purple-500 via-pink-500 to-red-500" }
-}
-
-function getProgressPercent(current: number, min: number, max: number) {
-  if (current <= min) return 0
-  if (current >= max) return 100
-  const range = max - min
-  if (range <= 0) return 100
-  return Math.round(((current - min) / range) * 100)
+function RankBadge({ rank }: { rank: number }) {
+  if (rank === 1) {
+    return (
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 px-3 py-1 text-xs font-black text-slate-950 shadow-[0_0_15px_rgba(251,191,36,0.6)]">
+        🏆 #1
+      </div>
+    )
+  }
+  if (rank === 2) {
+    return (
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-1 rounded-full bg-gradient-to-r from-slate-200 via-slate-100 to-slate-300 px-2.5 py-1 text-xs font-black text-slate-950 shadow-[0_0_12px_rgba(241,245,249,0.5)]">
+        🥈 #2
+      </div>
+    )
+  }
+  if (rank === 3) {
+    return (
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-700 via-amber-600 to-amber-800 px-2.5 py-1 text-xs font-black text-amber-100 shadow-[0_0_12px_rgba(180,83,9,0.4)]">
+        🥉 #3
+      </div>
+    )
+  }
+  return (
+    <div className="absolute top-3 right-3 z-10 rounded-full border border-white/20 bg-slate-950/80 px-2.5 py-1 text-xs font-bold text-slate-200 backdrop-blur-md">
+      #{rank}
+    </div>
+  )
 }
 
 function HomeFileCard({ file, rank }: { file: HomeFile; rank?: number }) {
@@ -229,64 +186,63 @@ function HomeFileCard({ file, rank }: { file: HomeFile; rank?: number }) {
   const badgeText = visibility === "premium" ? "Premium" : visibility === "private" ? "Private" : "Featured"
 
   return (
-    <div className="group relative overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.045] shadow-[0_14px_36px_rgba(0,0,0,0.28)] backdrop-blur-sm transition duration-300 hover:-translate-y-1.5 hover:border-cyan-400/40 hover:bg-white/[0.07] hover:shadow-[0_24px_60px_rgba(37,99,235,0.24)]">
-      <div className="pointer-events-none absolute inset-x-6 top-0 h-24 bg-cyan-400/10 blur-3xl opacity-0 transition duration-300 group-hover:opacity-100" />
+    <div className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-white/10 bg-slate-900/60 p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.3)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-2 hover:border-cyan-400/50 hover:shadow-[0_20px_40px_rgba(34,211,238,0.15)]">
+      <div className="relative">
+        {rank ? <RankBadge rank={rank} /> : null}
 
-      {rank ? (
-        <div className="absolute top-3 right-3 z-10 bg-amber-500 text-slate-950 font-black text-xs px-2.5 py-1 rounded-full shadow-lg">
-          #{rank}
-        </div>
-      ) : null}
+        <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl bg-slate-950">
+          {image ? (
+            <img
+              src={image}
+              alt={title}
+              className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-5xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950">
+              {getFileIcon(title)}
+            </div>
+          )}
 
-      <div className="relative aspect-[3/4] overflow-hidden bg-slate-900/60">
-        {image ? (
-          <img
-            src={image}
-            alt={title}
-            className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-5xl">
-            {getFileIcon(title)}
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
+
+          <div className="absolute left-3 top-3 rounded-full border border-white/15 bg-slate-950/70 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-cyan-300 backdrop-blur-md">
+            {badgeText}
           </div>
-        )}
 
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-900/20 to-transparent" />
-
-        <div className="absolute left-3 top-3 rounded-full border border-white/10 bg-slate-950/65 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-sky-200 backdrop-blur">
-          {badgeText}
-        </div>
-
-        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2 text-[11px] font-semibold text-white/90">
-          <span className="rounded-full border border-white/10 bg-slate-950/50 px-2.5 py-1 backdrop-blur">
-            {formatNumber(downloadCount)} downloads
-          </span>
-          <span className="rounded-full border border-white/10 bg-slate-950/50 px-2.5 py-1 backdrop-blur">
-            {visibility === "premium" ? "Premium" : "Open"}
-          </span>
+          <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2 text-[11px] font-medium text-white">
+            <span className="flex items-center gap-1 rounded-full border border-white/10 bg-slate-950/75 px-2.5 py-1 backdrop-blur-md text-slate-200">
+              ⚡ {formatNumber(downloadCount)}
+            </span>
+            <span className="rounded-full border border-white/10 bg-slate-950/75 px-2.5 py-1 backdrop-blur-md text-cyan-200">
+              {visibility === "premium" ? "VIP" : "Open"}
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="p-4">
-        <h3 className="line-clamp-2 text-sm font-bold leading-5 text-white sm:text-base sm:leading-6">
-          {title}
-        </h3>
+      <div className="flex flex-1 flex-col justify-between p-4 pt-3">
+        <div>
+          <h3 className="line-clamp-2 text-center text-sm font-bold text-white transition-colors duration-200 group-hover:text-cyan-300 sm:text-base">
+            {title}
+          </h3>
 
-        {file.user_name ? (
-          <p className="mt-2 text-xs text-cyan-300 truncate font-medium">
-            Downloaded by <strong className="text-white">{file.user_name}</strong>
-          </p>
-        ) : (
-          <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-300">
-            {file.description?.trim() || "Open this file to view details and download it."}
-          </p>
-        )}
+          {file.user_name ? (
+            <p className="mt-2 text-center text-xs font-medium text-slate-400 truncate">
+              By <span className="text-cyan-300 font-semibold">{file.user_name}</span>
+            </p>
+          ) : file.description?.trim() ? (
+            <p className="mt-2 line-clamp-2 text-center text-xs leading-5 text-slate-400">
+              {file.description.trim()}
+            </p>
+          ) : null}
+        </div>
 
         <Link
           href={getFileHref(file)}
-          className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 px-3 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-955/40 transition duration-300 hover:brightness-110"
+          className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 py-2.5 text-xs font-bold uppercase tracking-wider text-white shadow-md transition-all duration-300 hover:brightness-125 hover:shadow-cyan-500/25"
         >
-          Open File
+          <span>Open File</span>
+          <span>→</span>
         </Link>
       </div>
     </div>
@@ -310,15 +266,15 @@ function SmartStatCard({
 
   const content = (
     <div className="flex items-center gap-3 sm:gap-4 w-full">
-      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg ring-1 sm:h-12 sm:w-12 ${tone}`}>
+      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-xl shadow-inner ${tone}`}>
         {icon}
       </div>
 
-      <div className="flex flex-1 flex-row items-baseline gap-2 min-w-0">
-        <span className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">
-          {label}:
+      <div className="flex flex-1 flex-col min-w-0">
+        <span className="truncate text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+          {label}
         </span>
-        <span className="text-xl font-black leading-none text-white sm:text-2xl">
+        <span className="text-xl font-black text-white sm:text-2xl tracking-tight">
           {value}
         </span>
       </div>
@@ -330,7 +286,7 @@ function SmartStatCard({
       <button
         type="button"
         onClick={onClick}
-        className="min-w-0 rounded-[24px] border border-white/10 bg-white/[0.05] p-4 text-left shadow-[0_10px_24px_rgba(0,0,0,0.22)] backdrop-blur-sm transition duration-300 hover:-translate-y-0.5 hover:border-cyan-400/40 hover:bg-white/[0.08] w-full"
+        className="group min-w-0 rounded-2xl border border-white/10 bg-slate-900/40 p-4 text-left backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-cyan-400/40 hover:bg-slate-800/50 hover:shadow-[0_10px_25px_rgba(34,211,238,0.15)] w-full"
       >
         {content}
       </button>
@@ -338,7 +294,7 @@ function SmartStatCard({
   }
 
   return (
-    <div className="min-w-0 rounded-[24px] border border-white/10 bg-white/[0.05] p-4 text-left shadow-[0_10px_24px_rgba(0,0,0,0.22)] backdrop-blur-sm transition duration-300 hover:-translate-y-0.5 hover:border-cyan-400/20 hover:bg-white/[0.07] w-full">
+    <div className="min-w-0 rounded-2xl border border-white/10 bg-slate-900/40 p-4 text-left backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-slate-800/40 w-full">
       {content}
     </div>
   )
@@ -356,16 +312,17 @@ function SectionHeader({
   badge?: string
 }) {
   return (
-    <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">
           {title}
         </h2>
-        <p className="mt-1 text-sm text-slate-300">{subtitle}</p>
+        <p className="mt-1 text-sm text-slate-400">{subtitle}</p>
       </div>
 
-      <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-slate-200 shadow-[0_8px_25px_rgba(0,0,0,0.18)] backdrop-blur-sm">
-        {badge ? <span>{badge}</span> : null}
+      <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-slate-900/80 px-4 py-1.5 text-xs font-bold text-slate-300 backdrop-blur-md shadow-lg">
+        {badge ? <span className="text-cyan-400">{badge}</span> : null}
+        {badge ? <span>•</span> : null}
         <span>
           {formatNumber(count)} item{count === 1 ? "" : "s"}
         </span>
@@ -397,17 +354,17 @@ function FileSection({
 }) {
   const variantClass =
     variant === "hot"
-      ? "bg-[radial-gradient(circle_at_top_left,rgba(239,68,68,0.08),transparent_32%),rgba(255,255,255,0.02)]"
+      ? "bg-[radial-gradient(ellipse_at_top_left,rgba(239,68,68,0.08),transparent_50%)] border-rose-500/20"
       : variant === "curated"
-        ? "bg-[radial-gradient(circle_at_top_right,rgba(168,85,247,0.1),transparent_32%),rgba(255,255,255,0.02)]"
+        ? "bg-[radial-gradient(ellipse_at_top_right,rgba(168,85,247,0.08),transparent_50%)] border-purple-500/20"
         : variant === "fresh"
-          ? "bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.08),transparent_32%),rgba(255,255,255,0.02)]"
-          : "bg-transparent"
+          ? "bg-[radial-gradient(ellipse_at_top_left,rgba(16,185,129,0.08),transparent_50%)] border-emerald-500/20"
+          : "border-white/10"
 
   const displayedFiles = files.slice(0, maxItems)
 
   return (
-    <section className={`mt-10 overflow-hidden rounded-[30px] border border-white/5 p-5 sm:p-6 ${variantClass}`}>
+    <section className={`mt-10 overflow-hidden rounded-3xl border bg-slate-950/40 p-6 backdrop-blur-xl shadow-2xl ${variantClass}`}>
       <SectionHeader title={title} subtitle={subtitle} count={displayedFiles.length} badge={badge} />
 
       {loading ? (
@@ -415,19 +372,18 @@ function FileSection({
           {Array.from({ length: maxItems }).map((_, index) => (
             <div
               key={index}
-              className="overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.05] shadow-[0_10px_30px_rgba(0,0,0,0.25)]"
+              className="overflow-hidden rounded-3xl border border-white/10 bg-slate-900/40 p-2 space-y-3"
             >
-              <div className="aspect-[3/4] animate-pulse bg-white/10" />
-              <div className="space-y-2 p-4">
-                <div className="h-4 w-2/3 animate-pulse rounded bg-white/10" />
-                <div className="h-10 w-full animate-pulse rounded-2xl bg-white/10" />
-                <div className="h-3 w-1/2 animate-pulse rounded bg-white/10" />
+              <div className="aspect-[3/4] animate-pulse rounded-2xl bg-slate-800/60" />
+              <div className="space-y-2 p-3">
+                <div className="h-4 w-3/4 animate-pulse rounded bg-slate-800/60 mx-auto" />
+                <div className="h-8 w-full animate-pulse rounded-xl bg-slate-800/60" />
               </div>
             </div>
           ))}
         </div>
       ) : displayedFiles.length === 0 ? (
-        <div className="rounded-[24px] border border-dashed border-white/15 bg-white/[0.03] px-6 py-10 text-center text-sm font-medium text-slate-300">
+        <div className="rounded-2xl border border-dashed border-white/10 bg-slate-900/30 px-6 py-12 text-center text-sm font-medium text-slate-400">
           {emptyMessage}
         </div>
       ) : (
@@ -605,25 +561,17 @@ function DashboardPageContent() {
     }
   }
 
-  const totalFiles = Object.values(fileCounts).reduce((sum, count) => sum + count, 0)
-  const isPremiumFlag = currentUserProfile?.is_premium === true
   const role = String(currentUserProfile?.role || "").toLowerCase()
-  const coins = Number(currentUserProfile?.coins || 0)
   const currentUserName = getCurrentUserName(currentUserProfile)
-  const membershipLabel = getMembershipLabel(currentUserProfile?.membership, isPremiumFlag)
-  const levelInfo = getLevelInfo(coins)
-  const progressPercent = getProgressPercent(coins, levelInfo.currentMin, levelInfo.nextMin)
-  const coinsToNextLevel = Math.max(levelInfo.nextMin - coins, 0)
-  const membershipTone = getMembershipTone(currentUserProfile?.membership, isPremiumFlag)
-
   const canToggleOnlineUsers = role === "admin"
 
   if (checkingAuth) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#020617] px-4">
-        <div className="rounded-[28px] border border-white/10 bg-white/[0.05] px-8 py-6 text-center shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-sm">
-          <p className="text-lg font-semibold text-white">Checking your account...</p>
-          <p className="mt-2 text-sm text-slate-300">Please wait.</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#030712] px-4">
+        <div className="relative rounded-3xl border border-white/10 bg-slate-900/60 p-8 text-center shadow-2xl backdrop-blur-2xl">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-cyan-400 border-t-transparent" />
+          <p className="mt-4 text-base font-bold text-white">Authenticating...</p>
+          <p className="mt-1 text-xs text-slate-400">Loading your profile setup</p>
         </div>
       </div>
     )
@@ -633,226 +581,84 @@ function DashboardPageContent() {
     <>
       <PresenceTracker />
 
-      <div className="flex min-h-screen flex-col bg-[#020617] text-white">
-        <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(99,102,241,0.18),_transparent_30%),linear-gradient(180deg,_#030712_0%,_#020617_45%,_#061229_100%)]" />
-        <div className="fixed inset-0 -z-10 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] opacity-[0.08]" />
+      <div className="relative min-h-screen bg-[#030712] text-slate-100 selection:bg-cyan-500 selection:text-slate-950">
+        {/* Glowing Background Elements */}
+        <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+          <div className="absolute -top-40 -left-40 h-[600px] w-[600px] rounded-full bg-indigo-600/15 blur-[120px]" />
+          <div className="absolute top-1/3 -right-40 h-[600px] w-[600px] rounded-full bg-cyan-500/10 blur-[140px]" />
+          <div className="absolute -bottom-40 left-1/3 h-[600px] w-[600px] rounded-full bg-purple-600/15 blur-[140px]" />
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:32px_32px] opacity-20" />
+        </div>
 
-        <div className="mx-auto w-full max-w-[1800px] flex-1 px-4 pb-8 pt-4 sm:px-6 sm:pb-10 lg:px-8">
+        <div className="mx-auto w-full max-w-[1700px] px-4 pb-12 pt-6 sm:px-6 lg:px-8">
           <DailyRewardCard />
 
-          <section className="mt-2 overflow-hidden rounded-[34px] border border-white/10 bg-white/[0.04] shadow-[0_25px_80px_rgba(0,0,0,0.35)] backdrop-blur-md">
-            <div className="relative overflow-hidden border-b border-white/10 px-5 py-7 sm:px-6 sm:py-8 lg:px-8">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.14),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(99,102,241,0.18),_transparent_34%)]" />
-              <div className="absolute right-0 top-0 h-60 w-60 rounded-full bg-cyan-400/10 blur-3xl" />
-              <div className="absolute bottom-0 left-0 h-56 w-56 rounded-full bg-violet-500/10 blur-3xl" />
+          <section className="mt-4 overflow-hidden rounded-[36px] border border-white/10 bg-slate-900/40 shadow-2xl backdrop-blur-2xl">
+            {/* HERO BANNER */}
+            <div className="relative overflow-hidden border-b border-white/10 px-6 py-10 sm:px-10 sm:py-12">
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-purple-500/10 to-transparent" />
 
-              <div className="relative grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_420px]">
-                <div className="max-w-4xl">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-cyan-200">
-                    <span>Premium Dashboard</span>
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" />
-                    <span>Live</span>
+              <div className="relative z-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3.5 py-1 text-xs font-bold text-cyan-300 backdrop-blur-md">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
+                    </span>
+                    <span>Dashboard Active</span>
                   </div>
 
-                  <h1 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl lg:text-5xl xl:text-6xl">
+                  <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-5xl lg:text-6xl">
                     Welcome back,{" "}
-                    <span className="bg-gradient-to-r from-sky-300 via-cyan-300 to-blue-400 bg-clip-text text-transparent">
+                    <span className="bg-gradient-to-r from-cyan-300 via-sky-300 to-indigo-400 bg-clip-text text-transparent">
                       {currentUserName}
                     </span>
                   </h1>
-
-                  <div className="mt-6 flex flex-wrap gap-3">
-                    <Link
-                      href="/messages"
-                      className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-955/40 transition duration-300 hover:-translate-y-0.5 hover:brightness-110"
-                    >
-                      Open Messages
-                    </Link>
-
-                    <Link
-                      href="/upgrade"
-                      className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] px-5 py-3 text-sm font-bold text-slate-100 transition duration-300 hover:-translate-y-0.5 hover:bg-white/[0.09]"
-                    >
-                      Open JB Store
-                    </Link>
-
-                    <Link
-                      href="/leaderboard"
-                      className="inline-flex items-center justify-center rounded-2xl border border-amber-400/20 bg-amber-500/10 px-5 py-3 text-sm font-bold text-amber-100 transition duration-300 hover:-translate-y-0.5 hover:bg-amber-500/15"
-                    >
-                      View Leaderboard
-                    </Link>
-                  </div>
-                </div>
-
-                <div className="relative overflow-hidden rounded-[30px] border border-white/10 bg-slate-950/45 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.28)] backdrop-blur-md">
-                  <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${levelInfo.accent}`} />
-                  <div className="absolute right-4 top-4 h-28 w-28 rounded-full bg-cyan-400/10 blur-3xl" />
-
-                  <div className="relative flex items-start gap-4">
-                    <div className="relative">
-                      {currentUserProfile?.avatar_url ? (
-                        <img
-                          src={currentUserProfile.avatar_url}
-                          alt={currentUserName}
-                          className="h-20 w-20 rounded-[24px] object-cover ring-1 ring-white/15"
-                        />
-                      ) : (
-                        <div className="flex h-20 w-20 items-center justify-center rounded-[24px] bg-gradient-to-br from-sky-500 via-blue-600 to-violet-600 text-2xl font-black text-white ring-1 ring-white/15">
-                          {getInitials(currentUserName)}
-                        </div>
-                      )}
-
-                      <div className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-slate-950 bg-emerald-400 text-[11px] shadow-lg shadow-emerald-900/40">
-                        ✓
-                      </div>
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="truncate text-xl font-black text-white">{currentUserName}</h2>
-                        <div className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${membershipTone}`}>
-                          {membershipLabel}
-                        </div>
-                      </div>
-
-                      <p className="mt-1 text-sm text-slate-300">{levelInfo.level} Collector</p>
-                      <p className="mt-3 text-xs leading-5 text-slate-400">
-                        {coinsToNextLevel > 0
-                          ? `${formatNumber(coinsToNextLevel)} JB Coins left until your next level.`
-                          : "You already reached the current top visible level range."}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="relative mt-5 rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">
-                          JB Coin Power
-                        </div>
-                        <div className="mt-2 text-3xl font-black text-yellow-300 drop-shadow-[0_0_20px_rgba(253,224,71,0.18)]">
-                          <AnimatedNumber value={coins} />
-                        </div>
-                      </div>
-
-                      <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 px-3 py-2 text-right">
-                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-yellow-100/80">
-                          Rank Progress
-                        </div>
-                        <div className="mt-1 text-lg font-black text-white">
-                          <AnimatedNumber value={progressPercent} />
-                          %
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-4">
-                      <div className="mb-2 flex items-center justify-between text-[11px] font-semibold text-slate-300">
-                        <span>{levelInfo.level}</span>
-                        <span>
-                          Next at {formatNumber(levelInfo.nextMin)}
-                        </span>
-                      </div>
-                      <div className="h-3 overflow-hidden rounded-full bg-white/10">
-                        <div
-                          className={`h-full rounded-full bg-gradient-to-r ${levelInfo.accent} transition-all duration-700`}
-                          style={{ width: `${progressPercent}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="rounded-[20px] border border-white/10 bg-white/[0.04] p-3">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-300">
-                        Categories
-                      </div>
-                      <div className="mt-2 text-xl font-black text-white">
-                        <AnimatedNumber value={categories.length} />
-                      </div>
-                    </div>
-
-                    <div className="rounded-[20px] border border-white/10 bg-white/[0.04] p-3">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-300">
-                        Total Files
-                      </div>
-                      <div className="mt-2 text-xl font-black text-white">
-                        <AnimatedNumber value={totalFiles} />
-                      </div>
-                    </div>
-                  </div>
+                  <p className="mt-2 text-sm text-slate-400 sm:text-base">
+                    Discover, download, and manage premium collections in real-time.
+                  </p>
                 </div>
               </div>
             </div>
 
-            <div className="px-5 py-6 sm:px-6 sm:py-7 lg:px-8">
-              {/* ⚡ SECTION: Recent Member Downloads (Single Line - Max 5) */}
-              <FileSection
-                title="⚡ Recent Activity"
-                subtitle="Live downloads from community members."
-                files={recentDownloads}
-                loading={sectionsLoading}
-                emptyMessage="⚡ No recent download activity recorded yet."
-                badge="Activity"
-                variant="curated"
-                maxItems={5}
-              />
-
-              {/* 🔥 SECTION: Top 5 Downloaded Files (Single Line - Max 5) */}
-              <FileSection
-                title="🔥 Top Downloaded"
-                subtitle="Most popular files downloaded across the platform."
-                files={topFiles}
-                loading={sectionsLoading}
-                emptyMessage="🔥 No top downloaded files yet."
-                badge="Top 5"
-                variant="hot"
-                showRank={true}
-                maxItems={5}
-              />
-
-              {/* 🆕 SECTION: New Uploads */}
-              <FileSection
-                title="🆕 New Uploads"
-                subtitle="Fresh files recently added to your website."
-                files={latestFiles}
-                loading={sectionsLoading}
-                emptyMessage="🆕 No new uploads yet. Your latest content will appear here automatically."
-                badge="Fresh"
-                variant="fresh"
-                maxItems={5}
-              />
-
-              <section className="mt-12">
-                <SectionHeader
-                  title="Categories"
-                  subtitle="Explore premium-ready downloadable collections."
-                  count={categories.length}
-                  badge="Library"
-                />
+            <div className="p-6 sm:p-8 lg:p-10">
+              {/* 📁 SECTION 1: Categories Grid */}
+              <section className="mt-2">
+                <div className="mb-8 flex flex-col items-center justify-center text-center">
+                  <h2 className="text-2xl font-black tracking-tight text-white sm:text-4xl">
+                    Featured Collections
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-400 max-w-lg">
+                    Browse curated library collections organized specifically for you.
+                  </p>
+                  <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-purple-500/30 bg-purple-500/10 px-4 py-1.5 text-xs font-bold text-purple-300 backdrop-blur-md">
+                    <span>Library Catalog</span>
+                    <span>•</span>
+                    <span>{formatNumber(categories.length)} item{categories.length === 1 ? "" : "s"}</span>
+                  </div>
+                </div>
 
                 {loading ? (
-                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
-                    {Array.from({ length: 5 }).map((_, index) => (
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 max-w-5xl mx-auto">
+                    {Array.from({ length: 2 }).map((_, index) => (
                       <div
                         key={index}
-                        className="overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.05] shadow-[0_10px_30px_rgba(0,0,0,0.25)]"
+                        className="overflow-hidden rounded-3xl border border-white/10 bg-slate-900/40 p-3 space-y-4"
                       >
-                        <div className="aspect-[3/4] animate-pulse bg-white/10" />
-                        <div className="space-y-3 p-4">
-                          <div className="mx-auto h-4 w-3/4 animate-pulse rounded bg-white/10" />
-                          <div className="h-10 w-full animate-pulse rounded-2xl bg-white/10" />
+                        <div className="aspect-[16/9] animate-pulse rounded-2xl bg-slate-800/60" />
+                        <div className="space-y-2 p-3">
+                          <div className="h-5 w-1/2 animate-pulse rounded bg-slate-800/60 mx-auto" />
+                          <div className="h-10 w-full animate-pulse rounded-xl bg-slate-800/60" />
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : categories.length === 0 ? (
-                  <div className="rounded-[24px] border border-dashed border-white/15 bg-white/[0.03] px-6 py-10 text-center text-sm font-medium text-slate-300">
-                    📁 No categories available yet. Create your first collection and this area will light up.
+                  <div className="rounded-3xl border border-dashed border-white/10 bg-slate-900/30 px-6 py-12 text-center text-sm font-medium text-slate-400">
+                    📁 No categories found. Check back later!
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
+                  <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 max-w-5xl mx-auto">
                     {categories.map((category) => {
                       const image = getCategoryImage(category)
                       const count = fileCounts[category.id] || 0
@@ -860,46 +666,47 @@ function DashboardPageContent() {
                       return (
                         <div
                           key={category.id}
-                          className="group overflow-hidden rounded-[26px] border border-white/10 bg-white/[0.05] shadow-[0_10px_30px_rgba(0,0,0,0.25)] backdrop-blur-sm transition duration-300 hover:-translate-y-1.5 hover:border-cyan-400/40 hover:bg-white/[0.06] hover:shadow-[0_22px_52px_rgba(14,165,233,0.15)]"
+                          className="group relative overflow-hidden rounded-3xl border border-purple-500/20 bg-gradient-to-b from-slate-900/90 via-slate-950/90 to-purple-950/30 p-2 shadow-xl backdrop-blur-xl transition-all duration-300 hover:-translate-y-2 hover:border-purple-400/50 hover:shadow-[0_20px_50px_rgba(168,85,247,0.2)]"
                         >
-                          <div className="relative aspect-[3/4] overflow-hidden bg-slate-900/60">
+                          <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl bg-slate-950">
                             {image ? (
                               <img
                                 src={image}
                                 alt={category.name}
-                                className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                                className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
                               />
                             ) : (
-                              <div className="flex h-full w-full items-center justify-center text-5xl">
+                              <div className="flex h-full w-full items-center justify-center text-6xl bg-slate-900">
                                 {getCategoryIcon(category.name)}
                               </div>
                             )}
 
-                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-900/20 to-transparent" />
+                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
 
-                            <div className="absolute left-3 top-3 rounded-full border border-white/10 bg-slate-950/65 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-sky-200 backdrop-blur">
-                              Category
+                            <div className="absolute left-3.5 top-3.5 rounded-full border border-purple-400/30 bg-purple-950/80 px-3.5 py-1 text-[10px] font-black uppercase tracking-widest text-purple-200 backdrop-blur-md">
+                              CATEGORY
                             </div>
 
-                            <div className="absolute bottom-3 left-3 rounded-full border border-white/10 bg-slate-950/50 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur">
-                              {formatNumber(count)} file{count === 1 ? "" : "s"}
+                            <div className="absolute bottom-3.5 left-3.5 rounded-full border border-white/15 bg-slate-950/80 px-3 py-1 text-xs font-bold text-white backdrop-blur-md">
+                              📁 {formatNumber(count)} file{count === 1 ? "" : "s"}
                             </div>
                           </div>
 
-                          <div className="p-4">
-                            <h3 className="text-sm font-bold leading-5 text-white sm:text-base sm:leading-6">
+                          <div className="p-5">
+                            <h3 className="text-lg font-bold text-white text-center transition-colors group-hover:text-purple-300">
                               {category.name}
                             </h3>
 
-                            <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-300">
-                              {category.description?.trim() || "Open this collection to browse files."}
+                            <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-400 text-center">
+                              {category.description?.trim() || "Explore all files inside this collection."}
                             </p>
 
                             <Link
                               href={`/category/${category.id}`}
-                              className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 px-3 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-955/40 transition duration-300 hover:brightness-110"
+                              className="mt-5 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-600 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-lg transition-all duration-300 hover:brightness-125 hover:shadow-purple-500/25"
                             >
-                              Open Category
+                              <span>Explore Collection</span>
+                              <span>→</span>
                             </Link>
                           </div>
                         </div>
@@ -909,29 +716,68 @@ function DashboardPageContent() {
                 )}
               </section>
 
+              {/* 🔥 SECTION 2: Top Downloaded */}
+              <FileSection
+                title="🔥 Top Downloaded"
+                subtitle="The community's most downloaded files."
+                files={topFiles}
+                loading={sectionsLoading}
+                emptyMessage="🔥 No top downloaded files yet."
+                badge="Popular"
+                variant="hot"
+                showRank={true}
+                maxItems={5}
+              />
+
+              {/* 🆕 SECTION 3: New Uploads */}
+              <FileSection
+                title="🆕 Fresh Releases"
+                subtitle="Recently published downloads."
+                files={latestFiles}
+                loading={sectionsLoading}
+                emptyMessage="🆕 No new uploads yet."
+                badge="Latest"
+                variant="fresh"
+                maxItems={10}
+              />
+
+              {/* ⚡ SECTION 4: Recent Member Activity */}
+              <FileSection
+                title="⚡ Live Activity Feed"
+                subtitle="Real-time downloads happening across the network."
+                files={recentDownloads}
+                loading={sectionsLoading}
+                emptyMessage="⚡ No recent activity recorded yet."
+                badge="Activity"
+                variant="curated"
+                maxItems={5}
+              />
+
+              {/* 👥 SECTION 5: Live Community */}
               <section className="mt-12">
-                <div className="rounded-[30px] border border-white/10 bg-[#061229]/72 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-md sm:p-5">
-                  <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                      <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">
-                        Live Community
-                      </h2>
-                    </div>
+                <div className="rounded-3xl border border-white/10 bg-slate-900/50 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
+                  <div className="mb-6">
+                    <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">
+                      Community Live Pulse
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-400">
+                      Real-time usage metrics and active member interactions.
+                    </p>
                   </div>
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <SmartStatCard
-                      label="Members"
+                      label="Total Members"
                       value={formatNumber(liveStats.totalUsers)}
                       icon="👥"
-                      tone="bg-cyan-400/10 text-cyan-200 ring-cyan-400/20"
+                      tone="bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
                     />
 
                     <SmartStatCard
-                      label="Online"
+                      label="Online Now"
                       value={formatNumber(liveStats.onlineUsers)}
                       icon="🔥"
-                      tone="bg-emerald-400/10 text-emerald-200 ring-emerald-400/20"
+                      tone="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                       onClick={
                         canToggleOnlineUsers
                           ? () => setShowOnlineMembers((prev) => !prev)
@@ -940,40 +786,40 @@ function DashboardPageContent() {
                     />
 
                     <SmartStatCard
-                      label="Today"
+                      label="Active Today"
                       value={formatNumber(liveStats.activeToday)}
                       icon="📈"
-                      tone="bg-violet-400/10 text-violet-200 ring-violet-400/20"
+                      tone="bg-purple-500/20 text-purple-300 border border-purple-500/30"
                     />
 
                     <SmartStatCard
-                      label="New"
+                      label="New Joins"
                       value={formatNumber(newMembers.length)}
                       icon="🆕"
-                      tone="bg-amber-400/10 text-amber-200 ring-amber-400/20"
+                      tone="bg-amber-500/20 text-amber-300 border border-amber-500/30"
                     />
                   </div>
 
                   {canToggleOnlineUsers && showOnlineMembers ? (
-                    <div className="mt-4 rounded-[24px] border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm">
-                      <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/80 p-5 backdrop-blur-xl">
+                      <div className="mb-4 flex items-center justify-between gap-3">
                         <div>
-                          <h3 className="text-sm font-bold text-white">Online Users</h3>
-                          <p className="text-xs text-slate-300">Click a member to view profile.</p>
+                          <h3 className="text-base font-bold text-white">Online Members List</h3>
+                          <p className="text-xs text-slate-400">Click a user to open their profile details.</p>
                         </div>
 
                         <button
                           type="button"
                           onClick={() => setShowOnlineMembers(false)}
-                          className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/[0.12]"
+                          className="rounded-xl border border-white/10 bg-slate-800/80 px-3.5 py-1.5 text-xs font-bold text-slate-300 transition hover:bg-slate-700/80"
                         >
-                          Close
+                          Hide List
                         </button>
                       </div>
 
                       {onlineMembers.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] px-4 py-6 text-center text-sm text-slate-300">
-                          No users online right now.
+                        <div className="rounded-xl border border-dashed border-white/10 bg-slate-900/30 px-4 py-8 text-center text-sm text-slate-400">
+                          No members currently active.
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -981,30 +827,33 @@ function DashboardPageContent() {
                             <Link
                               key={member.id}
                               href={`/admin/users/${member.id}`}
-                              className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 transition hover:-translate-y-0.5 hover:border-cyan-400/40 hover:bg-white/[0.08]"
+                              className="group rounded-xl border border-white/10 bg-slate-900/50 p-3.5 transition duration-200 hover:border-cyan-400/40 hover:bg-slate-800/60"
                             >
                               <div className="flex items-center gap-3">
                                 {member.avatar_url ? (
                                   <img
                                     src={member.avatar_url}
                                     alt={getMemberDisplayName(member)}
-                                    className="h-11 w-11 rounded-2xl object-cover ring-1 ring-white/10"
+                                    className="h-10 w-10 rounded-xl object-cover ring-2 ring-white/10"
                                   />
                                 ) : (
-                                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 via-blue-600 to-violet-600 text-sm font-black text-white ring-1 ring-white/10">
+                                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-xs font-black text-white ring-2 ring-white/10">
                                     {getInitials(getMemberDisplayName(member))}
                                   </div>
                                 )}
 
                                 <div className="min-w-0 flex-1">
-                                  <div className="truncate text-sm font-bold text-white">
+                                  <div className="truncate text-sm font-bold text-white group-hover:text-cyan-300">
                                     {getMemberDisplayName(member)}
                                   </div>
-                                  <div className="mt-1 text-xs text-emerald-400">Online now</div>
+                                  <div className="flex items-center gap-1.5 text-xs text-emerald-400 mt-0.5">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    <span>Active Now</span>
+                                  </div>
                                 </div>
                               </div>
 
-                              <div className="mt-3 text-xs text-slate-300">
+                              <div className="mt-2.5 text-[11px] text-slate-400 pt-2 border-t border-white/5">
                                 Joined: {formatShortDate(member.created_at)}
                               </div>
                             </Link>
@@ -1027,9 +876,9 @@ export default function DashboardPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-[#020617] px-4 text-white">
-          <div className="rounded-[28px] border border-white/10 bg-white/[0.05] px-6 py-4 text-center font-bold shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-sm">
-            Loading dashboard...
+        <div className="flex min-h-screen items-center justify-center bg-[#030712] px-4 text-white">
+          <div className="rounded-3xl border border-white/10 bg-slate-900/60 px-8 py-6 text-center font-bold shadow-2xl backdrop-blur-xl">
+            Initializing interface...
           </div>
         </div>
       }

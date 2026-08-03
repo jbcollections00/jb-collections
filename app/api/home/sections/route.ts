@@ -14,12 +14,12 @@ export async function GET() {
 
     if (topError) console.error("Error fetching top files:", topError)
 
-    // 2. Fetch Latest 5 Uploads
+    // 2. Fetch Latest 10 Uploads (UPDATED TO 10)
     const { data: latestFiles, error: latestError } = await supabase
       .from("files")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(5)
+      .limit(10) // 👈 Changed from 5 to 10 here!
 
     if (latestError) console.error("Error fetching latest files:", latestError)
 
