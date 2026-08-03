@@ -8,7 +8,21 @@ import SiteHeader from "@/app/components/SiteHeader"
 import DailyRewardCard from "@/app/components/DailyRewardCard"
 import EarnTasksSection from "@/app/components/EarnTasksSection"
 
-type OfferwallProvider = "monlix" | "cpagrip"
+type OfferwallProvider = "cpagrip" | "torox" | "cpx" | "lootably" | "monlix"
+
+interface ProviderConfig {
+  id: OfferwallProvider
+  label: string
+  badge?: string
+}
+
+const PROVIDERS: ProviderConfig[] = [
+  { id: "cpagrip", label: "CPAGrip" },
+  { id: "torox", label: "Torox", badge: "High Payout" },
+  { id: "cpx", label: "CPX Surveys", badge: "Top Surveys" },
+  { id: "lootably", label: "Lootably" },
+  { id: "monlix", label: "Monlix" },
+]
 
 function EarnCoinsPageContent() {
   const supabase = useMemo(() => createClient(), [])
@@ -39,9 +53,12 @@ function EarnCoinsPageContent() {
     void checkUser()
   }, [router, supabase])
 
-  // Offerwall URLs configured with your exact CPAGrip details
-  const offerwallUrls = {
-    cpagrip: `https://www.cpagrip.com/show.php?l=0&u=2546994&id=1907578&subid=${userId || ""}`,
+  // Offerwall URLs configured with user ID tracking
+  const offerwallUrls: Record<OfferwallProvider, string> = {
+    cpagrip: `https://www.cpagrip.com/show.php?l=0&u=2546994&id=1907578&tracking_id=${userId || ""}&subid=${userId || ""}`,
+    torox: `https://offerwall.torox.io/YOUR_TOROX_APP_ID/${userId || ""}`,
+    cpx: `https://offers.cpx-research.com/index.php?app_id=35034&ext_user_id=${userId || ""}`,
+    lootably: `https://lootably.com/gifting-wall/YOUR_LOOTABLY_PLACEMENT_ID?uid=${userId || ""}`,
     monlix: `https://iframe.monlix.com/wall?appId=YOUR_MONLIX_APP_ID&userId=${userId || ""}`,
   }
 
@@ -75,7 +92,7 @@ function EarnCoinsPageContent() {
 
           {/* Integrated Partner Offerwalls Section */}
           <section className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/60 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-md">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-400">
                   Partner Offerwalls
@@ -88,41 +105,48 @@ function EarnCoinsPageContent() {
                 </p>
               </div>
 
-              {/* Provider Switcher Tabs */}
-              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/80 p-1.5">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("cpagrip")}
-                  className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
-                    activeTab === "cpagrip"
-                      ? "bg-gradient-to-r from-sky-400 to-blue-500 text-white shadow-md"
-                      : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  CPAGrip
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("monlix")}
-                  className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
-                    activeTab === "monlix"
-                      ? "bg-gradient-to-r from-sky-400 to-blue-500 text-white shadow-md"
-                      : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  Monlix
-                </button>
+              {/* Provider Switcher Tabs (Responsive Scrollable) */}
+              <div className="flex items-center gap-1.5 overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/80 p-1.5 scrollbar-none">
+                {PROVIDERS.map((provider) => {
+                  const isActive = activeTab === provider.id
+                  return (
+                    <button
+                      key={provider.id}
+                      type="button"
+                      onClick={() => setActiveTab(provider.id)}
+                      className={`relative flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+                        isActive
+                          ? "bg-gradient-to-r from-sky-400 to-blue-500 text-white shadow-md shadow-sky-500/20"
+                          : "text-slate-400 hover:text-white hover:bg-white/5"
+                      }`}
+                    >
+                      {provider.label}
+                      {provider.badge && (
+                        <span
+                          className={`rounded-full px-1.5 py-0.5 text-[9px] font-extrabold uppercase ${
+                            isActive
+                              ? "bg-white/20 text-white"
+                              : "bg-sky-500/20 text-sky-300 border border-sky-500/30"
+                          }`}
+                        >
+                          {provider.badge}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
             {/* Offerwall Frame */}
-            <div className="mt-6 overflow-hidden rounded-[24px] border border-white/10 bg-white shadow-2xl">
+            <div className="mt-6 overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 shadow-2xl">
               {userId ? (
                 <iframe
                   key={activeTab}
                   src={offerwallUrls[activeTab]}
-                  className="h-[750px] w-full border-0"
+                  className="h-[800px] w-full border-0 bg-slate-950"
                   title={`${activeTab} offerwall`}
+                  allow="geolocation; microphone; camera"
                 />
               ) : (
                 <div className="flex h-64 items-center justify-center text-sm font-semibold text-slate-400">
