@@ -8,10 +8,14 @@ import SiteHeader from "@/app/components/SiteHeader"
 import DailyRewardCard from "@/app/components/DailyRewardCard"
 import EarnTasksSection from "@/app/components/EarnTasksSection"
 
+type OfferwallProvider = "monlix" | "cpagrip"
+
 function EarnCoinsPageContent() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
   const [checkingAuth, setCheckingAuth] = useState(true)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<OfferwallProvider>("cpagrip")
 
   useEffect(() => {
     async function checkUser() {
@@ -25,6 +29,8 @@ function EarnCoinsPageContent() {
           router.replace("/login")
           return
         }
+
+        setUserId(user.id)
       } finally {
         setCheckingAuth(false)
       }
@@ -32,6 +38,12 @@ function EarnCoinsPageContent() {
 
     void checkUser()
   }, [router, supabase])
+
+  // Offerwall URLs configured with your exact CPAGrip details
+  const offerwallUrls = {
+    cpagrip: `https://www.cpagrip.com/show.php?l=0&u=2546994&id=1907578&subid=${userId || ""}`,
+    monlix: `https://iframe.monlix.com/wall?appId=YOUR_MONLIX_APP_ID&userId=${userId || ""}`,
+  }
 
   if (checkingAuth) {
     return (
@@ -60,6 +72,65 @@ function EarnCoinsPageContent() {
           <div className="mt-5">
             <EarnTasksSection />
           </div>
+
+          {/* Integrated Partner Offerwalls Section */}
+          <section className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/60 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-md">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-400">
+                  Partner Offerwalls
+                </p>
+                <h2 className="mt-1 text-2xl font-black text-white">
+                  Earn JB Coins via Offers & Surveys
+                </h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Complete tasks, play games, or answer surveys from our official partners.
+                </p>
+              </div>
+
+              {/* Provider Switcher Tabs */}
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/80 p-1.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("cpagrip")}
+                  className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
+                    activeTab === "cpagrip"
+                      ? "bg-gradient-to-r from-sky-400 to-blue-500 text-white shadow-md"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  CPAGrip
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("monlix")}
+                  className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
+                    activeTab === "monlix"
+                      ? "bg-gradient-to-r from-sky-400 to-blue-500 text-white shadow-md"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Monlix
+                </button>
+              </div>
+            </div>
+
+            {/* Offerwall Frame */}
+            <div className="mt-6 overflow-hidden rounded-[24px] border border-white/10 bg-white shadow-2xl">
+              {userId ? (
+                <iframe
+                  key={activeTab}
+                  src={offerwallUrls[activeTab]}
+                  className="h-[750px] w-full border-0"
+                  title={`${activeTab} offerwall`}
+                />
+              ) : (
+                <div className="flex h-64 items-center justify-center text-sm font-semibold text-slate-400">
+                  Loading offerwall...
+                </div>
+              )}
+            </div>
+          </section>
         </main>
       </div>
     </>

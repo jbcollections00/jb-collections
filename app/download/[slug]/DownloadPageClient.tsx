@@ -210,10 +210,6 @@ export default function DownloadPageClient() {
   const previewAsset = useMemo(() => getPreviewAsset(file), [file])
   const previewKind = useMemo(() => inferPreviewKind(file), [file])
   const fileTypeLabel = useMemo(() => inferExtension(file), [file])
-  const addedDateLabel = useMemo(
-    () => formatDate(file?.updated_at || file?.created_at || null),
-    [file]
-  )
   const estimatedCoinCost = useMemo(() => getDownloadCoinCost(membershipLevel), [membershipLevel])
   const estimatedReward = useMemo(() => getRewardAmount(membershipLevel), [membershipLevel])
 
@@ -756,7 +752,7 @@ export default function DownloadPageClient() {
                 </div>
               </div>
 
-              {/* Right Column: Download & Metadata Action Panel */}
+              {/* Right Column: Download & Action Panel */}
               <div className="flex flex-col justify-between space-y-6">
                 <div>
                   <h3 className="mb-2 text-base font-bold text-slate-800">Get File Access</h3>
@@ -803,36 +799,6 @@ export default function DownloadPageClient() {
                       {downloadError}
                     </div>
                   )}
-
-                  {/* File Metadata Rack */}
-                  <div className="mt-6 space-y-3">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        FILE TYPE
-                      </p>
-                      <p className="mt-0.5 text-lg font-black uppercase text-slate-900">
-                        {fileTypeLabel}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        UPDATED
-                      </p>
-                      <p className="mt-0.5 text-lg font-black text-slate-900">
-                        {addedDateLabel}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        ACCESS COST
-                      </p>
-                      <p className="mt-0.5 text-lg font-black text-slate-900">
-                        {estimatedCoinCost} Coins
-                      </p>
-                    </div>
-                  </div>
 
                   {/* Embedded Adsterra 300x250 Banner */}
                   <AdsterraBanner />

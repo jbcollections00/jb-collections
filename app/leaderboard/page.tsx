@@ -4,7 +4,6 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import SiteHeader from "@/app/components/SiteHeader"
-import SiteFooter from "@/app/components/SiteFooter"
 
 type UserProfile = {
   id: string
@@ -227,9 +226,6 @@ export default function LeaderboardPage() {
             )}
           </section>
         </div>
-
-        {/* Global Footer with Contact Us Link */}
-        <SiteFooter />
       </div>
     </>
   )
