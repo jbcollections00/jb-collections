@@ -1,245 +1,160 @@
+import { NextRequest, NextResponse } from "next/server"
+import { createClient } from "@supabase/supabase-js"
 
-import { NextResponse } from "next/server"
-import { createServerClient } from "@supabase/ssr"
-import { createClient as createSupabaseAdmin } from "@supabase/supabase-js"
-import { cookies } from "next/headers"
+// Prevent Next.js static caching
+export const dynamic = "force-dynamic"
+export const revalidate = 0
 
-export const runtime = "nodejs"
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+// Prefer Service Role Key to bypass RLS, fallback to Anon Key
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  ""
 
-type LeaderboardProfileRow = {
-  id: string
-  full_name?: string | null
-  name?: string | null
-  username?: string | null
-  avatar_url?: string | null
-  jb_points?: number | null
-  membership?: string | null
-  role?: string | null
-}
+const supabase = createClient(supabaseUrl, supabaseKey)
 
-function requireEnv(name: string) {
-  const value = process.env[name]
-
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`)
-  }
-
-  return value
-}
-
-async function createSupabaseUserClient() {
-  const cookieStore = await cookies()
-
-  return createServerClient(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-        set() {},
-        remove() {},
-      },
-    }
-  )
-}
-
-function createSupabaseAdminClient() {
-  return createSupabaseAdmin(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  )
-}
-
-function getDisplayName(profile: LeaderboardProfileRow) {
-  return (
-    profile.full_name?.trim() ||
-    profile.name?.trim() ||
-    profile.username?.trim() ||
-    "User"
-  )
-}
-
-function getMembership(profile: LeaderboardProfileRow) {
-  const role = String(profile.role || "").trim().toLowerCase()
-  const membership = String(profile.membership || "").trim().toLowerCase()
-
-  if (role === "admin") return "admin"
-  if (membership === "platinum") return "platinum"
-  if (membership === "premium") return "premium"
-
-  return "standard"
-}
-
-function getMembershipLabel(value: string) {
-  if (value === "admin") return "Admin"
-  if (value === "platinum") return "Platinum"
-  if (value === "premium") return "Premium"
-
-  return "Standard"
-}
-
-function getInitials(name: string) {
-  const cleaned = name.trim()
-
-  if (!cleaned) return "U"
-
-  const parts = cleaned.split(/\s+/).filter(Boolean)
-
-  if (parts.length === 1) {
-    return parts[0].slice(0, 2).toUpperCase()
-  }
-
-  return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase()
-}
-
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const adminDb = createSupabaseAdminClient()
-
-    let currentUserId: string | null = null
-
-    try {
-      const supabase = await createSupabaseUserClient()
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      currentUserId = user?.id || null
-    } catch {
-      currentUserId = null
-    }
-
-    const { data: topProfiles, error: leaderboardError } = await adminDb
-      .from("profiles")
-      .select(
-        "id, full_name, name, username, avatar_url, jb_points, membership, role"
-      )
-      .order("jb_points", {
-        ascending: false,
-        nullsFirst: false,
-      })
-      .limit(10)
-
-    if (leaderboardError) {
-      console.error("Leaderboard query error:", leaderboardError)
-
+    if (!supabaseUrl || !supabaseKey) {
       return NextResponse.json(
-        {
-          ok: false,
-          error: "Failed to load leaderboard",
-        },
-        {
-          status: 500,
-        }
+        { ok: false, error: "Missing Supabase URL or Key in environment variables." },
+        { status: 500 }
       )
     }
 
-    const leaderboardRows = Array.isArray(topProfiles)
-      ? (topProfiles as LeaderboardProfileRow[])
-      : []
+    // 1. Identify current user if Authorization header is provided
+    let currentUserId: string | null = null
+    const authHeader = req.headers.get("authorization")
 
-    const top = leaderboardRows.map((profile, index) => {
-      const displayName = getDisplayName(profile)
-      const membership = getMembership(profile)
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.replace("Bearer ", "")
+      const { data: userData } = await supabase.auth.getUser(token)
+      if (userData?.user) {
+        currentUserId = userData.user.id
+      }
+    }
+
+    // 2. Query all profile columns using select("*") to prevent missing-column errors
+    let profiles: any[] | null = null
+    let dbError: any = null
+
+    // Try ordering by jb_coins
+    const primaryQueryResult = await supabase
+      .from("profiles")
+      .select("*")
+      .order("jb_coins", { ascending: false })
+      .limit(100)
+
+    if (primaryQueryResult.error) {
+      // Fallback: try ordering by coins if jb_coins fails
+      const fallbackQueryResult = await supabase
+        .from("profiles")
+        .select("*")
+        .order("coins", { ascending: false })
+        .limit(100)
+
+      if (fallbackQueryResult.error) {
+        // Final fallback: select profiles without strict database sorting
+        const safeResult = await supabase
+          .from("profiles")
+          .select("*")
+          .limit(100)
+
+        profiles = safeResult.data
+        dbError = safeResult.error
+      } else {
+        profiles = fallbackQueryResult.data
+      }
+    } else {
+      profiles = primaryQueryResult.data
+    }
+
+    if (dbError || !profiles) {
+      console.error("Leaderboard DB error:", dbError)
+      return NextResponse.json(
+        { ok: false, error: dbError?.message || "Failed to fetch leaderboard data." },
+        { status: 500 }
+      )
+    }
+
+    // Sort in-memory as a guarantee
+    profiles.sort((a, b) => {
+      const aCoins = Number(a.jb_coins ?? a.coins ?? 0)
+      const bCoins = Number(b.jb_coins ?? b.coins ?? 0)
+      return bCoins - aCoins
+    })
+
+    // 3. Format profile objects into clean leaderboard entries
+    const top = profiles.map((user: any, index: number) => {
+      const displayName =
+        user.full_name || user.name || user.username || "Anonymous User"
+
+      const coinBalance = Number(user.jb_coins ?? user.coins ?? 0)
 
       return {
         rank: index + 1,
-        id: profile.id,
+        id: user.id,
         display_name: displayName,
-        username: profile.username || null,
-        avatar_url: profile.avatar_url || null,
-        initials: getInitials(displayName),
-
-        // IMPORTANT
-        coins: Number(profile.jb_points || 0),
-
-        membership,
-        membership_label: getMembershipLabel(membership),
-        is_current_user: currentUserId
-          ? profile.id === currentUserId
-          : false,
+        username: user.username || null,
+        avatar_url: user.avatar_url || null,
+        coins: coinBalance,
+        membership: user.membership || null,
+        membership_label: user.membership || "Member",
+        is_current_user: currentUserId ? user.id === currentUserId : false,
       }
     })
 
-    let me = null
+    // 4. Determine current user's rank object
+    let me = currentUserId
+      ? top.find((entry) => entry.id === currentUserId) || null
+      : null
 
-    if (currentUserId) {
-      const { data: currentUserProfile, error: currentUserError } =
-        await adminDb
-          .from("profiles")
-          .select(
-            "id, jb_points, full_name, name, username, avatar_url, membership, role"
-          )
-          .eq("id", currentUserId)
-          .maybeSingle()
+    if (currentUserId && !me) {
+      const { data: myProfile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", currentUserId)
+        .maybeSingle()
 
-      if (!currentUserError && currentUserProfile) {
-        const safeCurrentUserProfile =
-          currentUserProfile as LeaderboardProfileRow
-
-        const currentUserCoins = Number(
-          safeCurrentUserProfile.jb_points || 0
-        )
-
-        const { count: higherCount } = await adminDb
-          .from("profiles")
-          .select("id", {
-            count: "exact",
-            head: true,
-          })
-          .gt("jb_points", currentUserCoins)
-
-        const currentUserDisplayName =
-          getDisplayName(safeCurrentUserProfile)
-
-        const currentUserMembership =
-          getMembership(safeCurrentUserProfile)
+      if (myProfile) {
+        const myCoins = Number(myProfile.jb_coins ?? myProfile.coins ?? 0)
+        const myRank = profiles.filter(
+          (p: any) => Number(p.jb_coins ?? p.coins ?? 0) > myCoins
+        ).length + 1
 
         me = {
-          id: currentUserId,
-          rank: Number(higherCount || 0) + 1,
-          display_name: currentUserDisplayName,
-          username: safeCurrentUserProfile.username || null,
-          avatar_url: safeCurrentUserProfile.avatar_url || null,
-          initials: getInitials(currentUserDisplayName),
-
-          // IMPORTANT
-          coins: currentUserCoins,
-
-          membership: currentUserMembership,
-          membership_label: getMembershipLabel(currentUserMembership),
+          rank: myRank,
+          id: myProfile.id,
+          display_name:
+            myProfile.full_name || myProfile.name || myProfile.username || "You",
+          username: myProfile.username || null,
+          avatar_url: myProfile.avatar_url || null,
+          coins: myCoins,
+          membership: myProfile.membership || null,
+          membership_label: myProfile.membership || "Member",
+          is_current_user: true,
         }
       }
     }
 
-    return NextResponse.json({
-      ok: true,
-      top,
-      me,
-    })
-  } catch (error) {
-    console.error("Leaderboard route error:", error)
-
+    // 5. Return JSON with strict anti-cache headers
     return NextResponse.json(
+      { ok: true, top, me },
       {
-        ok: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to load leaderboard",
-      },
-      {
-        status: 500,
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
       }
+    )
+  } catch (err: any) {
+    console.error("Leaderboard GET route exception:", err)
+    return NextResponse.json(
+      { ok: false, error: err?.message || "Internal Server Error" },
+      { status: 500 }
     )
   }
 }
