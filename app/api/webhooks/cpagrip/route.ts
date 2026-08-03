@@ -34,8 +34,8 @@ export async function GET(request: Request) {
       );
     }
 
-    // 3. Set fixed reward to 100 JB Coins
-    const coinsToCredit = 100;
+    // 3. Set fixed reward to 500 JB Coins
+    const coinsToCredit = 500;
 
     // 4. Call Supabase RPC function (credit_user_coins)
     const { error } = await supabase.rpc('credit_user_coins', {
