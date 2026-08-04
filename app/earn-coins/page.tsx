@@ -17,7 +17,7 @@ interface ProviderConfig {
 }
 
 const PROVIDERS: ProviderConfig[] = [
-  { id: "cpagrip", label: "CPAGrip" },
+  { id: "cpagrip", label: "CPAGrip", badge: "Recommended" },
   { id: "torox", label: "Torox", badge: "High Payout" },
   { id: "cpx", label: "CPX Surveys", badge: "Top Surveys" },
   { id: "lootably", label: "Lootably" },
@@ -27,6 +27,7 @@ const PROVIDERS: ProviderConfig[] = [
 function EarnCoinsPageContent() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
+  
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<OfferwallProvider>("cpagrip")
@@ -54,8 +55,9 @@ function EarnCoinsPageContent() {
   }, [router, supabase])
 
   // Offerwall URLs configured with user ID tracking
+  // Note: Using passworddomain.com for CPAGrip to bypass common adblockers
   const offerwallUrls: Record<OfferwallProvider, string> = {
-    cpagrip: `https://www.cpagrip.com/show.php?l=0&u=2546994&id=1907578&tracking_id=${userId || ""}&subid=${userId || ""}`,
+    cpagrip: `https://passworddomain.com/show.php?l=0&u=2546994&id=1907578&tracking_id=${userId || ""}`,
     torox: `https://offerwall.torox.io/YOUR_TOROX_APP_ID/${userId || ""}`,
     cpx: `https://offers.cpx-research.com/index.php?app_id=35034&ext_user_id=${userId || ""}`,
     lootably: `https://lootably.com/gifting-wall/YOUR_LOOTABLY_PLACEMENT_ID?uid=${userId || ""}`,
@@ -139,17 +141,18 @@ function EarnCoinsPageContent() {
             </div>
 
             {/* Offerwall Frame */}
-            <div className="mt-6 overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 shadow-2xl">
+            <div className="mt-6 overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 shadow-2xl relative min-h-[800px]">
               {userId ? (
                 <iframe
                   key={activeTab}
                   src={offerwallUrls[activeTab]}
-                  className="h-[800px] w-full border-0 bg-slate-950"
+                  className="absolute inset-0 h-full w-full border-0 bg-slate-950"
                   title={`${activeTab} offerwall`}
-                  allow="geolocation; microphone; camera"
+                  allow="geolocation; microphone; camera; clipboard-write"
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"
                 />
               ) : (
-                <div className="flex h-64 items-center justify-center text-sm font-semibold text-slate-400">
+                <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-400">
                   Loading offerwall...
                 </div>
               )}
