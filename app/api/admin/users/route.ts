@@ -72,51 +72,67 @@ export async function GET() {
     let signupBonusByUser: Record<string, any> = {}
 
     if (userIds.length > 0) {
-      const { data: histories, error: historyError } = await adminSupabase
-        .from("coin_history")
-        .select("id, user_id, amount, type, description, reference, created_at")
-        .in("user_id", userIds)
-        .order("created_at", { ascending: false })
-        .limit(Math.max(userIds.length * 20, 20))
+      // Chunk size to prevent URL string length limits
+      const CHUNK_SIZE = 50
+      let allHistories: any[] = []
+      let allSignupBonuses: any[] = []
 
-      if (historyError) {
-        console.error("Admin users coin history error:", historyError.message)
-      } else {
-        historiesByUser = (histories || []).reduce<Record<string, any[]>>((acc, item) => {
-          if (!item.user_id) return acc
-          if (!acc[item.user_id]) acc[item.user_id] = []
-          if (acc[item.user_id].length < 20) {
-            acc[item.user_id].push({
-              id: item.id,
-              amount: item.amount,
-              type: item.type,
-              description: item.description,
-              reference: item.reference,
-              created_at: item.created_at,
-            })
-          }
-          return acc
-        }, {})
+      // Loop through users in smaller batches
+      for (let i = 0; i < userIds.length; i += CHUNK_SIZE) {
+        const chunk = userIds.slice(i, i + CHUNK_SIZE)
+
+        // 1. Fetch History for Chunk
+        const { data: histories, error: historyError } = await adminSupabase
+          .from("coin_history")
+          .select("id, user_id, amount, type, description, reference, created_at")
+          .in("user_id", chunk)
+          .order("created_at", { ascending: false })
+          .limit(chunk.length * 20)
+
+        if (historyError) {
+          console.error("Admin users coin history error (Chunk):", historyError.message)
+        } else if (histories) {
+          allHistories = [...allHistories, ...histories]
+        }
+
+        // 2. Fetch Signup Bonuses for Chunk
+        const { data: signupBonuses, error: signupBonusError } = await adminSupabase
+          .from("coin_history")
+          .select("id, user_id, amount, type, description, reference, created_at")
+          .in("user_id", chunk)
+          .eq("type", "signup_bonus")
+          .order("created_at", { ascending: false })
+          .limit(chunk.length * 3)
+
+        if (signupBonusError) {
+          console.error("Admin users signup bonus history error (Chunk):", signupBonusError.message)
+        } else if (signupBonuses) {
+          allSignupBonuses = [...allSignupBonuses, ...signupBonuses]
+        }
       }
 
+      // Map combined results to our dictionaries
+      historiesByUser = allHistories.reduce<Record<string, any[]>>((acc, item) => {
+        if (!item.user_id) return acc
+        if (!acc[item.user_id]) acc[item.user_id] = []
+        if (acc[item.user_id].length < 20) {
+          acc[item.user_id].push({
+            id: item.id,
+            amount: item.amount,
+            type: item.type,
+            description: item.description,
+            reference: item.reference,
+            created_at: item.created_at,
+          })
+        }
+        return acc
+      }, {})
 
-      const { data: signupBonuses, error: signupBonusError } = await adminSupabase
-        .from("coin_history")
-        .select("id, user_id, amount, type, description, reference, created_at")
-        .in("user_id", userIds)
-        .eq("type", "signup_bonus")
-        .order("created_at", { ascending: false })
-        .limit(Math.max(userIds.length * 3, 20))
-
-      if (signupBonusError) {
-        console.error("Admin users signup bonus history error:", signupBonusError.message)
-      } else {
-        signupBonusByUser = (signupBonuses || []).reduce<Record<string, any>>((acc, item) => {
-          if (!item.user_id || acc[item.user_id]) return acc
-          acc[item.user_id] = item
-          return acc
-        }, {})
-      }
+      signupBonusByUser = allSignupBonuses.reduce<Record<string, any>>((acc, item) => {
+        if (!item.user_id || acc[item.user_id]) return acc
+        acc[item.user_id] = item
+        return acc
+      }, {})
     }
 
     const usersWithActivities = users.map((userRow) => {
