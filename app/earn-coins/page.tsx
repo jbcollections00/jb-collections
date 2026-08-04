@@ -8,7 +8,8 @@ import SiteHeader from "@/app/components/SiteHeader"
 import DailyRewardCard from "@/app/components/DailyRewardCard"
 import EarnTasksSection from "@/app/components/EarnTasksSection"
 
-type OfferwallProvider = "cpagrip" | "torox" | "cpx" | "lootably" | "monlix"
+// Removed torox, lootably, and monlix
+type OfferwallProvider = "cpagrip" | "cpx"
 
 interface ProviderConfig {
   id: OfferwallProvider
@@ -16,12 +17,10 @@ interface ProviderConfig {
   badge?: string
 }
 
+// Only showing configured providers
 const PROVIDERS: ProviderConfig[] = [
   { id: "cpagrip", label: "CPAGrip", badge: "Recommended" },
-  { id: "torox", label: "Torox", badge: "High Payout" },
   { id: "cpx", label: "CPX Surveys", badge: "Top Surveys" },
-  { id: "lootably", label: "Lootably" },
-  { id: "monlix", label: "Monlix" },
 ]
 
 function EarnCoinsPageContent() {
@@ -54,14 +53,10 @@ function EarnCoinsPageContent() {
     void checkUser()
   }, [router, supabase])
 
-  // Offerwall URLs configured with user ID tracking
-  // Note: Using passworddomain.com for CPAGrip to bypass common adblockers
+  // Offerwall URLs strictly for active accounts
   const offerwallUrls: Record<OfferwallProvider, string> = {
-    cpagrip: `https://passworddomain.com/show.php?l=0&u=2546994&id=1907578&tracking_id=${userId || ""}`,
-    torox: `https://offerwall.torox.io/YOUR_TOROX_APP_ID/${userId || ""}`,
+    cpagrip: `https://www.cpagrip.com/show.php?l=0&u=2546994&id=1907578&tracking_id=${userId || ""}`,
     cpx: `https://offers.cpx-research.com/index.php?app_id=35034&ext_user_id=${userId || ""}`,
-    lootably: `https://lootably.com/gifting-wall/YOUR_LOOTABLY_PLACEMENT_ID?uid=${userId || ""}`,
-    monlix: `https://iframe.monlix.com/wall?appId=YOUR_MONLIX_APP_ID&userId=${userId || ""}`,
   }
 
   if (checkingAuth) {
@@ -92,7 +87,6 @@ function EarnCoinsPageContent() {
             <EarnTasksSection />
           </div>
 
-          {/* Integrated Partner Offerwalls Section */}
           <section className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/60 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-md">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -107,7 +101,6 @@ function EarnCoinsPageContent() {
                 </p>
               </div>
 
-              {/* Provider Switcher Tabs (Responsive Scrollable) */}
               <div className="flex items-center gap-1.5 overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/80 p-1.5 scrollbar-none">
                 {PROVIDERS.map((provider) => {
                   const isActive = activeTab === provider.id
@@ -140,7 +133,6 @@ function EarnCoinsPageContent() {
               </div>
             </div>
 
-            {/* Offerwall Frame */}
             <div className="mt-6 overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 shadow-2xl relative min-h-[800px]">
               {userId ? (
                 <iframe
