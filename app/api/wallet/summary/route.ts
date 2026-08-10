@@ -1,105 +1,124 @@
-import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { createServerClient } from "@supabase/ssr"
-import { createClient as createSupabaseAdmin } from "@supabase/supabase-js"
+import { NextRequest, NextResponse } from "next/server"
+import { createClient } from "@supabase/supabase-js"
 
-export const runtime = "nodejs"
+// Prevent Next.js static caching
+export const dynamic = "force-dynamic"
+export const revalidate = 0
 
-function requireEnv(name: string) {
-  const value = process.env[name]
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`)
-  }
-  return value
-}
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+// Prefer Service Role Key to bypass RLS, fallback to Anon Key
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  ""
 
-async function createSupabaseUserClient() {
-  const cookieStore = await cookies()
+const supabase = createClient(supabaseUrl, supabaseKey)
 
-  const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL")
-  const supabaseAnonKey = requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
-
-  return createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value
-      },
-      set() {},
-      remove() {},
-    },
-  })
-}
-
-function createSupabaseAdminClient() {
-  const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL")
-  const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY")
-
-  return createSupabaseAdmin(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
-}
-
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const supabase = await createSupabaseUserClient()
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
-
-    if (userError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json(
+        { ok: false, error: "Missing Supabase URL or Key in environment variables." },
+        { status: 500 }
+      )
     }
 
-    const adminDb = createSupabaseAdminClient()
+    // 1. Identify current user if Authorization header is provided
+    let currentUserId: string | null = null
+    const authHeader = req.headers.get("authorization")
 
-    const [{ data: profile, error: profileError }, { data: orders, error: ordersError }] =
-      await Promise.all([
-        adminDb.from("profiles").select("coins").eq("id", user.id).maybeSingle(),
-        adminDb
-          .from("coin_purchase_orders")
-          .select("coins, status")
-          .eq("user_id", user.id),
-      ])
-
-    if (profileError) {
-      return NextResponse.json({ error: "Failed to load wallet profile." }, { status: 500 })
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.replace("Bearer ", "")
+      const { data: userData } = await supabase.auth.getUser(token)
+      if (userData?.user) {
+        currentUserId = userData.user.id
+      }
     }
 
-    if (ordersError) {
-      return NextResponse.json({ error: "Failed to load wallet orders." }, { status: 500 })
+    // 2. Query all profile columns and strictly order by 'coins'
+    const { data: profiles, error: dbError } = await supabase
+      .from("profiles")
+      .select("*")
+      .order("coins", { ascending: false })
+      .limit(100)
+
+    if (dbError || !profiles) {
+      console.error("Leaderboard DB error:", dbError)
+      return NextResponse.json(
+        { ok: false, error: dbError?.message || "Failed to fetch leaderboard data." },
+        { status: 500 }
+      )
     }
 
-    const rows = Array.isArray(orders) ? orders : []
+    // 3. Format profile objects into clean leaderboard entries using only 'coins'
+    const top = profiles.map((user: any, index: number) => {
+      const displayName =
+        user.full_name || user.name || user.username || "Anonymous User"
 
-    const pendingCoins = rows.reduce((sum, row) => {
-      return String(row.status || "").trim().toLowerCase() === "pending"
-        ? sum + Number(row.coins || 0)
-        : sum
-    }, 0)
+      const coinBalance = Number(user.coins || 0)
 
-    const lifetimePurchased = rows.reduce((sum, row) => {
-      const status = String(row.status || "").trim().toLowerCase()
-      return status !== "rejected" ? sum + Number(row.coins || 0) : sum
-    }, 0)
-
-    return NextResponse.json({
-      ok: true,
-      summary: {
-        balance: Number(profile?.coins || 0),
-        pendingCoins,
-        lifetimePurchased,
-      },
+      return {
+        rank: index + 1,
+        id: user.id,
+        display_name: displayName,
+        username: user.username || null,
+        avatar_url: user.avatar_url || null,
+        coins: coinBalance,
+        membership: user.membership || null,
+        membership_label: user.membership || "Member",
+        is_current_user: currentUserId ? user.id === currentUserId : false,
+      }
     })
-  } catch (error) {
+
+    // 4. Determine current user's rank object
+    let me = currentUserId
+      ? top.find((entry) => entry.id === currentUserId) || null
+      : null
+
+    if (currentUserId && !me) {
+      const { data: myProfile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", currentUserId)
+        .maybeSingle()
+
+      if (myProfile) {
+        const myCoins = Number(myProfile.coins || 0)
+        const myRank = profiles.filter(
+          (p: any) => Number(p.coins || 0) > myCoins
+        ).length + 1
+
+        me = {
+          rank: myRank,
+          id: myProfile.id,
+          display_name:
+            myProfile.full_name || myProfile.name || myProfile.username || "You",
+          username: myProfile.username || null,
+          avatar_url: myProfile.avatar_url || null,
+          coins: myCoins,
+          membership: myProfile.membership || null,
+          membership_label: myProfile.membership || "Member",
+          is_current_user: true,
+        }
+      }
+    }
+
+    // 5. Return JSON with strict anti-cache headers
     return NextResponse.json(
+      { ok: true, top, me },
       {
-        error: error instanceof Error ? error.message : "Failed to load wallet summary.",
-      },
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    )
+  } catch (err: any) {
+    console.error("Leaderboard GET route exception:", err)
+    return NextResponse.json(
+      { ok: false, error: err?.message || "Internal Server Error" },
       { status: 500 }
     )
   }
