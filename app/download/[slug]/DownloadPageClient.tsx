@@ -5,6 +5,7 @@ import Script from "next/script"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import ArchiveExtractorModal from "@/components/ArchiveExtractorModal"
 
 type FileVisibility = "free" | "premium" | "platinum" | "private"
 type MembershipLevel = "standard" | "premium" | "platinum" | "admin"
@@ -187,6 +188,7 @@ export default function DownloadPageClient() {
   const [shareUrl, setShareUrl] = useState("")
   const [copied, setCopied] = useState(false)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
+  const [showExtractorModal, setShowExtractorModal] = useState(false)
 
   const [step, setStep] = useState<"waiting" | "ready" | "premium-only" | "platinum-only">(
     "waiting"
@@ -380,6 +382,7 @@ export default function DownloadPageClient() {
       setIsPremiumUser(false)
       setIsPlatinumUser(false)
       setShowPreviewModal(false)
+      setShowExtractorModal(false)
       setShowCoinConfirm(false)
       setShowInsufficientCoins(false)
       setRequiredCoins(null)
@@ -782,16 +785,28 @@ export default function DownloadPageClient() {
                       </Link>
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={handleDownloadButtonClick}
-                      disabled={startingDownload}
-                      className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-500 px-6 py-4 text-sm font-black text-white shadow-md shadow-blue-500/10 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {startingDownload
-                        ? "Initializing Secure Link..."
-                        : `⬇ DOWNLOAD — ${estimatedCoinCost} JB COINS`}
-                    </button>
+                    <div className="space-y-3">
+                      <button
+                        type="button"
+                        onClick={handleDownloadButtonClick}
+                        disabled={startingDownload}
+                        className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-500 px-6 py-4 text-sm font-black text-white shadow-md shadow-blue-500/10 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {startingDownload
+                          ? "Initializing Secure Link..."
+                          : `⬇ DOWNLOAD — ${estimatedCoinCost} JB COINS`}
+                      </button>
+
+                      {/* Online Extractor Trigger Button */}
+                      <button
+                        type="button"
+                        onClick={() => setShowExtractorModal(true)}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                      >
+                        <span>📂</span>
+                        <span>EXTRACT / PREVIEW ARCHIVE</span>
+                      </button>
+                    </div>
                   )}
 
                   {downloadError && (
@@ -1025,6 +1040,16 @@ export default function DownloadPageClient() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Online Archive Extractor Modal */}
+      {file && (
+        <ArchiveExtractorModal
+          isOpen={showExtractorModal}
+          onClose={() => setShowExtractorModal(false)}
+          fileUrl={file.file_url || `/api/download/${file.id}`}
+          fileName={getDisplayName(file)}
+        />
       )}
     </>
   )

@@ -1,11 +1,25 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export async function GET() {
   try {
     const supabase = await createClient()
 
-    // 1. Fetch Top 5 Downloaded Files
+    // 1. Fetch Real-Time Total Counts (Para hindi na hardcoded na 85)
+    const [
+      { count: totalFilesCount },
+      { count: totalUsersCount },
+      { count: totalDownloadsCount },
+    ] = await Promise.all([
+      supabase.from("files").select("*", { count: "exact", head: true }),
+      supabase.from("profiles").select("*", { count: "exact", head: true }),
+      supabase.from("download_unlocks").select("*", { count: "exact", head: true }),
+    ])
+
+    // 2. Fetch Top 5 Downloaded Files
     const { data: topFiles, error: topError } = await supabase
       .from("files")
       .select("*")
@@ -14,16 +28,16 @@ export async function GET() {
 
     if (topError) console.error("Error fetching top files:", topError)
 
-    // 2. Fetch Latest 10 Uploads (UPDATED TO 10)
+    // 3. Fetch Latest 10 Uploads
     const { data: latestFiles, error: latestError } = await supabase
       .from("files")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(10) // 👈 Changed from 5 to 10 here!
+      .limit(10)
 
     if (latestError) console.error("Error fetching latest files:", latestError)
 
-    // 3. Fetch Trending Files
+    // 4. Fetch Trending Files
     const { data: trendingFiles, error: trendingError } = await supabase
       .from("files")
       .select("*")
@@ -32,7 +46,7 @@ export async function GET() {
 
     if (trendingError) console.error("Error fetching trending files:", trendingError)
 
-    // 4. Fetch Recent Downloads Activity (using 'download_unlocks')
+    // 5. Fetch Recent Downloads Activity
     let recentDownloads: any[] = []
 
     const { data: logsData, error: logsError } = await supabase
@@ -65,7 +79,7 @@ export async function GET() {
       console.error("Error fetching recent downloads activity:", logsError)
     } else if (logsData && logsData.length > 0) {
       recentDownloads = logsData
-        .filter((log: any) => log.files) // Ensure attached file record exists
+        .filter((log: any) => log.files)
         .map((log: any) => ({
           id: log.files.id,
           title: log.files.title || log.files.name,
@@ -85,6 +99,14 @@ export async function GET() {
 
     return NextResponse.json(
       {
+        stats: {
+          total_files: totalFilesCount || 0,
+          total_users: totalUsersCount || 0,
+          total_downloads: totalDownloadsCount || 0,
+        },
+        total_files: totalFilesCount || 0,
+        total_users: totalUsersCount || 0,
+        total_downloads: totalDownloadsCount || 0,
         top: topFiles || [],
         latest: latestFiles || [],
         trending: trendingFiles || [],
@@ -99,7 +121,16 @@ export async function GET() {
   } catch (error) {
     console.error("Server Error in /api/home/sections:", error)
     return NextResponse.json(
-      { top: [], latest: [], trending: [], recent_downloads: [] },
+      {
+        stats: { total_files: 0, total_users: 0, total_downloads: 0 },
+        total_files: 0,
+        total_users: 0,
+        total_downloads: 0,
+        top: [],
+        latest: [],
+        trending: [],
+        recent_downloads: [],
+      },
       { status: 500 }
     )
   }

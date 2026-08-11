@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import PresenceTracker from "@/app/components/PresenceTracker"
 import DailyRewardCard from "@/app/components/DailyRewardCard"
+import TopDownloaderAd from "@/app/components/TopDownloaderAd"
 
 type Category = {
   id: string
@@ -149,34 +150,134 @@ function getInitials(name: string) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
-// --- UPDATED PROMO MODAL COMPONENT (ALWAYS SHOWS UNTIL 100 CLAIMS) ---
+// --- WEEKLY LEADERBOARD POPUP MODAL ---
+function WeeklyLeaderboardModal() {
+  const [isOpen, setIsOpen] = useState(false)
+  const router = useRouter()
+
+  useEffect(() => {
+    // Tinitiyak na lalabas lang kung hindi pa nakikita ngayong browser session
+    const hasSeenModal = sessionStorage.getItem("hasSeenLeaderboardModal")
+    if (!hasSeenModal) {
+      const timer = setTimeout(() => {
+        setIsOpen(true)
+      }, 1200)
+      return () => clearTimeout(timer)
+    }
+  }, [])
+
+  const handleClose = () => {
+    sessionStorage.setItem("hasSeenLeaderboardModal", "true")
+    setIsOpen(false)
+  }
+
+  const handleAction = () => {
+    handleClose()
+    router.push("/leaderboard") // I-redirect sa Leaderboard page
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
+      <div 
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
+        onClick={handleClose}
+      />
+      
+      <div className="relative w-full max-w-md overflow-hidden rounded-[24px] border border-amber-500/20 bg-slate-900/95 p-6 text-center shadow-[0_0_50px_rgba(234,179,8,0.25)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-300 text-white">
+        {/* Close Button */}
+        <button 
+          onClick={handleClose}
+          className="absolute right-4 top-4 rounded-full p-1 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+          </svg>
+        </button>
+
+        {/* Trophy Icon Badge */}
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-amber-400/40 bg-gradient-to-br from-amber-400/20 to-yellow-600/20 shadow-[0_0_30px_rgba(234,179,8,0.3)]">
+          <span className="text-3xl">🏆</span>
+        </div>
+
+        <h2 className="text-2xl font-black text-white">
+          Weekly Race is Live!
+        </h2>
+        
+        {/* Instructions Box */}
+        <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-left shadow-inner">
+          <p className="mb-2 text-sm font-bold text-amber-400">Paano Sumali at Manalo ng JB Coins:</p>
+          <ol className="list-decimal space-y-2 pl-4 text-[13px] font-medium text-slate-300">
+            <li>Kumita ng coins sa pamamagitan ng daily check-ins, tasks, at activities.</li>
+            <li>Nagsisimula ang race tuwing <strong className="text-white">Lunes (12:00 AM)</strong> at nagre-reset tuwing <strong className="text-white">Linggo (11:59 PM)</strong>.</li>
+            <li>Ang Top 3 members na may pinakamaming naipong coins ngayong linggo ay mananalo ng rewards!</li>
+          </ol>
+
+          {/* Prizes Breakdown Grid */}
+          <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-slate-950/80 p-3 text-center border border-white/10">
+            <div>
+              <p className="text-[11px] text-amber-400 font-bold">🥇 1st Place</p>
+              <p className="text-sm font-black text-white">+500 JB</p>
+            </div>
+            <div>
+              <p className="text-[11px] text-slate-300 font-bold">🥈 2nd Place</p>
+              <p className="text-sm font-black text-white">+300 JB</p>
+            </div>
+            <div>
+              <p className="text-[11px] text-amber-600 font-bold">🥉 3rd Place</p>
+              <p className="text-sm font-black text-white">+200 JB</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Weekly Prize Pool Banner */}
+        <div className="mt-4 rounded-full bg-slate-800/60 py-1.5 text-xs font-bold text-amber-300 border border-amber-500/20">
+          🔥 1,000 JB Coins Total Prize Pool Every Week!
+        </div>
+
+        {/* Action Buttons */}
+        <div className="mt-6 flex flex-col gap-3">
+          <button 
+            onClick={handleAction}
+            className="w-full rounded-xl bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 py-3 font-bold text-slate-950 shadow-lg shadow-amber-500/25 transition-all hover:scale-[1.02] hover:shadow-amber-500/40"
+          >
+            View Leaderboard Now
+          </button>
+          <button 
+            onClick={handleClose}
+            className="w-full rounded-xl py-2.5 font-semibold text-slate-400 transition-colors hover:bg-white/5 hover:text-white text-xs"
+          >
+            Maybe Later
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// --- PROMO MODAL COMPONENT (PLATINUM UPGRADE) ---
 function PromoModal({ totalClaims = 0 }: { totalClaims?: number }) {
   const [isOpen, setIsOpen] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
-    // If 100 or more users have completed the task globally, stop showing the pop-up entirely.
-    if (totalClaims >= 100) {
-      return
-    }
+    // Stop showing if 100 claims reached globally or if WeeklyLeaderboardModal is open
+    if (totalClaims >= 100) return
 
-    // Otherwise, pop it up every time they visit the dashboard (1.5s delay)
     const timer = setTimeout(() => {
       setIsOpen(true)
-    }, 1500)
+    }, 2500)
     
     return () => clearTimeout(timer)
   }, [totalClaims])
 
   const handleClose = () => {
-    // Simply closes the modal for this session. No local storage saved!
-    // It will appear again the next time they load the page.
     setIsOpen(false)
   }
 
   const handleAction = () => {
     setIsOpen(false)
-    // Redirect to the offerwall page
     router.push("/earn-coins")
   }
 
@@ -207,7 +308,6 @@ function PromoModal({ totalClaims = 0 }: { totalClaims?: number }) {
           Free Platinum Upgrade!
         </h2>
         
-        {/* Step-by-Step Instructions Box */}
         <div className="mt-5 rounded-xl border border-sky-500/20 bg-sky-500/10 p-4 text-left shadow-inner">
           <p className="mb-2 text-sm font-bold text-sky-400">How to claim your upgrade:</p>
           <ol className="list-decimal space-y-2.5 pl-4 text-[13px] font-medium text-slate-300">
@@ -219,7 +319,6 @@ function PromoModal({ totalClaims = 0 }: { totalClaims?: number }) {
           </ol>
         </div>
 
-        {/* Added a small scarcity tracker to encourage them */}
         <div className="mt-4 rounded-full bg-slate-800/50 py-1.5 text-xs font-bold text-slate-300">
           <span className="text-sky-400">{Math.max(0, 100 - totalClaims)}</span> spots remaining!
         </div>
@@ -242,7 +341,6 @@ function PromoModal({ totalClaims = 0 }: { totalClaims?: number }) {
     </div>
   )
 }
-// --- END PROMO MODAL COMPONENT ---
 
 function RankBadge({ rank }: { rank: number }) {
   if (rank === 1) {
@@ -513,7 +611,7 @@ function DashboardPageContent() {
   const [showOnlineMembers, setShowOnlineMembers] = useState(false)
   
   // State for tracking completed claims
-  const [totalClaims, setTotalClaims] = useState(15) // Placeholder: Change to dynamically fetch from DB
+  const [totalClaims] = useState(15)
 
   const [liveStats, setLiveStats] = useState({
     onlineUsers: 0,
@@ -679,7 +777,10 @@ function DashboardPageContent() {
     <>
       <PresenceTracker />
       
-      {/* RENDER THE PROMO POPUP HERE */}
+      {/* 🏆 WEEKLY LEADERBOARD POPUP */}
+      <WeeklyLeaderboardModal />
+
+      {/* 💎 PROMO OFFER POPUP */}
       <PromoModal totalClaims={totalClaims} />
 
       <div className="relative min-h-screen bg-[#030712] text-slate-100 selection:bg-cyan-500 selection:text-slate-950">
@@ -691,10 +792,18 @@ function DashboardPageContent() {
           <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:32px_32px] opacity-20" />
         </div>
 
-        <div className="mx-auto w-full max-w-[1700px] px-4 pb-12 pt-6 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-[1700px] px-4 pb-12 pt-6 sm:px-6 lg:px-8 space-y-4">
           <DailyRewardCard />
 
-          <section className="mt-4 overflow-hidden rounded-[36px] border border-white/10 bg-slate-900/40 shadow-2xl backdrop-blur-2xl">
+          {/* 🚀 TOP DOWNLOADER PROMO AD BANNER */}
+          <TopDownloaderAd
+            targetUrl="/leaderboard"
+            title="⚡ Rank #1 Top Downloader Gets Bonus Coins & Perks!"
+            description="I-download ang pinakabagong files araw-araw, humabol sa rankings, at manalo ng exclusive JB Coins rewards!"
+            badgeText="TOP DOWNLOADER RACE"
+          />
+
+          <section className="overflow-hidden rounded-[36px] border border-white/10 bg-slate-900/40 shadow-2xl backdrop-blur-2xl">
             {/* HERO BANNER */}
             <div className="relative overflow-hidden border-b border-white/10 px-6 py-10 sm:px-10 sm:py-12">
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-purple-500/10 to-transparent" />

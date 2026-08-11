@@ -17,6 +17,7 @@ type UserProfile = {
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "🏠" },
   { label: "Profile", href: "/profile", icon: "👤" },
+  { label: "Leaderboard", href: "/leaderboard", icon: "🏆" },
   { label: "Buy COINS", href: "/upgrade", icon: "🪙" },
   { label: "Earn Coins", href: "/earn-coins", icon: "🎯" },
   { label: "Mystery Box", href: "/mystery-box", icon: "🎁" },

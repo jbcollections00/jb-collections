@@ -296,6 +296,7 @@ export async function GET(
 
     const supabase = await createClient()
     const adminDb = createAdminDb()
+    const dbClient = adminDb || supabase
 
     const {
       data: { user },
@@ -458,14 +459,18 @@ export async function GET(
     }
 
     if (!allowed) {
-      await supabase.from("download_logs").insert({
-        user_id: user.id,
-        file_id: fileOnly.id,
-        file_version_id: currentVersion.id,
-        result: "denied",
-        ip_address: getClientIp(req),
-        user_agent: req.headers.get("user-agent"),
-      })
+      try {
+        await dbClient.from("download_logs").insert({
+          user_id: user.id,
+          file_id: fileOnly.id,
+          file_version_id: currentVersion.id,
+          result: "denied",
+          ip_address: getClientIp(req),
+          user_agent: req.headers.get("user-agent"),
+        })
+      } catch (logError) {
+        console.warn("Failed logging denied download:", logError)
+      }
 
       return NextResponse.json(
         {
@@ -490,14 +495,18 @@ export async function GET(
       Boolean(linkvertiseUrl)
 
     if (shouldUseLinkvertise) {
-      await supabase.from("download_logs").insert({
-        user_id: user.id,
-        file_id: fileOnly.id,
-        file_version_id: currentVersion.id,
-        result: "linkvertise_redirect",
-        ip_address: getClientIp(req),
-        user_agent: req.headers.get("user-agent"),
-      })
+      try {
+        await dbClient.from("download_logs").insert({
+          user_id: user.id,
+          file_id: fileOnly.id,
+          file_version_id: currentVersion.id,
+          result: "linkvertise_redirect",
+          ip_address: getClientIp(req),
+          user_agent: req.headers.get("user-agent"),
+        })
+      } catch (logError) {
+        console.warn("Failed logging linkvertise redirect:", logError)
+      }
 
       if (mode === "json") {
         return NextResponse.json({
@@ -510,14 +519,18 @@ export async function GET(
     }
 
     if (downloadCoinCost > 0 && userCoins < downloadCoinCost) {
-      await supabase.from("download_logs").insert({
-        user_id: user.id,
-        file_id: fileOnly.id,
-        file_version_id: currentVersion.id,
-        result: "insufficient_coins",
-        ip_address: getClientIp(req),
-        user_agent: req.headers.get("user-agent"),
-      })
+      try {
+        await dbClient.from("download_logs").insert({
+          user_id: user.id,
+          file_id: fileOnly.id,
+          file_version_id: currentVersion.id,
+          result: "insufficient_coins",
+          ip_address: getClientIp(req),
+          user_agent: req.headers.get("user-agent"),
+        })
+      } catch (logError) {
+        console.warn("Failed logging insufficient coins:", logError)
+      }
 
       return NextResponse.json(
         {
@@ -571,21 +584,35 @@ export async function GET(
       downloadFilename: safeFilename,
     })
 
-    await supabase.from("download_logs").insert({
-      user_id: user.id,
-      file_id: fileOnly.id,
-      file_version_id: currentVersion.id,
-      result: boosted ? "success_boosted" : "success",
-      ip_address: getClientIp(req),
-      user_agent: req.headers.get("user-agent"),
-    })
-
-    await supabase
-      .from("files")
-      .update({
-        downloads_count: (fileOnly.downloads_count || 0) + 1,
+    // 🏆 RECORD TO DOWNLOAD LOGS (For Weekly Leaderboard & Analytics)
+    try {
+      const { error: logErr } = await dbClient.from("download_logs").insert({
+        user_id: user.id,
+        file_id: fileOnly.id,
+        file_version_id: currentVersion.id,
+        result: boosted ? "success_boosted" : "success",
+        ip_address: getClientIp(req),
+        user_agent: req.headers.get("user-agent"),
       })
-      .eq("id", fileOnly.id)
+
+      if (logErr) {
+        console.warn("Download log insert warning:", logErr.message)
+      }
+    } catch (logErr) {
+      console.warn("Error inserting into download_logs:", logErr)
+    }
+
+    // 📊 INCREMENT FILE DOWNLOAD COUNT
+    try {
+      await dbClient
+        .from("files")
+        .update({
+          downloads_count: (fileOnly.downloads_count || 0) + 1,
+        })
+        .eq("id", fileOnly.id)
+    } catch (countErr) {
+      console.warn("Error updating downloads_count:", countErr)
+    }
 
     let rewardResponse = {
       rewarded: false,
