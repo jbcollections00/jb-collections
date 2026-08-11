@@ -75,6 +75,14 @@ export async function POST() {
       return NextResponse.json({ error: "Failed to update wallet" }, { status: 500 })
     }
 
+    // 🟢 FIXED: Nag-insert na tayo sa coin_transactions para mabasa ng Leaderboard!
+    await supabase.from("coin_transactions").insert({
+      user_id: user.id,
+      amount: reward,
+      type: "mystery_box",
+      description: `Opened Mystery Box (+${reward} JB Coins)`
+    })
+
     return NextResponse.json({
       success: true,
       reward,

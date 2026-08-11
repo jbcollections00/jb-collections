@@ -29,9 +29,10 @@ export async function GET(req: NextRequest) {
       ? Math.min(Math.max(limitParam, 1), 50)
       : 12
 
+    // 🟢 INAYOS: Binago mula 'coin_history' patungong 'coin_transactions'
     const { data, error } = await supabase
-      .from("coin_history") // ✅ FIXED
-      .select("id, amount, type, description, created_at") // ✅ FIXED
+      .from("coin_transactions")
+      .select("id, amount, type, description, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(limit)

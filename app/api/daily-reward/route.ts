@@ -258,7 +258,7 @@ async function loadRecentDailyRewardDates(
   userId: string
 ) {
   const { data, error } = await adminDb
-    .from("coin_history")
+    .from("coin_transactions")
     .select("id, amount, created_at")
     .eq("user_id", userId)
     .eq("type", "daily_reward")
@@ -300,7 +300,7 @@ export async function GET() {
     const baseCoins = Number(settings.daily_reward_base || 0)
 
     const { data: claimRow, error: claimError } = await supabase
-      .from("coin_history")
+      .from("coin_transactions")
       .select("id, amount, created_at")
       .eq("user_id", user.id)
       .eq("type", "daily_reward")
@@ -380,7 +380,7 @@ export async function POST() {
     const { start, end } = getManilaDayRange()
 
     const { data: existingClaim, error: existingClaimError } = await adminDb
-      .from("coin_history")
+      .from("coin_transactions")
       .select("id, amount, created_at")
       .eq("user_id", user.id)
       .eq("type", "daily_reward")
@@ -486,7 +486,7 @@ export async function POST() {
     }
 
     const { data: newClaim, error: newClaimError } = await adminDb
-      .from("coin_history")
+      .from("coin_transactions")
       .select("id, amount, created_at")
       .eq("user_id", user.id)
       .eq("type", "daily_reward")
