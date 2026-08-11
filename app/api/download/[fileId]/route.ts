@@ -667,46 +667,10 @@ export async function GET(
       })
     }
 
-    // ⚡ STREAM MODE FOR ONLINE ARCHIVE EXTRACTOR (Range Request Proxying)
+    // ⚡ STREAM MODE FOR ONLINE ARCHIVE EXTRACTOR
+    // Redirect directly to R2 so Vercel doesn't choke on large files.
     if (isStreamMode) {
-      const rangeHeader = req.headers.get("range")
-      const fetchHeaders: HeadersInit = {}
-      if (rangeHeader) {
-        fetchHeaders["Range"] = rangeHeader
-      }
-
-      const r2Res = await fetch(signedUrl, { headers: fetchHeaders })
-
-      if (!r2Res.ok && r2Res.status !== 206) {
-        console.error("R2 fetch stream failed:", r2Res.status, r2Res.statusText)
-        return NextResponse.json(
-          { error: "Failed to fetch stream from storage provider" },
-          { status: r2Res.status }
-        )
-      }
-
-      const responseHeaders = new Headers()
-      responseHeaders.set(
-        "Content-Type",
-        currentVersion.mime_type || "application/octet-stream"
-      )
-      responseHeaders.set(
-        "Content-Disposition",
-        `inline; filename="${safeFilename}"`
-      )
-      responseHeaders.set("Accept-Ranges", "bytes")
-      responseHeaders.set("Cache-Control", "public, max-age=3600")
-
-      const contentRange = r2Res.headers.get("content-range")
-      if (contentRange) responseHeaders.set("Content-Range", contentRange)
-
-      const contentLength = r2Res.headers.get("content-length")
-      if (contentLength) responseHeaders.set("Content-Length", contentLength)
-
-      return new NextResponse(r2Res.body, {
-        status: r2Res.status,
-        headers: responseHeaders,
-      })
+      return NextResponse.redirect(signedUrl, { status: 302 })
     }
 
     // 🚀 STANDARD DOWNLOAD DIRECT REDIRECT
