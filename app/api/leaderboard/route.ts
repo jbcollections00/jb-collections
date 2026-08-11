@@ -14,7 +14,6 @@ export async function GET(req: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
       ""
 
-    // Truth Test Log: Ipapakita sa terminal kung aling Supabase project ang binabasa nito
     console.log("🔥 ROUTE IS READING SUPABASE URL:", supabaseUrl)
 
     if (!supabaseUrl || !supabaseKey) {
@@ -24,7 +23,7 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // Initialize Supabase inside the handler so env variables are freshly read on request
+    // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     // 1. Identify current user if Authorization header is provided
@@ -39,14 +38,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 2. Query top profiles ordered strictly by 'coins'
-    const { data: profiles, error: dbError } = await supabase
-      .from("profiles")
-      .select("*")
-      .order("coins", { ascending: false })
-      .limit(100)
+    // 🟢 2. CALL THE SQL RPC FUNCTION (weekly coins calculation from coin_history)
+    const { data: earners, error: dbError } = await supabase
+      .rpc("get_weekly_top_coin_earners")
 
-    if (dbError || !profiles) {
+    if (dbError || !earners) {
       console.error("Leaderboard DB error:", dbError)
       return NextResponse.json(
         { ok: false, error: dbError?.message || "Failed to fetch leaderboard data." },
@@ -54,23 +50,21 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // 3. Format profile objects into clean leaderboard entries
-    const top = profiles.map((user: any, index: number) => {
-      const displayName =
-        user.full_name || user.name || user.username || "Anonymous User"
-
-      const coinBalance = Number(user.coins || 0)
+    // 🟢 3. Format weekly RPC results into clean leaderboard entries
+    const top = earners.map((user: any, index: number) => {
+      const displayName = user.username || "Anonymous User"
+      const coinEarnedWeekly = Number(user.total_coins_earned || 0)
 
       return {
         rank: index + 1,
-        id: user.id,
+        id: user.user_id,
         display_name: displayName,
         username: user.username || null,
         avatar_url: user.avatar_url || null,
-        coins: coinBalance,
-        membership: user.membership || null,
-        membership_label: user.membership || "Member",
-        is_current_user: currentUserId ? user.id === currentUserId : false,
+        coins: coinEarnedWeekly,
+        membership: null,
+        membership_label: "Member",
+        is_current_user: currentUserId ? user.user_id === currentUserId : false,
       }
     })
 
@@ -87,18 +81,14 @@ export async function GET(req: NextRequest) {
         .maybeSingle()
 
       if (myProfile) {
-        const myCoins = Number(myProfile.coins || 0)
-        const myRank =
-          profiles.filter((p: any) => Number(p.coins || 0) > myCoins).length + 1
-
         me = {
-          rank: myRank,
+          rank: 999,
           id: myProfile.id,
           display_name:
             myProfile.full_name || myProfile.name || myProfile.username || "You",
           username: myProfile.username || null,
           avatar_url: myProfile.avatar_url || null,
-          coins: myCoins,
+          coins: 0,
           membership: myProfile.membership || null,
           membership_label: myProfile.membership || "Member",
           is_current_user: true,

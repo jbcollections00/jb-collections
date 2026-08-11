@@ -1,100 +1,134 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@supabase/supabase-js"
+import { createClient as createServerClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 export async function GET() {
   try {
-    const supabase = await createClient()
+    const supabase = await createServerClient()
 
-    // 1. Fetch Real-Time Total Counts (Para hindi na hardcoded na 85)
+    // Service Role / Admin Client to bypass RLS for global live activity feed
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+    const serviceKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      ""
+    const adminSupabase = createClient(supabaseUrl, serviceKey)
+
+    // 1. Fetch Total Counts across tables
     const [
       { count: totalFilesCount },
       { count: totalUsersCount },
-      { count: totalDownloadsCount },
+      { count: logsCount },
+      { count: unlocksCount },
     ] = await Promise.all([
       supabase.from("files").select("*", { count: "exact", head: true }),
       supabase.from("profiles").select("*", { count: "exact", head: true }),
+      supabase.from("download_logs").select("*", { count: "exact", head: true }),
       supabase.from("download_unlocks").select("*", { count: "exact", head: true }),
     ])
 
-    // 2. Fetch Top 5 Downloaded Files
-    const { data: topFiles, error: topError } = await supabase
-      .from("files")
-      .select("*")
-      .order("downloads_count", { ascending: false })
-      .limit(5)
+    const totalDownloadsCount = (logsCount || 0) + (unlocksCount || 0)
 
-    if (topError) console.error("Error fetching top files:", topError)
-
-    // 3. Fetch Latest 10 Uploads
-    const { data: latestFiles, error: latestError } = await supabase
+    // 2. Fetch Latest Uploads
+    const { data: latestFiles } = await supabase
       .from("files")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(10)
 
-    if (latestError) console.error("Error fetching latest files:", latestError)
-
-    // 4. Fetch Trending Files
-    const { data: trendingFiles, error: trendingError } = await supabase
+    // 3. Fetch Top & Trending Files
+    const { data: topFiles } = await supabase
       .from("files")
       .select("*")
       .order("downloads_count", { ascending: false })
       .limit(5)
 
-    if (trendingError) console.error("Error fetching trending files:", trendingError)
-
-    // 5. Fetch Recent Downloads Activity
-    let recentDownloads: any[] = []
-
-    const { data: logsData, error: logsError } = await supabase
-      .from("download_unlocks")
-      .select(`
-        id,
-        created_at,
-        files (
-          id,
-          title,
-          name,
-          slug,
-          description,
-          thumbnail_url,
-          cover_url,
-          image_url,
-          downloads_count,
-          visibility
-        ),
-        profiles (
-          full_name,
-          name,
-          username
-        )
-      `)
-      .order("created_at", { ascending: false })
+    const { data: trendingFiles } = await supabase
+      .from("files")
+      .select("*")
+      .order("downloads_count", { ascending: false })
       .limit(5)
 
-    if (logsError) {
-      console.error("Error fetching recent downloads activity:", logsError)
-    } else if (logsData && logsData.length > 0) {
-      recentDownloads = logsData
-        .filter((log: any) => log.files)
-        .map((log: any) => ({
-          id: log.files.id,
-          title: log.files.title || log.files.name,
-          thumbnail_url: log.files.thumbnail_url,
-          cover_url: log.files.cover_url,
-          image_url: log.files.image_url,
-          downloads_count: log.files.downloads_count,
-          visibility: log.files.visibility,
-          description: log.files.description,
-          user_name:
-            log.profiles?.full_name ||
-            log.profiles?.name ||
-            log.profiles?.username ||
-            "Community Member",
-        }))
+    // 4. FETCH REAL RECENT DOWNLOADS DIRECTLY FROM LOGS
+    const [{ data: dlLogs }, { data: unlockLogs }] = await Promise.all([
+      adminSupabase
+        .from("download_logs")
+        .select("id, user_id, file_id, created_at")
+        .not("file_id", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(15),
+      adminSupabase
+        .from("download_unlocks")
+        .select("id, user_id, file_id, created_at")
+        .not("file_id", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(15),
+    ])
+
+    // Merge and sort real download records by latest date
+    const combinedLogs = [
+      ...(dlLogs || []),
+      ...(unlockLogs || []),
+    ]
+      .sort(
+        (a: any, b: any) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+      .slice(0, 10)
+
+    let recentDownloads: any[] = []
+
+    if (combinedLogs.length > 0) {
+      const fileIds = Array.from(
+        new Set(combinedLogs.map((l: any) => l.file_id).filter(Boolean))
+      )
+      const userIds = Array.from(
+        new Set(combinedLogs.map((l: any) => l.user_id).filter(Boolean))
+      )
+
+      // Fetch file and user details in parallel
+      const [{ data: filesData }, { data: profilesData }] = await Promise.all([
+        fileIds.length > 0
+          ? adminSupabase.from("files").select("*").in("id", fileIds)
+          : { data: [] },
+        userIds.length > 0
+          ? adminSupabase.from("profiles").select("*").in("id", userIds)
+          : { data: [] },
+      ])
+
+      const filesMap = new Map((filesData || []).map((f: any) => [f.id, f]))
+      const profilesMap = new Map(
+        (profilesData || []).map((p: any) => [p.id, p])
+      )
+
+      recentDownloads = combinedLogs
+        .map((log: any, index: number) => {
+          const file = filesMap.get(log.file_id)
+          if (!file) return null
+          const profile = log.user_id ? profilesMap.get(log.user_id) : null
+
+          return {
+            id: log.id || `${file.id}-${index}`,
+            file_id: file.id,
+            title: file.title || file.name,
+            thumbnail_url: file.thumbnail_url,
+            cover_url: file.cover_url,
+            image_url: file.image_url,
+            downloads_count: file.downloads_count || 0,
+            visibility: file.visibility,
+            description: file.description,
+            user_name:
+              profile?.full_name ||
+              profile?.name ||
+              profile?.username ||
+              "Anonymous User",
+            created_at: log.created_at,
+          }
+        })
+        .filter(Boolean)
     }
 
     return NextResponse.json(

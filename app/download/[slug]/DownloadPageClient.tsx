@@ -46,10 +46,12 @@ function AdsterraBanner() {
   const bannerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!bannerRef.current) return
-    bannerRef.current.innerHTML = ""
+    const currentContainer = bannerRef.current
+    if (!currentContainer) return
 
-    const container = document.createElement("div")
+    currentContainer.innerHTML = ""
+
+    const wrapper = document.createElement("div")
 
     const scriptOptions = document.createElement("script")
     scriptOptions.type = "text/javascript"
@@ -68,9 +70,15 @@ function AdsterraBanner() {
     scriptInvoke.src =
       "https://www.highperformanceformat.com/b34ceb41f59688ea67157fc3adaa80c5/invoke.js"
 
-    container.appendChild(scriptOptions)
-    container.appendChild(scriptInvoke)
-    bannerRef.current.appendChild(container)
+    wrapper.appendChild(scriptOptions)
+    wrapper.appendChild(scriptInvoke)
+    currentContainer.appendChild(wrapper)
+
+    return () => {
+      if (currentContainer) {
+        currentContainer.innerHTML = ""
+      }
+    }
   }, [])
 
   return (
@@ -107,17 +115,6 @@ function formatCount(value?: number | null) {
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`
   if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, "")}K`
   return `${count}`
-}
-
-function formatDate(value?: string | null) {
-  if (!value) return "Jul 15, 2026"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Jul 15, 2026"
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date)
 }
 
 function inferExtension(file: FileRow | null) {
@@ -494,12 +491,6 @@ export default function DownloadPageClient() {
         return
       }
 
-      if (premium || unlockedFromQuery || visibilityValue !== "free") {
-        setDownloadReady(true)
-        setStep("ready")
-        return
-      }
-
       setStep("ready")
       setDownloadReady(true)
     } catch (err) {
@@ -684,7 +675,6 @@ export default function DownloadPageClient() {
 
   return (
     <>
-      {/* Adsterra Popunder Script */}
       <Script
         id="adsterra-popunder"
         strategy="afterInteractive"
@@ -693,12 +683,9 @@ export default function DownloadPageClient() {
 
       <div className="min-h-screen bg-slate-50 px-4 py-8 pb-16">
         <div className="mx-auto max-w-5xl">
-          {/* Main Clean Layout Card */}
           <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
-            {/* Clean Header Layout */}
             <div className="relative overflow-hidden bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-700 px-6 py-8 text-white sm:px-8 sm:py-10">
               <div className="relative flex w-full flex-col gap-6 md:flex-row md:items-center md:justify-between">
-                {/* Primary Title and Description */}
                 <div className="flex-1 space-y-3">
                   <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
                     {getDisplayName(file)}
@@ -711,9 +698,7 @@ export default function DownloadPageClient() {
               </div>
             </div>
 
-            {/* Core Interaction Layer */}
             <div className="grid grid-cols-1 items-start gap-8 p-6 sm:p-8 md:grid-cols-2">
-              {/* Left Column: Visual Asset Display */}
               <div className="flex flex-col items-center">
                 <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
                   {previewAsset ? (
@@ -755,7 +740,6 @@ export default function DownloadPageClient() {
                 </div>
               </div>
 
-              {/* Right Column: Download & Action Panel */}
               <div className="flex flex-col justify-between space-y-6">
                 <div>
                   <h3 className="mb-2 text-base font-bold text-slate-800">Get File Access</h3>
@@ -797,7 +781,6 @@ export default function DownloadPageClient() {
                           : `⬇ DOWNLOAD — ${estimatedCoinCost} JB COINS`}
                       </button>
 
-                      {/* Online Extractor Trigger Button */}
                       <button
                         type="button"
                         onClick={() => setShowExtractorModal(true)}
@@ -815,11 +798,9 @@ export default function DownloadPageClient() {
                     </div>
                   )}
 
-                  {/* Embedded Adsterra 300x250 Banner */}
                   <AdsterraBanner />
                 </div>
 
-                {/* Social Distribution Rack */}
                 <div className="border-t border-slate-100 pt-5">
                   <p className="mb-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Distribution Actions
@@ -868,7 +849,6 @@ export default function DownloadPageClient() {
               </div>
             </div>
 
-            {/* Related Items Grid — 5 Columns */}
             {related.length > 0 && (
               <div className="border-t border-slate-100 bg-slate-50/50 p-6 sm:p-8">
                 <div className="mb-4 flex items-center justify-between gap-3">
@@ -925,7 +905,6 @@ export default function DownloadPageClient() {
         </div>
       </div>
 
-      {/* System Notices */}
       {rewardNotice && (
         <div className="fixed bottom-6 right-6 z-[9999]">
           <div
@@ -942,7 +921,6 @@ export default function DownloadPageClient() {
         </div>
       )}
 
-      {/* Modals */}
       {showCoinConfirm && (
         <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border border-slate-100 bg-white p-5 shadow-xl">
@@ -1042,7 +1020,6 @@ export default function DownloadPageClient() {
         </div>
       )}
 
-      {/* Online Archive Extractor Modal */}
       {file && (
         <ArchiveExtractorModal
           isOpen={showExtractorModal}

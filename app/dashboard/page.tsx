@@ -73,6 +73,7 @@ type LiveStatsResponse = {
   onlineUsers?: number
   activeToday?: number
   totalUsers?: number
+  newJoinsCount?: number
   newMembers?: MemberItem[]
   onlineMembers?: MemberItem[]
 }
@@ -156,7 +157,6 @@ function WeeklyLeaderboardModal() {
   const router = useRouter()
 
   useEffect(() => {
-    // Tinitiyak na lalabas lang kung hindi pa nakikita ngayong browser session
     const hasSeenModal = sessionStorage.getItem("hasSeenLeaderboardModal")
     if (!hasSeenModal) {
       const timer = setTimeout(() => {
@@ -173,7 +173,7 @@ function WeeklyLeaderboardModal() {
 
   const handleAction = () => {
     handleClose()
-    router.push("/leaderboard") // I-redirect sa Leaderboard page
+    router.push("/leaderboard")
   }
 
   if (!isOpen) return null
@@ -186,7 +186,6 @@ function WeeklyLeaderboardModal() {
       />
       
       <div className="relative w-full max-w-md overflow-hidden rounded-[24px] border border-amber-500/20 bg-slate-900/95 p-6 text-center shadow-[0_0_50px_rgba(234,179,8,0.25)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-300 text-white">
-        {/* Close Button */}
         <button 
           onClick={handleClose}
           className="absolute right-4 top-4 rounded-full p-1 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
@@ -196,7 +195,6 @@ function WeeklyLeaderboardModal() {
           </svg>
         </button>
 
-        {/* Trophy Icon Badge */}
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-amber-400/40 bg-gradient-to-br from-amber-400/20 to-yellow-600/20 shadow-[0_0_30px_rgba(234,179,8,0.3)]">
           <span className="text-3xl">🏆</span>
         </div>
@@ -205,7 +203,6 @@ function WeeklyLeaderboardModal() {
           Weekly Race is Live!
         </h2>
         
-        {/* Instructions Box */}
         <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-left shadow-inner">
           <p className="mb-2 text-sm font-bold text-amber-400">Paano Sumali at Manalo ng JB Coins:</p>
           <ol className="list-decimal space-y-2 pl-4 text-[13px] font-medium text-slate-300">
@@ -214,7 +211,6 @@ function WeeklyLeaderboardModal() {
             <li>Ang Top 3 members na may pinakamaming naipong coins ngayong linggo ay mananalo ng rewards!</li>
           </ol>
 
-          {/* Prizes Breakdown Grid */}
           <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-slate-950/80 p-3 text-center border border-white/10">
             <div>
               <p className="text-[11px] text-amber-400 font-bold">🥇 1st Place</p>
@@ -231,12 +227,10 @@ function WeeklyLeaderboardModal() {
           </div>
         </div>
 
-        {/* Weekly Prize Pool Banner */}
         <div className="mt-4 rounded-full bg-slate-800/60 py-1.5 text-xs font-bold text-amber-300 border border-amber-500/20">
           🔥 1,000 JB Coins Total Prize Pool Every Week!
         </div>
 
-        {/* Action Buttons */}
         <div className="mt-6 flex flex-col gap-3">
           <button 
             onClick={handleAction}
@@ -262,7 +256,6 @@ function PromoModal({ totalClaims = 0 }: { totalClaims?: number }) {
   const router = useRouter()
 
   useEffect(() => {
-    // Stop showing if 100 claims reached globally or if WeeklyLeaderboardModal is open
     if (totalClaims >= 100) return
 
     const timer = setTimeout(() => {
@@ -610,13 +603,13 @@ function DashboardPageContent() {
   const [newMembers, setNewMembers] = useState<MemberItem[]>([])
   const [showOnlineMembers, setShowOnlineMembers] = useState(false)
   
-  // State for tracking completed claims
   const [totalClaims] = useState(15)
 
   const [liveStats, setLiveStats] = useState({
     onlineUsers: 0,
     activeToday: 0,
     totalUsers: 0,
+    newJoinsCount: 0,
   })
 
   useEffect(() => {
@@ -664,8 +657,16 @@ function DashboardPageContent() {
 
     checkUserAndLoad()
 
+    // 🔄 REAL-TIME AUTO-POLLING: Kusa nitong itinatawag ang live stats bawat 15 segundo
+    const interval = setInterval(() => {
+      if (isMounted) {
+        fetchLiveStats()
+      }
+    }, 15000)
+
     return () => {
       isMounted = false
+      clearInterval(interval)
     }
   }, [supabase, router])
 
@@ -741,6 +742,7 @@ function DashboardPageContent() {
         onlineUsers: Number(data.onlineUsers || 0),
         activeToday: Number(data.activeToday || 0),
         totalUsers: Number(data.totalUsers || 0),
+        newJoinsCount: Number(data.newJoinsCount ?? data.newMembers?.length ?? 0),
       })
 
       setOnlineMembers(Array.isArray(data.onlineMembers) ? data.onlineMembers : [])
@@ -751,6 +753,7 @@ function DashboardPageContent() {
         onlineUsers: 0,
         activeToday: 0,
         totalUsers: 0,
+        newJoinsCount: 0,
       })
       setOnlineMembers([])
       setNewMembers([])
@@ -1004,7 +1007,7 @@ function DashboardPageContent() {
 
                     <SmartStatCard
                       label="New Joins"
-                      value={formatNumber(newMembers.length)}
+                      value={formatNumber(liveStats.newJoinsCount || newMembers.length)}
                       icon="🆕"
                       tone="bg-amber-500/20 text-amber-300 border border-amber-500/30"
                     />

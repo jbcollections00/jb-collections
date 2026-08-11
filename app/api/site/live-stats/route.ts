@@ -58,6 +58,7 @@ function fallbackResponse(message = "Live stats fallback response.") {
       totalUsers: 0,
       activeToday: 0,
       onlineUsers: 0,
+      newJoinsCount: 0,
       onlineMembers: [],
       newMembers: [],
       warning: message,
@@ -111,7 +112,7 @@ export async function GET() {
 
       supabase
         .from("profiles")
-        .select(memberFields)
+        .select(memberFields, { count: "exact" })
         .not("last_seen", "is", null)
         .gte("last_seen", onlineSince)
         .order("last_seen", { ascending: false })
@@ -119,7 +120,7 @@ export async function GET() {
 
       supabase
         .from("profiles")
-        .select(memberFields)
+        .select(memberFields, { count: "exact" })
         .not("created_at", "is", null)
         .gte("created_at", startOfToday)
         .order("created_at", { ascending: false })
@@ -144,7 +145,8 @@ export async function GET() {
       {
         totalUsers: Number(totalUsersResult.count || 0),
         activeToday: Number(activeTodayResult.count || 0),
-        onlineUsers: onlineMembers.length,
+        onlineUsers: Number(onlineMembersResult.count || onlineMembers.length),
+        newJoinsCount: Number(newMembersResult.count || newMembers.length),
         onlineMembers,
         newMembers,
       },
