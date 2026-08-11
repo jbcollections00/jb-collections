@@ -62,23 +62,48 @@ export default function ArchiveExtractorModal({ isOpen, onClose, fileUrl, fileNa
           headers["Authorization"] = `Bearer ${session.access_token}`
         }
 
-        // 🛠️ Tiyaking may ?mode=stream sa URL para ma-stream ang file bytes nang walang CORS/403 Error
+        // 🛠️ STEP 1: Gamitin ang ?mode=json para makuha ang link nang hindi nagre-redirect
         let targetUrl = fileUrl
-        if (targetUrl.includes("/api/download/") && !targetUrl.includes("mode=stream")) {
+        if (targetUrl.includes("/api/download/")) {
+          // Tanggalin ang stream mode kung meron, at palitan ng json
+          targetUrl = targetUrl.replace(/([?&])mode=[^&]+(&|$)/, '$1').replace(/\?$/, '')
           const separator = targetUrl.includes("?") ? "&" : "?"
-          targetUrl = `${targetUrl}${separator}mode=stream`
+          targetUrl = `${targetUrl}${separator}mode=json`
         }
 
-        const response = await fetch(targetUrl, {
-          credentials: "include",
+        // 🛠️ STEP 2: I-fetch ang API route para makuha ang signed R2 URL (dito kasama ang credentials)
+        const apiResponse = await fetch(targetUrl, {
+          credentials: "include", 
           headers,
         })
 
-        if (!response.ok) {
-          if (response.status === 403) {
+        if (!apiResponse.ok) {
+          if (apiResponse.status === 403) {
             throw new Error("Access denied (403). Session expired or missing download permissions.")
           }
-          throw new Error(`Failed to fetch archive file (Status: ${response.status}).`)
+          throw new Error(`Failed to get secure link (Status: ${apiResponse.status}).`)
+        }
+
+        const apiData = await apiResponse.json()
+
+        if (apiData.error) {
+           throw new Error(apiData.error)
+        }
+
+        // Kung nangangailangan ng Linkvertise or iba pang redirection
+        if (apiData.redirectUrl) {
+           throw new Error("Ang file na ito ay may ads/redirect. I-download na lang nang direkta sa ibaba.")
+        }
+
+        const finalDownloadUrl = apiData.downloadUrl || targetUrl
+
+        // 🛠️ STEP 3: I-fetch ang mismong ZIP file sa R2 gamit ang secure link (WALANG CREDENTIALS)
+        const response = await fetch(finalDownloadUrl, {
+           // WALA na ang credentials: "include" dito para pumasa sa Cloudflare CORS!
+        })
+
+        if (!response.ok) {
+           throw new Error(`Failed to fetch archive file from storage (Status: ${response.status}).`)
         }
 
         const blob = await response.blob()
