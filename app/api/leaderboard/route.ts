@@ -5,6 +5,19 @@ import { createClient } from "@supabase/supabase-js"
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
+// 🟢 Define TypeScript interface to avoid Vercel build errors
+interface LeaderboardEntry {
+  rank: number
+  id: string
+  display_name: string
+  username: string | null
+  avatar_url: string | null
+  coins: number
+  membership: string | null
+  membership_label: string
+  is_current_user: boolean
+}
+
 export async function GET(req: NextRequest) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
@@ -38,7 +51,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 🟢 2. CALL THE SQL RPC FUNCTION (weekly coins calculation from coin_history)
+    // 2. CALL THE SQL RPC FUNCTION (weekly coins calculation from coin_history)
     const { data: earners, error: dbError } = await supabase
       .rpc("get_weekly_top_coin_earners")
 
@@ -50,8 +63,8 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // 🟢 3. Format weekly RPC results into clean leaderboard entries
-    const top = earners.map((user: any, index: number) => {
+    // 3. Format weekly RPC results into clean leaderboard entries with explicit typing
+    const top: LeaderboardEntry[] = earners.map((user: Record<string, any>, index: number) => {
       const displayName = user.username || "Anonymous User"
       const coinEarnedWeekly = Number(user.total_coins_earned || 0)
 
@@ -68,9 +81,9 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    // 4. Determine current user's rank object
-    let me = currentUserId
-      ? top.find((entry) => entry.id === currentUserId) || null
+    // 4. Determine current user's rank object (Explicitly typed 'entry' parameter)
+    let me: LeaderboardEntry | null = currentUserId
+      ? top.find((entry: LeaderboardEntry) => entry.id === currentUserId) || null
       : null
 
     if (currentUserId && !me) {
