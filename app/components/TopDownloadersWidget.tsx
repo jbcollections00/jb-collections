@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@/utils/supabase/client'; // Siguraduhing tama ang path ng supabase client mo
+import { createClient } from '@/lib/supabase/client';
 import Image from 'next/image';
 
 interface LeaderboardUser {
