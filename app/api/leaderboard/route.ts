@@ -5,23 +5,27 @@ import { createClient } from "@supabase/supabase-js"
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-// Prefer Service Role Key to bypass RLS, fallback to Anon Key
-const supabaseKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  ""
-
-const supabase = createClient(supabaseUrl, supabaseKey)
-
 export async function GET(req: NextRequest) {
   try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+    // Prefer Service Role Key to bypass RLS, fallback to Anon Key
+    const supabaseKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      ""
+
+    // Truth Test Log: Ipapakita sa terminal kung aling Supabase project ang binabasa nito
+    console.log("🔥 ROUTE IS READING SUPABASE URL:", supabaseUrl)
+
     if (!supabaseUrl || !supabaseKey) {
       return NextResponse.json(
         { ok: false, error: "Missing Supabase URL or Key in environment variables." },
         { status: 500 }
       )
     }
+
+    // Initialize Supabase inside the handler so env variables are freshly read on request
+    const supabase = createClient(supabaseUrl, supabaseKey)
 
     // 1. Identify current user if Authorization header is provided
     let currentUserId: string | null = null
@@ -35,40 +39,12 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 2. Query all profile columns using select("*") to prevent missing-column errors
-    let profiles: any[] | null = null
-    let dbError: any = null
-
-    // Try ordering by jb_coins
-    const primaryQueryResult = await supabase
+    // 2. Query top profiles ordered strictly by 'coins'
+    const { data: profiles, error: dbError } = await supabase
       .from("profiles")
       .select("*")
-      .order("jb_coins", { ascending: false })
+      .order("coins", { ascending: false })
       .limit(100)
-
-    if (primaryQueryResult.error) {
-      // Fallback: try ordering by coins if jb_coins fails
-      const fallbackQueryResult = await supabase
-        .from("profiles")
-        .select("*")
-        .order("coins", { ascending: false })
-        .limit(100)
-
-      if (fallbackQueryResult.error) {
-        // Final fallback: select profiles without strict database sorting
-        const safeResult = await supabase
-          .from("profiles")
-          .select("*")
-          .limit(100)
-
-        profiles = safeResult.data
-        dbError = safeResult.error
-      } else {
-        profiles = fallbackQueryResult.data
-      }
-    } else {
-      profiles = primaryQueryResult.data
-    }
 
     if (dbError || !profiles) {
       console.error("Leaderboard DB error:", dbError)
@@ -78,19 +54,12 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // Sort in-memory as a guarantee
-    profiles.sort((a, b) => {
-      const aCoins = Number(a.jb_coins ?? a.coins ?? 0)
-      const bCoins = Number(b.jb_coins ?? b.coins ?? 0)
-      return bCoins - aCoins
-    })
-
     // 3. Format profile objects into clean leaderboard entries
     const top = profiles.map((user: any, index: number) => {
       const displayName =
         user.full_name || user.name || user.username || "Anonymous User"
 
-      const coinBalance = Number(user.jb_coins ?? user.coins ?? 0)
+      const coinBalance = Number(user.coins || 0)
 
       return {
         rank: index + 1,
@@ -118,10 +87,9 @@ export async function GET(req: NextRequest) {
         .maybeSingle()
 
       if (myProfile) {
-        const myCoins = Number(myProfile.jb_coins ?? myProfile.coins ?? 0)
-        const myRank = profiles.filter(
-          (p: any) => Number(p.jb_coins ?? p.coins ?? 0) > myCoins
-        ).length + 1
+        const myCoins = Number(myProfile.coins || 0)
+        const myRank =
+          profiles.filter((p: any) => Number(p.coins || 0) > myCoins).length + 1
 
         me = {
           rank: myRank,
@@ -138,7 +106,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 5. Return JSON with strict anti-cache headers
+    // 5. Return JSON response with strict anti-cache headers
     return NextResponse.json(
       { ok: true, top, me },
       {
