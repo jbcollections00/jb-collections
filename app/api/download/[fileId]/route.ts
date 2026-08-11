@@ -278,19 +278,26 @@ export async function GET(
     const mode = url.searchParams.get("mode")
     const boosted = url.searchParams.get("boost") === "1"
     const unlocked = url.searchParams.get("unlocked") === "1"
+    const isStreamMode = mode === "stream"
 
+    // 🛡️ REVISED DOMAIN & REFERER CHECK (Flexible Domain Matching)
     const referer = req.headers.get("referer") || ""
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || req.nextUrl.origin
-    const allowedOrigin = new URL(siteUrl).origin
-
     if (referer) {
-      const refererOrigin = new URL(referer).origin
+      try {
+        const refererHost = new URL(referer).hostname.replace(/^www\./, "")
+        const currentHost = req.nextUrl.hostname.replace(/^www\./, "")
+        const envSiteHost = process.env.NEXT_PUBLIC_SITE_URL
+          ? new URL(process.env.NEXT_PUBLIC_SITE_URL).hostname.replace(/^www\./, "")
+          : currentHost
 
-      if (refererOrigin !== allowedOrigin) {
-        return NextResponse.json(
-          { error: "Direct download not allowed" },
-          { status: 403 }
-        )
+        if (refererHost !== currentHost && refererHost !== envSiteHost) {
+          return NextResponse.json(
+            { error: "Direct download not allowed from external site" },
+            { status: 403 }
+          )
+        }
+      } catch (e) {
+        console.warn("Invalid referer header ignored:", referer)
       }
     }
 
@@ -489,6 +496,7 @@ export async function GET(
     const shouldUseLinkvertise =
       !unlocked &&
       !boosted &&
+      !isStreamMode && // 🚀 Archive extractor mode will NOT redirect to linkvertise
       membershipLevel === "standard" &&
       visibility === "free" &&
       fileOnly.monetization_enabled !== false &&
@@ -580,7 +588,7 @@ export async function GET(
     const signedUrl = await getSignedDownloadUrl({
       key: currentVersion.object_key.trim(),
       bucket: currentVersion.bucket_name?.trim() || undefined,
-      expiresInSeconds: 60,
+      expiresInSeconds: 300,
       downloadFilename: safeFilename,
     })
 
@@ -629,8 +637,6 @@ export async function GET(
         boosted,
       })
 
-      console.log("Download coin reward result:", rewardResult)
-
       if (rewardResult.awarded > 0) {
         rewardResponse = {
           rewarded: true,
@@ -648,6 +654,7 @@ export async function GET(
       console.error("Download coin reward error:", rewardError)
     }
 
+    // 📦 JSON MODE
     if (mode === "json") {
       return NextResponse.json({
         downloadUrl: signedUrl,
@@ -660,6 +667,49 @@ export async function GET(
       })
     }
 
+    // ⚡ STREAM MODE FOR ONLINE ARCHIVE EXTRACTOR (Range Request Proxying)
+    if (isStreamMode) {
+      const rangeHeader = req.headers.get("range")
+      const fetchHeaders: HeadersInit = {}
+      if (rangeHeader) {
+        fetchHeaders["Range"] = rangeHeader
+      }
+
+      const r2Res = await fetch(signedUrl, { headers: fetchHeaders })
+
+      if (!r2Res.ok && r2Res.status !== 206) {
+        console.error("R2 fetch stream failed:", r2Res.status, r2Res.statusText)
+        return NextResponse.json(
+          { error: "Failed to fetch stream from storage provider" },
+          { status: r2Res.status }
+        )
+      }
+
+      const responseHeaders = new Headers()
+      responseHeaders.set(
+        "Content-Type",
+        currentVersion.mime_type || "application/octet-stream"
+      )
+      responseHeaders.set(
+        "Content-Disposition",
+        `inline; filename="${safeFilename}"`
+      )
+      responseHeaders.set("Accept-Ranges", "bytes")
+      responseHeaders.set("Cache-Control", "public, max-age=3600")
+
+      const contentRange = r2Res.headers.get("content-range")
+      if (contentRange) responseHeaders.set("Content-Range", contentRange)
+
+      const contentLength = r2Res.headers.get("content-length")
+      if (contentLength) responseHeaders.set("Content-Length", contentLength)
+
+      return new NextResponse(r2Res.body, {
+        status: r2Res.status,
+        headers: responseHeaders,
+      })
+    }
+
+    // 🚀 STANDARD DOWNLOAD DIRECT REDIRECT
     return NextResponse.redirect(signedUrl, { status: 302 })
   } catch (error) {
     console.error("Download route error:", error)
