@@ -69,18 +69,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        {/* icons */}
-        <link rel="icon" href="/favicon.ico" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-        <link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png" />
-        <link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png" />
-      </head>
-
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
-        {/* ✅ Next.js Script Component */}
+        {/* ✅ Google AdSense Script */}
         <Script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6646475793737493"

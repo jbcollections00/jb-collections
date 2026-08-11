@@ -18,6 +18,9 @@ type Props = {
   fileName: string
 }
 
+// 💰 Opsyonal: Ilagay dito ang Adsterra Direct Link mo para kumita kapag nag-extract sila
+const ADSTERRA_DIRECT_LINK = process.env.NEXT_PUBLIC_ADSTERRA_DIRECT_LINK || ""
+
 export default function ArchiveExtractorModal({ isOpen, onClose, fileUrl, fileName }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -46,7 +49,6 @@ export default function ArchiveExtractorModal({ isOpen, onClose, fileUrl, fileNa
       }
 
       try {
-        // Inayos ang 403 Forbidden sa pamamagitan ng pagpasa ng Supabase Bearer Token
         const supabase = createClient()
         const {
           data: { session },
@@ -60,7 +62,14 @@ export default function ArchiveExtractorModal({ isOpen, onClose, fileUrl, fileNa
           headers["Authorization"] = `Bearer ${session.access_token}`
         }
 
-        const response = await fetch(fileUrl, {
+        // 🛠️ Tiyaking may ?mode=stream sa URL para ma-stream ang file bytes nang walang CORS/403 Error
+        let targetUrl = fileUrl
+        if (targetUrl.includes("/api/download/") && !targetUrl.includes("mode=stream")) {
+          const separator = targetUrl.includes("?") ? "&" : "?"
+          targetUrl = `${targetUrl}${separator}mode=stream`
+        }
+
+        const response = await fetch(targetUrl, {
           credentials: "include",
           headers,
         })
@@ -102,6 +111,11 @@ export default function ArchiveExtractorModal({ isOpen, onClose, fileUrl, fileNa
     if (entry.directory || !entry.getData) return
 
     try {
+      // 💰 Buksan ang Ad Direct Link sa panibagong tab para kumita sa extract click
+      if (ADSTERRA_DIRECT_LINK) {
+        window.open(ADSTERRA_DIRECT_LINK, "_blank")
+      }
+
       setExtractingName(entry.filename)
       const blobWriter = new zip.BlobWriter()
       const blob = await entry.getData(blobWriter)
@@ -159,7 +173,7 @@ export default function ArchiveExtractorModal({ isOpen, onClose, fileUrl, fileNa
           {loading && (
             <div className="flex flex-col items-center justify-center py-12 gap-3 text-slate-400">
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-500 border-t-transparent" />
-              <p className="text-sm font-medium">Extracting file list...</p>
+              <p className="text-sm font-medium font-sans">Extracting file list...</p>
             </div>
           )}
 
@@ -169,6 +183,9 @@ export default function ArchiveExtractorModal({ isOpen, onClose, fileUrl, fileNa
               <a
                 href={fileUrl}
                 download={fileName}
+                onClick={() => {
+                  if (ADSTERRA_DIRECT_LINK) window.open(ADSTERRA_DIRECT_LINK, "_blank")
+                }}
                 className="inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-xs font-bold text-slate-950 transition hover:bg-amber-400 shadow-lg"
               >
                 ⬇️ Download Full Archive File Directly

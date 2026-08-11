@@ -1,6 +1,13 @@
 import { createClient } from "@/lib/supabase-server"
 import Link from "next/link"
 
+interface LeaderboardUser {
+  user_id: string
+  username?: string | null
+  total_downloads?: number | null
+  total_coins?: number | null
+}
+
 export default async function LeaderboardPage(props: {
   searchParams: Promise<{ tab?: string }>
 }) {
@@ -15,7 +22,10 @@ export default async function LeaderboardPage(props: {
     supabase.from("weekly_top_coin_earners").select("*").limit(10),
   ])
 
-  const currentList = activeTab === "downloaders" ? (topDownloaders || []) : (topCoinEarners || [])
+  const currentList: LeaderboardUser[] =
+    activeTab === "downloaders"
+      ? (topDownloaders as LeaderboardUser[]) || []
+      : (topCoinEarners as LeaderboardUser[]) || []
 
   return (
     <div className="flex justify-center p-6 min-h-screen bg-slate-950 text-white">
@@ -54,7 +64,7 @@ export default async function LeaderboardPage(props: {
         {/* Leaderboard List */}
         {currentList && currentList.length > 0 ? (
           <div className="space-y-2.5">
-            {currentList.map((user: any, index: number) => {
+            {currentList.map((user: LeaderboardUser, index: number) => {
               const rank = index + 1
               const rankBadge =
                 rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`
@@ -66,7 +76,7 @@ export default async function LeaderboardPage(props: {
 
               return (
                 <div
-                  key={user.user_id}
+                  key={user.user_id || index}
                   className="flex items-center justify-between p-3.5 bg-slate-800/40 border border-slate-700/40 rounded-xl hover:bg-slate-800/80 transition-all"
                 >
                   <div className="flex items-center gap-3">
