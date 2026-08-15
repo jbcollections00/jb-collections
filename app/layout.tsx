@@ -78,6 +78,13 @@ export default function RootLayout({
           strategy="afterInteractive"
         />
 
+        {/* 🚀 Effective CPM Network Script */}
+        <Script
+          id="effective-cpm-ad"
+          src="https://pl30860037.effectivecpmnetwork.com/ab/fc/2b/abfc2b67797cad69eeb017f892ecfcd9.js"
+          strategy="afterInteractive"
+        />
+
         {/* 🛡️ Client-side safe guard component */}
         <ScriptElementGuard />
 
