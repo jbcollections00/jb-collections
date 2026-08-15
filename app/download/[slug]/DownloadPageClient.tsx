@@ -152,16 +152,16 @@ function getShortDescription(file: FileRow | null) {
 
 function getDownloadCoinCost(level: MembershipLevel) {
   if (level === "admin") return 0
-  if (level === "platinum") return 8
-  if (level === "premium") return 10
-  return 12
+  if (level === "platinum") return 10
+  if (level === "premium") return 15
+  return 20
 }
 
 function getRewardAmount(level: MembershipLevel) {
   if (level === "admin") return 0
-  if (level === "platinum") return 3
+  if (level === "platinum") return 1
   if (level === "premium") return 2
-  return 2
+  return 3
 }
 
 export default function DownloadPageClient() {
@@ -267,11 +267,11 @@ export default function DownloadPageClient() {
       searchParams?.get("reward") === "today"
 
     const rewardAmountRaw =
-      searchParams?.get("rewardAmount") || searchParams?.get("reward_amount") || "2"
+      searchParams?.get("rewardAmount") || searchParams?.get("reward_amount") || `${estimatedReward}`
 
     const parsedRewardAmount = Number(rewardAmountRaw)
     const rewardAmount =
-      Number.isFinite(parsedRewardAmount) && parsedRewardAmount > 0 ? parsedRewardAmount : 2
+      Number.isFinite(parsedRewardAmount) && parsedRewardAmount > 0 ? parsedRewardAmount : estimatedReward
 
     if (rewarded) {
       showRewardNotice(`+${rewardAmount} JB Coins earned`, "success")
@@ -283,7 +283,7 @@ export default function DownloadPageClient() {
       showRewardNotice("Already rewarded today", "info")
       dispatchCoinPopup(0, "Already rewarded today")
     }
-  }, [searchParams, showRewardNotice])
+  }, [searchParams, showRewardNotice, estimatedReward])
 
   useEffect(() => {
     if (!idOrSlug) return

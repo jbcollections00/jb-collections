@@ -56,6 +56,10 @@ type RewardResult = {
   reason: RewardResultReason
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
 function normalizeMembership(profile?: ProfileRow | null): MembershipLevel {
   const role = String(profile?.role || "").trim().toLowerCase()
   const membership = String(profile?.membership || "").trim().toLowerCase()
@@ -70,9 +74,9 @@ function normalizeMembership(profile?: ProfileRow | null): MembershipLevel {
 
 function getBaseDownloadCoinCost(level: MembershipLevel) {
   if (level === "admin") return 0
-  if (level === "platinum") return 8
-  if (level === "premium") return 10
-  return 12
+  if (level === "platinum") return 10
+  if (level === "premium") return 15
+  return 20
 }
 
 function getDownloadCoinCost(level: MembershipLevel, file?: FileRow | null, boosted = false) {
@@ -98,9 +102,9 @@ function getDownloadCoinCost(level: MembershipLevel, file?: FileRow | null, boos
 function getDownloadRewardAmount(level: MembershipLevel, boosted = false) {
   if (level === "admin") return 0
 
-  let reward = 2
+  let reward = 3
 
-  if (level === "platinum") reward = 3
+  if (level === "platinum") reward = 1
   if (level === "premium") reward = 2
 
   if (boosted) {
@@ -176,11 +180,7 @@ async function awardDownloadCoins(params: {
   const rewardAmount = getDownloadRewardAmount(membershipLevel, boosted)
   const dailyLimit = getDailyDownloadRewardLimit(membershipLevel)
 
-  if (rewardAmount <= 0) {
-    return { awarded: 0, reason: "limit_disabled" }
-  }
-
-  if (dailyLimit <= 0) {
+  if (rewardAmount <= 0 || dailyLimit <= 0) {
     return { awarded: 0, reason: "limit_disabled" }
   }
 
@@ -280,7 +280,6 @@ export async function GET(
     const unlocked = url.searchParams.get("unlocked") === "1"
     const isStreamMode = mode === "stream"
 
-    // 🛡️ REVISED DOMAIN & REFERER CHECK (Flexible Domain Matching)
     const referer = req.headers.get("referer") || ""
     if (referer) {
       try {
@@ -296,7 +295,7 @@ export async function GET(
             { status: 403 }
           )
         }
-      } catch (e) {
+      } catch {
         console.warn("Invalid referer header ignored:", referer)
       }
     }
@@ -362,13 +361,15 @@ export async function GET(
     const membershipLevel = normalizeMembership(profile)
     const userCoins = Number(profile?.coins || 0)
 
-    const { data: fileData, error: fileError } = await supabase
+    const baseFileQuery = supabase
       .from("files")
       .select(
         "id, title, slug, visibility, status, downloads_count, linkvertise_url, shrinkme_url, monetization_enabled"
       )
-      .eq("id", fileId)
-      .maybeSingle()
+
+    const { data: fileData, error: fileError } = isUuid(fileId)
+      ? await baseFileQuery.eq("id", fileId).maybeSingle()
+      : await baseFileQuery.eq("slug", fileId).maybeSingle()
 
     if (fileError) {
       return NextResponse.json(
@@ -382,6 +383,7 @@ export async function GET(
     }
 
     const fileOnly = fileData as FileRow
+    const realFileId = fileOnly.id
     const downloadCoinCost = getDownloadCoinCost(membershipLevel, fileOnly, boosted)
     const baseDownloadCoinCost = getDownloadCoinCost(membershipLevel, fileOnly, false)
     const boostExtraCost = boosted ? DOWNLOAD_BOOST_EXTRA_COST : 0
@@ -399,7 +401,7 @@ export async function GET(
       .select(
         "id, file_id, object_key, bucket_name, archive_type, mime_type, file_size_bytes, is_current"
       )
-      .eq("file_id", fileId)
+      .eq("file_id", realFileId)
       .order("is_current", { ascending: false })
 
     if (versionsError) {
@@ -469,7 +471,7 @@ export async function GET(
       try {
         await dbClient.from("download_logs").insert({
           user_id: user.id,
-          file_id: fileOnly.id,
+          file_id: realFileId,
           file_version_id: currentVersion.id,
           result: "denied",
           ip_address: getClientIp(req),
@@ -496,7 +498,7 @@ export async function GET(
     const shouldUseLinkvertise =
       !unlocked &&
       !boosted &&
-      !isStreamMode && // 🚀 Archive extractor mode will NOT redirect to linkvertise
+      !isStreamMode &&
       membershipLevel === "standard" &&
       visibility === "free" &&
       fileOnly.monetization_enabled !== false &&
@@ -506,7 +508,7 @@ export async function GET(
       try {
         await dbClient.from("download_logs").insert({
           user_id: user.id,
-          file_id: fileOnly.id,
+          file_id: realFileId,
           file_version_id: currentVersion.id,
           result: "linkvertise_redirect",
           ip_address: getClientIp(req),
@@ -530,7 +532,7 @@ export async function GET(
       try {
         await dbClient.from("download_logs").insert({
           user_id: user.id,
-          file_id: fileOnly.id,
+          file_id: realFileId,
           file_version_id: currentVersion.id,
           result: "insufficient_coins",
           ip_address: getClientIp(req),
@@ -563,11 +565,11 @@ export async function GET(
         p_amount: -downloadCoinCost,
         p_type: boosted ? "boosted_download_spend" : "download_spend",
         p_description: boosted
-          ? `Boosted download spend for ${fileOnly.title || fileOnly.slug || fileOnly.id}`
-          : `Download spend for ${fileOnly.title || fileOnly.slug || fileOnly.id}`,
+          ? `Boosted download spend for ${fileOnly.title || fileOnly.slug || realFileId}`
+          : `Download spend for ${fileOnly.title || fileOnly.slug || realFileId}`,
         p_reference: boosted
-          ? `boosted_download_spend:${user.id}:${fileOnly.id}:${Date.now()}`
-          : `download_spend:${user.id}:${fileOnly.id}:${Date.now()}`,
+          ? `boosted_download_spend:${user.id}:${realFileId}:${Date.now()}`
+          : `download_spend:${user.id}:${realFileId}:${Date.now()}`,
       })
 
       if (spendError) {
@@ -592,11 +594,10 @@ export async function GET(
       downloadFilename: safeFilename,
     })
 
-    // 🏆 RECORD TO DOWNLOAD LOGS (For Weekly Leaderboard & Analytics)
     try {
       const { error: logErr } = await dbClient.from("download_logs").insert({
         user_id: user.id,
-        file_id: fileOnly.id,
+        file_id: realFileId,
         file_version_id: currentVersion.id,
         result: boosted ? "success_boosted" : "success",
         ip_address: getClientIp(req),
@@ -610,14 +611,13 @@ export async function GET(
       console.warn("Error inserting into download_logs:", logErr)
     }
 
-    // 📊 INCREMENT FILE DOWNLOAD COUNT
     try {
       await dbClient
         .from("files")
         .update({
           downloads_count: (fileOnly.downloads_count || 0) + 1,
         })
-        .eq("id", fileOnly.id)
+        .eq("id", realFileId)
     } catch (countErr) {
       console.warn("Error updating downloads_count:", countErr)
     }
@@ -631,8 +631,8 @@ export async function GET(
     try {
       const rewardResult = await awardDownloadCoins({
         userId: user.id,
-        fileId: fileOnly.id,
-        fileTitle: fileOnly.title || fileOnly.slug || fileOnly.id,
+        fileId: realFileId,
+        fileTitle: fileOnly.title || fileOnly.slug || realFileId,
         membershipLevel,
         boosted,
       })
@@ -654,7 +654,6 @@ export async function GET(
       console.error("Download coin reward error:", rewardError)
     }
 
-    // 📦 JSON MODE
     if (mode === "json") {
       return NextResponse.json({
         downloadUrl: signedUrl,
@@ -667,13 +666,10 @@ export async function GET(
       })
     }
 
-    // ⚡ STREAM MODE FOR ONLINE ARCHIVE EXTRACTOR
-    // Redirect directly to R2 so Vercel doesn't choke on large files.
     if (isStreamMode) {
       return NextResponse.redirect(signedUrl, { status: 302 })
     }
 
-    // 🚀 STANDARD DOWNLOAD DIRECT REDIRECT
     return NextResponse.redirect(signedUrl, { status: 302 })
   } catch (error) {
     console.error("Download route error:", error)
