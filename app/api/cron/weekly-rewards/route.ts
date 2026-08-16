@@ -27,26 +27,47 @@ export async function GET(req: NextRequest) {
 
     const supabase = createClient(supabaseUrl, serviceKey)
 
-    // 2. Compute ng Date Range para sa NAKARAANG LINGGO (Last Week)
+    // 2. Compute Date Range sa Asia/Manila Timezone (August 10 to August 16)
     const now = new Date()
-    const dayOfWeek = now.getUTCDay()
+    const manilaNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Manila" }))
+
+    const dayOfWeek = manilaNow.getDay() // 0 = Sun, 1 = Mon...
     const diffToCurrentMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
 
-    const startOfCurrentWeek = new Date(now)
-    startOfCurrentWeek.setUTCDate(now.getUTCDate() - diffToCurrentMonday)
-    startOfCurrentWeek.setUTCHours(0, 0, 0, 0)
+    const startOfCurrentWeekLocal = new Date(manilaNow)
+    startOfCurrentWeekLocal.setDate(manilaNow.getDate() - diffToCurrentMonday)
+    startOfCurrentWeekLocal.setHours(0, 0, 0, 0)
 
-    const startOfLastWeek = new Date(startOfCurrentWeek)
-    startOfLastWeek.setUTCDate(startOfLastWeek.getUTCDate() - 7)
+    const startOfLastWeekLocal = new Date(startOfCurrentWeekLocal)
+    startOfLastWeekLocal.setDate(startOfLastWeekLocal.getDate() - 7)
 
-    const endOfLastWeek = new Date(startOfCurrentWeek)
+    const endOfLastWeekLocal = new Date(startOfCurrentWeekLocal)
 
-    // 3. Query Top Earners para sa Last Week
+    // Formatter para sa ISO range query sa Supabase (+08:00)
+    const formatLocalISO = (d: Date) => {
+      const year = d.getFullYear()
+      const month = String(d.getMonth() + 1).padStart(2, "0")
+      const day = String(d.getDate()).padStart(2, "0")
+      const hours = String(d.getHours()).padStart(2, "0")
+      const minutes = String(d.getMinutes()).padStart(2, "0")
+      const seconds = String(d.getSeconds()).padStart(2, "0")
+      return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+08:00`
+    }
+
+    const startIso = new Date(formatLocalISO(startOfLastWeekLocal)).toISOString()
+    const endIso = new Date(formatLocalISO(endOfLastWeekLocal)).toISOString()
+
+    const displayStart = `${startOfLastWeekLocal.getFullYear()}-${String(startOfLastWeekLocal.getMonth() + 1).padStart(2, "0")}-${String(startOfLastWeekLocal.getDate()).padStart(2, "0")}`
+    const lastWeekSunday = new Date(endOfLastWeekLocal)
+    lastWeekSunday.setDate(lastWeekSunday.getDate() - 1)
+    const displayEnd = `${lastWeekSunday.getFullYear()}-${String(lastWeekSunday.getMonth() + 1).padStart(2, "0")}-${String(lastWeekSunday.getDate()).padStart(2, "0")}`
+
+    // 3. Query Top Earners para sa Last Week (Aug 10 - Aug 16)
     const { data: transactions, error: txError } = await supabase
       .from("coin_transactions")
       .select("user_id, amount, type, created_at")
-      .gte("created_at", startOfLastWeek.toISOString())
-      .lt("created_at", endOfLastWeek.toISOString())
+      .gte("created_at", startIso)
+      .lt("created_at", endIso)
       .gt("amount", 0)
       .neq("type", "weekly_reward")
 
@@ -65,7 +86,7 @@ export async function GET(req: NextRequest) {
         .limit(3)
 
       if (!topProfiles || topProfiles.length === 0) {
-        return NextResponse.json({ message: "No active participants found for last week" })
+        return NextResponse.json({ message: `No active participants found for period ${displayStart} to ${displayEnd}` })
       }
 
       top3 = topProfiles.map((p) => ({ user_id: p.id }))
@@ -84,11 +105,10 @@ export async function GET(req: NextRequest) {
     const rewards = [500, 300, 200]
     const distributedWinners = []
 
-    // Mag-add ng 7 araw para sa expiration ng membership tier
     const tierExpiresAt = new Date()
     tierExpiresAt.setDate(tierExpiresAt.getDate() + 7)
 
-    // 4. I-distribute ang Coin Rewards at Membership Tier Upgrades
+    // 4. Distribution Loop
     for (let i = 0; i < top3.length; i++) {
       const winner = top3[i]
       const userId = winner.user_id
@@ -97,7 +117,6 @@ export async function GET(req: NextRequest) {
 
       if (!userId) continue
 
-      // Rank 1 = Platinum, Rank 2 & 3 = Premium
       const tierGranted = rank === 1 ? "platinum" : "premium"
 
       const { error: rpcError } = await supabase.rpc("handle_coin_change", {
@@ -105,7 +124,7 @@ export async function GET(req: NextRequest) {
         p_amount: prizeAmount,
         p_type: "weekly_reward",
         p_description: `Weekly Leaderboard Rank #${rank} Reward (${tierGranted.toUpperCase()} + ${prizeAmount} Coins)`,
-        p_reference: `weekly_reward:${userId}:${startOfLastWeek.toISOString().slice(0, 10)}`,
+        p_reference: `weekly_reward:${userId}:${displayStart}`,
       })
 
       if (rpcError) {
@@ -133,7 +152,6 @@ export async function GET(req: NextRequest) {
           })
           .eq("id", userId)
       } else {
-        // I-update ang membership tier status pagkatapos maiproseso ang coins via RPC
         await supabase
           .from("profiles")
           .update({
@@ -155,7 +173,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "Last week's rewards & 7-day tier upgrades successfully distributed!",
-      period: `${startOfLastWeek.toISOString().slice(0, 10)} to ${endOfLastWeek.toISOString().slice(0, 10)}`,
+      period: `${displayStart} to ${displayEnd}`,
       winners: distributedWinners,
     })
   } catch (err: any) {
