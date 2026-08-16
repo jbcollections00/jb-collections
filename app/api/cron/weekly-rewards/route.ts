@@ -54,7 +54,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Database error", details: txError.message }, { status: 500 })
     }
 
-    // Isa lang ang deklarasyon ng variable gamit ang 'let' para sa TypeScript
     let top3: { user_id: string }[] = []
 
     if (!transactions || transactions.length === 0) {
@@ -85,7 +84,11 @@ export async function GET(req: NextRequest) {
     const rewards = [500, 300, 200]
     const distributedWinners = []
 
-    // 4. I-distribute ang pabuya
+    // Mag-add ng 7 araw para sa expiration ng membership tier
+    const tierExpiresAt = new Date()
+    tierExpiresAt.setDate(tierExpiresAt.getDate() + 7)
+
+    // 4. I-distribute ang Coin Rewards at Membership Tier Upgrades
     for (let i = 0; i < top3.length; i++) {
       const winner = top3[i]
       const userId = winner.user_id
@@ -94,11 +97,14 @@ export async function GET(req: NextRequest) {
 
       if (!userId) continue
 
+      // Rank 1 = Platinum, Rank 2 & 3 = Premium
+      const tierGranted = rank === 1 ? "platinum" : "premium"
+
       const { error: rpcError } = await supabase.rpc("handle_coin_change", {
         p_user_id: userId,
         p_amount: prizeAmount,
         p_type: "weekly_reward",
-        p_description: `Weekly Leaderboard Rank #${rank} Reward (Last Week)`,
+        p_description: `Weekly Leaderboard Rank #${rank} Reward (${tierGranted.toUpperCase()} + ${prizeAmount} Coins)`,
         p_reference: `weekly_reward:${userId}:${startOfLastWeek.toISOString().slice(0, 10)}`,
       })
 
@@ -107,7 +113,7 @@ export async function GET(req: NextRequest) {
           user_id: userId,
           amount: prizeAmount,
           type: "weekly_reward",
-          description: `Weekly Leaderboard Rank #${rank} Reward (Last Week)`,
+          description: `Weekly Leaderboard Rank #${rank} Reward (${tierGranted.toUpperCase()} + ${prizeAmount} Coins)`,
         })
 
         const { data: profile } = await supabase
@@ -116,21 +122,39 @@ export async function GET(req: NextRequest) {
           .eq("id", userId)
           .single()
 
-        if (profile) {
-          const currentCoins = Number(profile.coins || 0)
-          await supabase
-            .from("profiles")
-            .update({ coins: currentCoins + prizeAmount })
-            .eq("id", userId)
-        }
+        const currentCoins = Number(profile?.coins || 0)
+
+        await supabase
+          .from("profiles")
+          .update({
+            coins: currentCoins + prizeAmount,
+            membership_tier: tierGranted,
+            tier_expires_at: tierExpiresAt.toISOString(),
+          })
+          .eq("id", userId)
+      } else {
+        // I-update ang membership tier status pagkatapos maiproseso ang coins via RPC
+        await supabase
+          .from("profiles")
+          .update({
+            membership_tier: tierGranted,
+            tier_expires_at: tierExpiresAt.toISOString(),
+          })
+          .eq("id", userId)
       }
 
-      distributedWinners.push({ userId, rank, prizeAmount })
+      distributedWinners.push({
+        userId,
+        rank,
+        prizeAmount,
+        tierGranted,
+        expiresAt: tierExpiresAt.toISOString(),
+      })
     }
 
     return NextResponse.json({
       success: true,
-      message: "Last week's rewards successfully distributed!",
+      message: "Last week's rewards & 7-day tier upgrades successfully distributed!",
       period: `${startOfLastWeek.toISOString().slice(0, 10)} to ${endOfLastWeek.toISOString().slice(0, 10)}`,
       winners: distributedWinners,
     })
