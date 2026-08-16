@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/yearly-promo-credit",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-rewards",
+      "schedule": "0 0 * * 1"
     }
   ]
 }
