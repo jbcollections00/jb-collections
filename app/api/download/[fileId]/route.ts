@@ -277,18 +277,17 @@ export async function GET(
     const url = new URL(req.url)
     const mode = url.searchParams.get("mode")
     const boosted = url.searchParams.get("boost") === "1"
-    const unlocked = url.searchParams.get("unlocked") === "1"
     const isStreamMode = mode === "stream"
 
-    const referer = req.headers.get("referer") || ""
+    const referer = req.headers.get("referer")
+    const currentHost = req.nextUrl.hostname.replace(/^www\./, "")
+    const envSiteHost = process.env.NEXT_PUBLIC_SITE_URL
+      ? new URL(process.env.NEXT_PUBLIC_SITE_URL).hostname.replace(/^www\./, "")
+      : currentHost
+
     if (referer) {
       try {
         const refererHost = new URL(referer).hostname.replace(/^www\./, "")
-        const currentHost = req.nextUrl.hostname.replace(/^www\./, "")
-        const envSiteHost = process.env.NEXT_PUBLIC_SITE_URL
-          ? new URL(process.env.NEXT_PUBLIC_SITE_URL).hostname.replace(/^www\./, "")
-          : currentHost
-
         if (refererHost !== currentHost && refererHost !== envSiteHost) {
           return NextResponse.json(
             { error: "Direct download not allowed from external site" },
@@ -296,7 +295,10 @@ export async function GET(
           )
         }
       } catch {
-        console.warn("Invalid referer header ignored:", referer)
+        return NextResponse.json(
+          { error: "Invalid referer header" },
+          { status: 403 }
+        )
       }
     }
 
@@ -496,8 +498,6 @@ export async function GET(
 
     const linkvertiseUrl = fileOnly.linkvertise_url?.trim() || ""
     const shouldUseLinkvertise =
-      !unlocked &&
-      !boosted &&
       !isStreamMode &&
       membershipLevel === "standard" &&
       visibility === "free" &&
