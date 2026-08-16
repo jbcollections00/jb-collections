@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic"
 
 export async function GET(req: NextRequest) {
   try {
-    // 1. Security check gamit ang Authorization Header O URL Query Parameter (?secret=...)
+    // 1. Security check (Header or ?secret= Query Param)
     const authHeader = req.headers.get("authorization")
     const url = new URL(req.url)
     const querySecret = url.searchParams.get("secret")
@@ -27,57 +27,88 @@ export async function GET(req: NextRequest) {
 
     const supabase = createClient(supabaseUrl, serviceKey)
 
-    // 2. Kunin ang Top 3 mula sa weekly leaderboard
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-    const res = await fetch(`${siteUrl}/api/leaderboard/weekly`, {
-      cache: "no-store",
-    })
+    // 2. Compute ng Date Range para sa NAKARAANG LINGGO (Last Week: Last Mon 00:00 to Sun 23:59)
+    const now = new Date()
+    const dayOfWeek = now.getUTCDay() // 0 = Sun, 1 = Mon...
+    const diffToCurrentMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
 
-    if (!res.ok) {
-      return NextResponse.json({ error: "Failed to fetch leaderboard endpoint" }, { status: 500 })
+    const startOfCurrentWeek = new Date(now)
+    startOfCurrentWeek.setUTCDate(now.getUTCDate() - diffToCurrentMonday)
+    startOfCurrentWeek.setUTCHours(0, 0, 0, 0)
+
+    const startOfLastWeek = new Date(startOfCurrentWeek)
+    startOfLastWeek.setUTCDate(startOfLastWeek.getUTCDate() - 7)
+
+    const endOfLastWeek = new Date(startOfCurrentWeek)
+
+    // 3. I-query ang Top Earners para sa Last Week mula sa coin_transactions
+    const { data: transactions, error: txError } = await supabase
+      .from("coin_transactions")
+      .select("user_id, amount, type, created_at")
+      .gte("created_at", startOfLastWeek.toISOString())
+      .lt("created_at", endOfLastWeek.toISOString())
+      .gt("amount", 0) // Rewards/Earnings lang
+      .neq("type", "weekly_reward") // I-exclude ang reward payouts
+
+    if (txError) {
+      return NextResponse.json({ error: "Database error", details: txError.message }, { status: 500 })
     }
 
-    const data = await res.json()
+    // Isama sa computation ang profile scores kapag walang transactions
+    if (!transactions || transactions.length === 0) {
+      // Fallback: Kunin ang Top 3 mula sa profiles order by coins
+      const { data: topProfiles } = await supabase
+        .from("profiles")
+        .select("id, coins, role")
+        .neq("role", "admin")
+        .order("coins", { ascending: false })
+        .limit(3)
 
-    if (!data.success || !data.leaderboard || data.leaderboard.length === 0) {
-      return NextResponse.json({ message: "No active participants found" })
+      if (!topProfiles || topProfiles.length === 0) {
+        return NextResponse.json({ message: "No active participants found for last week" })
+      }
+
+      var top3 = topProfiles.map((p) => ({ user_id: p.id }))
+    } else {
+      // Sum coins per user
+      const userTotals: Record<string, number> = {}
+      transactions.forEach((tx) => {
+        userTotals[tx.user_id] = (userTotals[tx.user_id] || 0) + Number(tx.amount || 0)
+      })
+
+      var top3 = Object.entries(userTotals)
+        .map(([user_id, total]) => ({ user_id, total }))
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 3)
     }
 
-    const top3 = data.leaderboard.slice(0, 3)
     const rewards = [500, 300, 200]
     const distributedWinners = []
 
-    // 3. I-distribute ang pabuya
+    // 4. I-distribute ang pabuya sa mga nanalo
     for (let i = 0; i < top3.length; i++) {
       const winner = top3[i]
-      const userId = winner.user_id || winner.id
+      const userId = winner.user_id
       const prizeAmount = rewards[i]
       const rank = i + 1
 
       if (!userId) continue
 
-      // A. Gamitin ang RPC function kung mayroon para sa atomic coin update
       const { error: rpcError } = await supabase.rpc("handle_coin_change", {
         p_user_id: userId,
         p_amount: prizeAmount,
         p_type: "weekly_reward",
-        p_description: `Weekly Leaderboard Rank #${rank} Reward`,
-        p_reference: `weekly_reward:${userId}:${new Date().toISOString().slice(0, 10)}`,
+        p_description: `Weekly Leaderboard Rank #${rank} Reward (Last Week)`,
+        p_reference: `weekly_reward:${userId}:${startOfLastWeek.toISOString().slice(0, 10)}`,
       })
 
-      // B. Fallback kapag walang RPC function sa Supabase
       if (rpcError) {
-        const { error: txError } = await supabase.from("coin_transactions").insert({
+        await supabase.from("coin_transactions").insert({
           user_id: userId,
           amount: prizeAmount,
           type: "weekly_reward",
-          description: `Weekly Leaderboard Rank #${rank} Reward`,
+          description: `Weekly Leaderboard Rank #${rank} Reward (Last Week)`,
         })
-
-        if (txError) {
-          console.error(`Transaction insert error for user ${userId}:`, txError.message)
-          continue
-        }
 
         const { data: profile } = await supabase
           .from("profiles")
@@ -99,7 +130,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Weekly rewards successfully distributed!",
+      message: "Last week's rewards successfully distributed!",
+      period: `${startOfLastWeek.toISOString().slice(0, 10)} to ${endOfLastWeek.toISOString().slice(0, 10)}`,
       winners: distributedWinners,
     })
   } catch (err: any) {
