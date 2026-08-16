@@ -27,9 +27,9 @@ export async function GET(req: NextRequest) {
 
     const supabase = createClient(supabaseUrl, serviceKey)
 
-    // 2. Compute ng Date Range para sa NAKARAANG LINGGO (Last Week: Last Mon 00:00 to Sun 23:59)
+    // 2. Compute ng Date Range para sa NAKARAANG LINGGO (Last Week)
     const now = new Date()
-    const dayOfWeek = now.getUTCDay() // 0 = Sun, 1 = Mon...
+    const dayOfWeek = now.getUTCDay()
     const diffToCurrentMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
 
     const startOfCurrentWeek = new Date(now)
@@ -41,22 +41,23 @@ export async function GET(req: NextRequest) {
 
     const endOfLastWeek = new Date(startOfCurrentWeek)
 
-    // 3. I-query ang Top Earners para sa Last Week mula sa coin_transactions
+    // 3. Query Top Earners para sa Last Week
     const { data: transactions, error: txError } = await supabase
       .from("coin_transactions")
       .select("user_id, amount, type, created_at")
       .gte("created_at", startOfLastWeek.toISOString())
       .lt("created_at", endOfLastWeek.toISOString())
-      .gt("amount", 0) // Rewards/Earnings lang
-      .neq("type", "weekly_reward") // I-exclude ang reward payouts
+      .gt("amount", 0)
+      .neq("type", "weekly_reward")
 
     if (txError) {
       return NextResponse.json({ error: "Database error", details: txError.message }, { status: 500 })
     }
 
-    // Isama sa computation ang profile scores kapag walang transactions
+    // Isa lang ang deklarasyon ng variable gamit ang 'let' para sa TypeScript
+    let top3: { user_id: string }[] = []
+
     if (!transactions || transactions.length === 0) {
-      // Fallback: Kunin ang Top 3 mula sa profiles order by coins
       const { data: topProfiles } = await supabase
         .from("profiles")
         .select("id, coins, role")
@@ -68,15 +69,14 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ message: "No active participants found for last week" })
       }
 
-      var top3 = topProfiles.map((p) => ({ user_id: p.id }))
+      top3 = topProfiles.map((p) => ({ user_id: p.id }))
     } else {
-      // Sum coins per user
       const userTotals: Record<string, number> = {}
       transactions.forEach((tx) => {
         userTotals[tx.user_id] = (userTotals[tx.user_id] || 0) + Number(tx.amount || 0)
       })
 
-      var top3 = Object.entries(userTotals)
+      top3 = Object.entries(userTotals)
         .map(([user_id, total]) => ({ user_id, total }))
         .sort((a, b) => b.total - a.total)
         .slice(0, 3)
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
     const rewards = [500, 300, 200]
     const distributedWinners = []
 
-    // 4. I-distribute ang pabuya sa mga nanalo
+    // 4. I-distribute ang pabuya
     for (let i = 0; i < top3.length; i++) {
       const winner = top3[i]
       const userId = winner.user_id
