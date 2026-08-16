@@ -5,11 +5,16 @@ export const dynamic = "force-dynamic"
 
 export async function GET(req: NextRequest) {
   try {
-    // 1. Security check gamit ang CRON_SECRET para maiwasan ang pampublikong pang-aabuso
+    // 1. Security check gamit ang Authorization Header O URL Query Parameter (?secret=...)
     const authHeader = req.headers.get("authorization")
+    const url = new URL(req.url)
+    const querySecret = url.searchParams.get("secret")
     const cronSecret = process.env.CRON_SECRET
 
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    const isHeaderValid = authHeader === `Bearer ${cronSecret}`
+    const isQueryValid = querySecret === cronSecret
+
+    if (cronSecret && !isHeaderValid && !isQueryValid) {
       return NextResponse.json({ error: "Unauthorized access" }, { status: 401 })
     }
 
