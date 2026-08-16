@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic"
 
 export async function GET(req: NextRequest) {
   try {
-    // 1. Security check (Header or ?secret= Query Param)
+    // 1. Security check
     const authHeader = req.headers.get("authorization")
     const url = new URL(req.url)
     const querySecret = url.searchParams.get("secret")
@@ -27,11 +27,11 @@ export async function GET(req: NextRequest) {
 
     const supabase = createClient(supabaseUrl, serviceKey)
 
-    // 2. Compute Date Range sa Asia/Manila Timezone (August 10 to August 16)
+    // 2. Date Range computation para sa Asia/Manila Timezone (Last Week Mon-Sun)
     const now = new Date()
     const manilaNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Manila" }))
 
-    const dayOfWeek = manilaNow.getDay() // 0 = Sun, 1 = Mon...
+    const dayOfWeek = manilaNow.getDay()
     const diffToCurrentMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
 
     const startOfCurrentWeekLocal = new Date(manilaNow)
@@ -43,7 +43,6 @@ export async function GET(req: NextRequest) {
 
     const endOfLastWeekLocal = new Date(startOfCurrentWeekLocal)
 
-    // Formatter para sa ISO range query sa Supabase (+08:00)
     const formatLocalISO = (d: Date) => {
       const year = d.getFullYear()
       const month = String(d.getMonth() + 1).padStart(2, "0")
@@ -62,69 +61,22 @@ export async function GET(req: NextRequest) {
     lastWeekSunday.setDate(lastWeekSunday.getDate() - 1)
     const displayEnd = `${lastWeekSunday.getFullYear()}-${String(lastWeekSunday.getMonth() + 1).padStart(2, "0")}-${String(lastWeekSunday.getDate()).padStart(2, "0")}`
 
-    // 3. Query Top Earners para sa Last Week (Aug 10 - Aug 16)
-    const { data: transactions, error: txError } = await supabase
-      .from("coin_transactions")
-      .select("user_id, amount, type, created_at")
-      .gte("created_at", startIso)
-      .lt("created_at", endIso)
-      .gt("amount", 0)
-      .neq("type", "weekly_reward")
-
-    if (txError) {
-      return NextResponse.json({ error: "Database error", details: txError.message }, { status: 500 })
-    }
-
-    let top3: { user_id: string }[] = []
-
-    if (!transactions || transactions.length === 0) {
-      const { data: topProfiles } = await supabase
-        .from("profiles")
-        .select("id, coins, role")
-        .neq("role", "admin")
-        .order("coins", { ascending: false })
-        .limit(3)
-
-      if (!topProfiles || topProfiles.length === 0) {
-        return NextResponse.json({ message: `No active participants found for period ${displayStart} to ${displayEnd}` })
-      }
-
-      top3 = topProfiles.map((p) => ({ user_id: p.id }))
-    } else {
-      const userTotals: Record<string, number> = {}
-      transactions.forEach((tx) => {
-        userTotals[tx.user_id] = (userTotals[tx.user_id] || 0) + Number(tx.amount || 0)
-      })
-
-      top3 = Object.entries(userTotals)
-        .map(([user_id, total]) => ({ user_id, total }))
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 3)
-    }
-
     const rewards = [500, 300, 200]
-    const distributedWinners = []
-
     const tierExpiresAt = new Date()
     tierExpiresAt.setDate(tierExpiresAt.getDate() + 7)
 
-    // 4. Distribution Loop
-    for (let i = 0; i < top3.length; i++) {
-      const winner = top3[i]
-      const userId = winner.user_id
-      const prizeAmount = rewards[i]
-      const rank = i + 1
-
-      if (!userId) continue
-
+    // Helper function para sa pag-award ng user
+    async function grantReward(userId: string, rank: number, prizeAmount: number, category: string) {
       const tierGranted = rank === 1 ? "platinum" : "premium"
+      const description = `Weekly Leaderboard (${category}) Rank #${rank} Reward (${tierGranted.toUpperCase()} + ${prizeAmount} Coins)`
+      const reference = `weekly_${category.toLowerCase().replace(/\s+/g, "_")}:${userId}:${displayStart}`
 
       const { error: rpcError } = await supabase.rpc("handle_coin_change", {
         p_user_id: userId,
         p_amount: prizeAmount,
         p_type: "weekly_reward",
-        p_description: `Weekly Leaderboard Rank #${rank} Reward (${tierGranted.toUpperCase()} + ${prizeAmount} Coins)`,
-        p_reference: `weekly_reward:${userId}:${displayStart}`,
+        p_description: description,
+        p_reference: reference,
       })
 
       if (rpcError) {
@@ -132,15 +84,10 @@ export async function GET(req: NextRequest) {
           user_id: userId,
           amount: prizeAmount,
           type: "weekly_reward",
-          description: `Weekly Leaderboard Rank #${rank} Reward (${tierGranted.toUpperCase()} + ${prizeAmount} Coins)`,
+          description: description,
         })
 
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("coins")
-          .eq("id", userId)
-          .single()
-
+        const { data: profile } = await supabase.from("profiles").select("coins").eq("id", userId).single()
         const currentCoins = Number(profile?.coins || 0)
 
         await supabase
@@ -161,20 +108,84 @@ export async function GET(req: NextRequest) {
           .eq("id", userId)
       }
 
-      distributedWinners.push({
-        userId,
-        rank,
-        prizeAmount,
-        tierGranted,
-        expiresAt: tierExpiresAt.toISOString(),
+      return { userId, rank, prizeAmount, tierGranted, expiresAt: tierExpiresAt.toISOString() }
+    }
+
+    // --- A. TOP COIN EARNERS ---
+    const { data: coinTx } = await supabase
+      .from("coin_transactions")
+      .select("user_id, amount")
+      .gte("created_at", startIso)
+      .lt("created_at", endIso)
+      .gt("amount", 0)
+      .neq("type", "weekly_reward")
+
+    const coinEarnersWinners = []
+    if (coinTx && coinTx.length > 0) {
+      const coinTotals: Record<string, number> = {}
+      coinTx.forEach((tx) => {
+        coinTotals[tx.user_id] = (coinTotals[tx.user_id] || 0) + Number(tx.amount || 0)
       })
+
+      const top3Earners = Object.entries(coinTotals)
+        .map(([user_id, total]) => ({ user_id, total }))
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 3)
+
+      for (let i = 0; i < top3Earners.length; i++) {
+        const w = await grantReward(top3Earners[i].user_id, i + 1, rewards[i], "Top Coin Earner")
+        coinEarnersWinners.push(w)
+      }
+    }
+
+    // --- B. TOP DOWNLOADERS ---
+    // Subukang i-query ang 'downloads' table (fallback sa 'file_downloads' kung sakali)
+    let downloadLogs = null
+    const { data: dlData, error: dlError } = await supabase
+      .from("downloads")
+      .select("user_id")
+      .gte("created_at", startIso)
+      .lt("created_at", endIso)
+
+    if (!dlError) {
+      downloadLogs = dlData
+    } else {
+      const { data: fDlData } = await supabase
+        .from("file_downloads")
+        .select("user_id")
+        .gte("created_at", startIso)
+        .lt("created_at", endIso)
+      downloadLogs = fDlData
+    }
+
+    const downloadersWinners = []
+    if (downloadLogs && downloadLogs.length > 0) {
+      const downloadCounts: Record<string, number> = {}
+      downloadLogs.forEach((dl) => {
+        if (dl.user_id) {
+          downloadCounts[dl.user_id] = (downloadCounts[dl.user_id] || 0) + 1
+        }
+      })
+
+      const top3Downloaders = Object.entries(downloadCounts)
+        .map(([user_id, total]) => ({ user_id, total }))
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 3)
+
+      for (let i = 0; i < top3Downloaders.length; i++) {
+        const w = await grantReward(top3Downloaders[i].user_id, i + 1, rewards[i], "Top Downloader")
+        downloadersWinners.push(w)
+      }
     }
 
     return NextResponse.json({
       success: true,
-      message: "Last week's rewards & 7-day tier upgrades successfully distributed!",
+      message: "Weekly rewards for both competitions successfully distributed!",
       period: `${displayStart} to ${displayEnd}`,
-      winners: distributedWinners,
+      results: {
+        topCoinEarners: coinEarnersWinners,
+        topDownloaders: downloadersWinners,
+      },
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
