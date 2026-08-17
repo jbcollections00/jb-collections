@@ -16,6 +16,7 @@ type UserProfile = {
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "🏠" },
+  // { label: "Messages", href: "/messages", icon: "💬" },
   { label: "Profile", href: "/profile", icon: "👤" },
   { label: "Leaderboard", href: "/leaderboard", icon: "🏆" },
   { label: "Buy COINS", href: "/upgrade", icon: "🪙" },
@@ -23,6 +24,18 @@ const navItems = [
   { label: "Mystery Box", href: "/mystery-box", icon: "🎁" },
   { label: "Tutorials", href: "/tutorials", icon: "📘" },
 ]
+
+const STORAGE_KEY = "jb_deleted_message_ids"
+
+function getDismissedIds(): string[] {
+  if (typeof window === "undefined") return []
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
 
 function toSafeNumber(value: unknown) {
   const parsed = Number(value)
@@ -36,6 +49,7 @@ export default function SiteHeader() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [coins, setCoins] = useState(0)
+  const [unreadCount, setUnreadCount] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
 
   const currentUserIdRef = useRef<string | null>(null)
@@ -46,14 +60,49 @@ export default function SiteHeader() {
     if (!userId) return
 
     const { data } = await supabase
-  .from("profiles")
-  .select("coins, jb_points")
-  .eq("id", userId)
-  .maybeSingle()
+      .from("profiles")
+      .select("coins, jb_points")
+      .eq("id", userId)
+      .maybeSingle()
 
-setCoins(
-  toSafeNumber(data?.coins ?? data?.jb_points)
-)
+    setCoins(
+      toSafeNumber(data?.coins ?? data?.jb_points)
+    )
+  }
+
+  async function checkUnreadMessages() {
+    const userId = currentUserIdRef.current
+    if (!userId) return
+
+    try {
+      // 1. Fetch from main 'messages' table
+      const { data: primaryData } = await supabase
+        .from("messages")
+        .select("id, is_read")
+        .or(`user_id.eq.${userId},user_id.is.null`)
+
+      let allMessages = primaryData || []
+
+      // 2. Fallback to 'user_messages' if primary query returned nothing
+      if (!allMessages.length) {
+        const { data: fallbackData } = await supabase
+          .from("user_messages")
+          .select("id, is_read")
+          .or(`user_id.eq.${userId},user_id.is.null`)
+        
+        allMessages = fallbackData || []
+      }
+
+      // 3. Filter out locally deleted IDs and messages that are already read
+      const dismissed = getDismissedIds()
+      const unreadList = allMessages.filter(
+        (msg) => !msg.is_read && !dismissed.includes(msg.id)
+      )
+
+      setUnreadCount(unreadList.length)
+    } catch (err) {
+      console.error("Error fetching unread count:", err)
+    }
   }
 
   useEffect(() => {
@@ -75,6 +124,7 @@ setCoins(
       setProfile(data as UserProfile)
 
       await refreshWallet()
+      await checkUnreadMessages()
     }
 
     void init()
@@ -153,6 +203,23 @@ setCoins(
             </Link>
 
             <div className="ml-auto flex items-center gap-2">
+
+              {/* Message Icon Button with Notification Badge */}
+              <Link
+                href="/messages"
+                className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/30 text-base text-white transition hover:bg-white/20 sm:h-10 sm:w-10 sm:text-lg"
+                title="Messages"
+                aria-label="Messages"
+              >
+                💬
+                {unreadCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white ring-2 ring-blue-900 shadow-md">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </Link>
+
+              {/* Coins Wallet Box */}
               <div className="rounded-full border border-white/20 bg-black/30 px-3 py-1.5 sm:min-w-[150px]">
                 <div className="flex items-center gap-2">
                   <img src="/jb-coin.png" alt="JB Coin" className="h-4 w-4 object-contain" />

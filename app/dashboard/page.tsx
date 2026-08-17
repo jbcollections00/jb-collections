@@ -250,91 +250,6 @@ function WeeklyLeaderboardModal() {
   )
 }
 
-// --- PROMO MODAL COMPONENT (PLATINUM UPGRADE) ---
-function PromoModal({ totalClaims = 0 }: { totalClaims?: number }) {
-  const [isOpen, setIsOpen] = useState(false)
-  const router = useRouter()
-
-  useEffect(() => {
-    if (totalClaims >= 100) return
-
-    const timer = setTimeout(() => {
-      setIsOpen(true)
-    }, 2500)
-    
-    return () => clearTimeout(timer)
-  }, [totalClaims])
-
-  const handleClose = () => {
-    setIsOpen(false)
-  }
-
-  const handleAction = () => {
-    setIsOpen(false)
-    router.push("/earn-coins")
-  }
-
-  if (!isOpen) return null
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
-      <div 
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
-        onClick={handleClose}
-      />
-      
-      <div className="relative w-full max-w-md overflow-hidden rounded-[24px] border border-white/10 bg-slate-900/95 p-6 text-center shadow-[0_0_50px_rgba(14,165,233,0.3)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-300">
-        <button 
-          onClick={handleClose}
-          className="absolute right-4 top-4 rounded-full p-1 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
-          </svg>
-        </button>
-
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-sky-400/30 bg-gradient-to-br from-sky-400/20 to-blue-600/20 shadow-[0_0_30px_rgba(56,189,248,0.2)]">
-          <span className="text-3xl">💎</span>
-        </div>
-
-        <h2 className="text-2xl font-black text-white">
-          Free Platinum Upgrade!
-        </h2>
-        
-        <div className="mt-5 rounded-xl border border-sky-500/20 bg-sky-500/10 p-4 text-left shadow-inner">
-          <p className="mb-2 text-sm font-bold text-sky-400">How to claim your upgrade:</p>
-          <ol className="list-decimal space-y-2.5 pl-4 text-[13px] font-medium text-slate-300">
-            <li>Click the <strong className="text-white">Claim Offer Now</strong> button below.</li>
-            <li>On the Earn Coins page, select the <strong className="text-sky-300">CPAGrip</strong> or <strong className="text-sky-300">CPX Surveys</strong> tab.</li>
-            <li>Click on any available survey, app download, or task inside the main frame.</li>
-            <li>Read and follow the task's instructions to complete it fully.</li>
-            <li>Once successful, your 1-Month Platinum Account will unlock automatically!</li>
-          </ol>
-        </div>
-
-        <div className="mt-4 rounded-full bg-slate-800/50 py-1.5 text-xs font-bold text-slate-300">
-          <span className="text-sky-400">{Math.max(0, 100 - totalClaims)}</span> spots remaining!
-        </div>
-
-        <div className="mt-6 flex flex-col gap-3">
-          <button 
-            onClick={handleAction}
-            className="w-full rounded-xl bg-gradient-to-r from-sky-400 to-blue-600 py-3 font-bold text-white shadow-lg shadow-sky-500/25 transition-all hover:scale-[1.02] hover:shadow-sky-500/40"
-          >
-            Claim Offer Now
-          </button>
-          <button 
-            onClick={handleClose}
-            className="w-full rounded-xl py-3 font-semibold text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
-          >
-            Maybe Later
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function RankBadge({ rank }: { rank: number }) {
   if (rank === 1) {
     return (
@@ -602,8 +517,6 @@ function DashboardPageContent() {
   const [onlineMembers, setOnlineMembers] = useState<MemberItem[]>([])
   const [newMembers, setNewMembers] = useState<MemberItem[]>([])
   const [showOnlineMembers, setShowOnlineMembers] = useState(false)
-  
-  const [totalClaims] = useState(15)
 
   const [liveStats, setLiveStats] = useState({
     onlineUsers: 0,
@@ -782,9 +695,6 @@ function DashboardPageContent() {
       
       {/* 🏆 WEEKLY LEADERBOARD POPUP */}
       <WeeklyLeaderboardModal />
-
-      {/* 💎 PROMO OFFER POPUP */}
-      <PromoModal totalClaims={totalClaims} />
 
       <div className="relative min-h-screen bg-[#030712] text-slate-100 selection:bg-cyan-500 selection:text-slate-950">
         {/* Glowing Background Elements */}

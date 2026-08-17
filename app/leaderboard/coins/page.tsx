@@ -59,13 +59,13 @@ export default async function CoinsLeaderboardPage() {
   // --- FETCH DATA ---
   const [currentRes, lastRes] = await Promise.all([
     supabase
-      .from("coin_transactions")
+      .from("coin_history")
       .select("user_id, amount, profiles(username)")
       .gte("created_at", currentStartIso)
       .gt("amount", 0)
       .neq("type", "weekly_reward"),
     supabase
-      .from("coin_transactions")
+      .from("coin_history")
       .select("user_id, amount, profiles(username)")
       .gte("created_at", lastStartIso)
       .lt("created_at", currentStartIso)

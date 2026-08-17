@@ -1,18 +1,68 @@
+"use client"
+
 import Link from "next/link"
 import SiteHeader from "@/app/components/SiteHeader"
+import { useState } from "react"
+import { createClient } from "@/lib/supabase/client"
 
+// Note: Metadata exports are not allowed in "use client" components in Next.js.
+// If you need this metadata for SEO, you should move this form into a separate 
+// Client Component (e.g., SupportForm.tsx) and import it into a Server Component page.
+/*
 export const metadata = {
   title: "Contact Us | JB Collections",
   description:
     "Contact JB Collections for account concerns, membership, coins, rewards, password recovery, Telegram support, and other concerns.",
 }
+*/
 
 export default function ContactPage() {
+  const [message, setMessage] = useState("")
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle")
+  
+  const supabase = createClient()
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!message.trim()) return
+
+    setStatus("loading")
+
+    try {
+      // 1. Automatically fetch the current user's ID and Email
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser()
+
+      if (authError || !user) throw new Error("Not authenticated")
+
+      // 2. Insert the query into a new 'support_queries' table
+      const { error: insertError } = await supabase
+        .from("support_queries")
+        .insert({
+          user_id: user.id,
+          user_email: user.email,
+          message: message.trim(),
+          is_resolved: false,
+        })
+
+      if (insertError) throw insertError
+
+      setStatus("success")
+      setMessage("")
+    } catch (error) {
+      console.error("Failed to send query:", error)
+      setStatus("error")
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#020617] text-slate-100">
       <SiteHeader />
 
       <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+        {/* Header Section */}
         <section className="overflow-hidden rounded-[32px] border border-blue-500/20 bg-slate-900 shadow-[0_24px_70px_rgba(2,6,23,0.45)]">
           <div className="relative">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.22),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(99,102,241,0.22),transparent_34%)]" />
@@ -35,6 +85,48 @@ export default function ContactPage() {
           </div>
         </section>
 
+        {/* NEW: Automated Support Form */}
+        <section className="mt-8 rounded-[28px] border border-blue-500/30 bg-slate-900/90 p-6 shadow-[0_18px_40px_rgba(2,6,23,0.34)] sm:p-8">
+          <h2 className="text-2xl font-black text-white">Send an Automated Query</h2>
+          <p className="mt-2 text-sm text-slate-400">
+            Send a direct message to our support team. Your account details are automatically attached so we can assist you faster.
+          </p>
+
+          <form onSubmit={handleSubmit} className="mt-6 grid gap-4">
+            <textarea
+              rows={4}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Describe your issue or concern here..."
+              disabled={status === "loading"}
+              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-5 py-4 text-sm text-slate-200 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+              required
+            />
+            
+            <div className="flex items-center gap-4">
+              <button
+                type="submit"
+                disabled={status === "loading" || !message.trim()}
+                className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {status === "loading" ? "Sending..." : "Submit Query"}
+              </button>
+              
+              {status === "success" && (
+                <span className="text-sm font-bold text-green-400">
+                  Message sent successfully! We will reply soon.
+                </span>
+              )}
+              {status === "error" && (
+                <span className="text-sm font-bold text-red-400">
+                  Failed to send message. Please try again.
+                </span>
+              )}
+            </div>
+          </form>
+        </section>
+
+        {/* Existing Content Blocks */}
         <section className="mt-8 grid gap-5 md:grid-cols-2">
           <div className="rounded-[28px] border border-slate-800 bg-slate-900/90 p-6 shadow-[0_18px_40px_rgba(2,6,23,0.34)]">
             <h2 className="text-xl font-black text-white">

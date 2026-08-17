@@ -45,9 +45,10 @@ export default function LayoutShell({
 }) {
   const pathname = usePathname() ?? ""
 
-  // Hide navigation header on landing page, login, and signup pages
+  // Hide navigation header on landing page, admin pages, login, and signup pages
   const hideHeader =
     pathname === "/" ||
+    pathname.startsWith("/admin") ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/signup")
 
@@ -59,6 +60,7 @@ export default function LayoutShell({
 
   const hideFooter =
     pathname === "/" ||
+    pathname.startsWith("/admin") ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/signup")
 
@@ -132,7 +134,7 @@ export default function LayoutShell({
                 Refund Policy
               </Link>
               <Link href="/contact" className="transition hover:text-white">
-                 Contact Us
+                Contact Us
               </Link>
             </div>
 

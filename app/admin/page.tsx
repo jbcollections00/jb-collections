@@ -10,15 +10,7 @@ type DashboardStat = {
   totalCategories: number
   totalFiles: number
   totalMessages: number
-  pendingUpgrades: number
   pendingCoinPurchases: number
-}
-
-type RecentItem = {
-  id: string
-  label: string
-  sublabel: string
-  href: string
 }
 
 type QuickAction = {
@@ -27,13 +19,6 @@ type QuickAction = {
   href: string
   icon: string
   tone: string
-}
-
-type BasicStatusRow = {
-  id: string
-  full_name?: string | null
-  created_at?: string | null
-  status?: string | null
 }
 
 const quickActions: QuickAction[] = [
@@ -45,13 +30,6 @@ const quickActions: QuickAction[] = [
     tone: "from-sky-500 to-blue-600",
   },
   {
-    title: "Review Payments",
-    description: "Check upgrade requests and payment submissions.",
-    href: "/admin/upgrades",
-    icon: "💰",
-    tone: "from-emerald-500 to-teal-600",
-  },
-  {
     title: "Coin Purchases",
     description: "Approve or monitor JB Coin purchase activity.",
     href: "/admin/coin-purchases",
@@ -59,10 +37,10 @@ const quickActions: QuickAction[] = [
     tone: "from-amber-500 to-orange-600",
   },
   {
-    title: "Open Messages",
-    description: "Jump into admin conversations and support chat.",
+    title: "Announcements",
+    description: "Send and view global announcements and support chat.",
     href: "/admin/messages",
-    icon: "💬",
+    icon: "📢",
     tone: "from-violet-500 to-fuchsia-600",
   },
   {
@@ -83,22 +61,6 @@ const quickActions: QuickAction[] = [
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat().format(value)
-}
-
-function formatDate(value?: string | null) {
-  if (!value) return "Recently"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Recently"
-  return date.toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  })
-}
-
-function isPendingStatus(status?: string | null) {
-  const value = String(status || "").trim().toLowerCase()
-  return value === "" || value === "pending"
 }
 
 function StatCard({
@@ -156,7 +118,6 @@ export default function AdminDashboardPage() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
 
-  const [loading, setLoading] = useState(true)
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [adminName, setAdminName] = useState("Admin")
   const [stats, setStats] = useState<DashboardStat>({
@@ -164,10 +125,8 @@ export default function AdminDashboardPage() {
     totalCategories: 0,
     totalFiles: 0,
     totalMessages: 0,
-    pendingUpgrades: 0,
     pendingCoinPurchases: 0,
   })
-  const [recentRows, setRecentRows] = useState<RecentItem[]>([])
 
   useEffect(() => {
     void loadDashboard()
@@ -175,7 +134,6 @@ export default function AdminDashboardPage() {
 
   async function loadDashboard() {
     try {
-      setLoading(true)
       setCheckingAuth(true)
 
       const {
@@ -194,7 +152,6 @@ export default function AdminDashboardPage() {
         categoriesResult,
         filesResult,
         messagesResult,
-        upgradesResult,
         coinPurchasesResult,
       ] = await Promise.all([
         supabase.from("profiles").select("full_name, name, username").eq("id", user.id).maybeSingle(),
@@ -203,15 +160,8 @@ export default function AdminDashboardPage() {
         supabase.from("files").select("id", { count: "exact", head: true }),
         supabase.from("conversation_messages").select("id", { count: "exact", head: true }),
         supabase
-          .from("upgrades")
-          .select("id, full_name, created_at, status", { count: "exact" })
-          .order("created_at", { ascending: false })
-          .limit(5),
-        supabase
           .from("coin_purchases")
-          .select("id, full_name, created_at, status", { count: "exact" })
-          .order("created_at", { ascending: false })
-          .limit(5),
+          .select("id, status", { count: "exact" }),
       ])
 
       const profile = profileResult.data as
@@ -225,47 +175,21 @@ export default function AdminDashboardPage() {
           "Admin"
       )
 
-      const upgradeRows = (Array.isArray(upgradesResult.data) ? upgradesResult.data : []) as BasicStatusRow[]
-      const coinRows = (Array.isArray(coinPurchasesResult.data) ? coinPurchasesResult.data : []) as BasicStatusRow[]
+      const coinRows = Array.isArray(coinPurchasesResult.data) ? coinPurchasesResult.data : []
 
       setStats({
         totalUsers: usersResult.count || 0,
         totalCategories: categoriesResult.count || 0,
         totalFiles: filesResult.count || 0,
         totalMessages: messagesResult.count || 0,
-        pendingUpgrades: upgradeRows.filter((row) => isPendingStatus(row.status)).length,
-        pendingCoinPurchases: coinRows.filter((row) => isPendingStatus(row.status)).length,
+        pendingCoinPurchases: coinRows.filter(
+          (row) => !row.status || String(row.status).toLowerCase() === "pending"
+        ).length,
       })
-
-      const recentUpgradeItems: RecentItem[] = upgradeRows.slice(0, 3).map((row) => ({
-        id: `upgrade-${row.id}`,
-        label: row.full_name?.trim() || "Upgrade Request",
-        sublabel: `${isPendingStatus(row.status) ? "Pending" : row.status || "Updated"} • ${formatDate(row.created_at)}`,
-        href: "/admin/upgrades",
-      }))
-
-      const recentCoinItems: RecentItem[] = coinRows.slice(0, 3).map((row) => ({
-        id: `coin-${row.id}`,
-        label: row.full_name?.trim() || "Coin Purchase",
-        sublabel: `${isPendingStatus(row.status) ? "Pending" : row.status || "Updated"} • ${formatDate(row.created_at)}`,
-        href: "/admin/coin-purchases",
-      }))
-
-      setRecentRows([...recentUpgradeItems, ...recentCoinItems].slice(0, 6))
     } catch (error) {
       console.error("Failed to load admin dashboard:", error)
-      setStats({
-        totalUsers: 0,
-        totalCategories: 0,
-        totalFiles: 0,
-        totalMessages: 0,
-        pendingUpgrades: 0,
-        pendingCoinPurchases: 0,
-      })
-      setRecentRows([])
     } finally {
       setCheckingAuth(false)
-      setLoading(false)
     }
   }
 
@@ -286,94 +210,46 @@ export default function AdminDashboardPage() {
         <section className="mb-8 overflow-hidden rounded-[30px] border border-slate-200 bg-[#04122b] shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
           <div className="relative overflow-hidden">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.34),transparent_32%),radial-gradient(circle_at_top_right,rgba(99,102,241,0.34),transparent_28%),linear-gradient(135deg,#071533_0%,#020817_48%,#071a4a_100%)]" />
-            <div className="absolute inset-y-0 right-0 w-[42%] bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.20),transparent_62%)]" />
 
             <div className="relative px-5 py-7 sm:px-8 sm:py-10 lg:px-10 lg:py-12">
-              <div className="grid gap-8 xl:grid-cols-[minmax(0,1.35fr)_420px] xl:items-center">
-                <div>
-                  <div className="inline-flex items-center rounded-full border border-cyan-400/25 bg-cyan-500/10 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.28em] text-cyan-200 shadow-[0_8px_24px_rgba(6,182,212,0.18)]">
-                    Admin Control Center
-                  </div>
-
-                  <h1 className="mt-6 max-w-5xl text-4xl font-black leading-[0.95] tracking-tight text-white sm:text-5xl lg:text-6xl">
-                    Welcome back,{" "}
-                    <span className="bg-gradient-to-r from-cyan-300 via-sky-400 to-blue-500 bg-clip-text text-transparent">
-                      {adminName}
-                    </span>
-                  </h1>
-
-                  <p className="mt-5 max-w-3xl text-base leading-8 text-slate-300 sm:text-lg">
-                    Manage categories, files, payments, coin purchases, messages, and users from one premium
-                    command center.
-                  </p>
-
-                  <div className="mt-7 flex flex-wrap gap-3">
-                    <Link
-                      href="/admin/upgrades"
-                      className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-sky-500 to-violet-600 px-6 py-3 text-sm font-bold text-white shadow-[0_12px_30px_rgba(59,130,246,0.28)] transition hover:scale-[1.02]"
-                    >
-                      Review Payments
-                    </Link>
-
-                    <Link
-                      href="/admin/coin-purchases"
-                      className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/10 px-6 py-3 text-sm font-bold text-white shadow-[0_10px_24px_rgba(15,23,42,0.14)] backdrop-blur transition hover:bg-white/15"
-                    >
-                      Check Coin Purchases
-                    </Link>
-
-                    <Link
-                      href="/admin/users"
-                      className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/10 px-6 py-3 text-sm font-bold text-white shadow-[0_10px_24px_rgba(15,23,42,0.14)] backdrop-blur transition hover:bg-white/15"
-                    >
-                      Manage Users
-                    </Link>
-                  </div>
+              <div>
+                <div className="inline-flex items-center rounded-full border border-cyan-400/25 bg-cyan-500/10 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.28em] text-cyan-200 shadow-[0_8px_24px_rgba(6,182,212,0.18)]">
+                  Admin Control Center
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="rounded-[24px] border border-white/12 bg-white/10 px-5 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-md">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-cyan-100/75">
-                      Total Users
-                    </div>
-                    <div className="mt-3 text-3xl font-black text-white sm:text-4xl">
-                      {formatNumber(stats.totalUsers)}
-                    </div>
-                  </div>
+                <h1 className="mt-6 max-w-5xl text-4xl font-black leading-[0.95] tracking-tight text-white sm:text-5xl lg:text-6xl">
+                  Welcome back,{" "}
+                  <span className="bg-gradient-to-r from-cyan-300 via-sky-400 to-blue-500 bg-clip-text text-transparent">
+                    {adminName}
+                  </span>
+                </h1>
 
-                  <div className="rounded-[24px] border border-white/12 bg-white/10 px-5 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-md">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-cyan-100/75">
-                      Total Files
-                    </div>
-                    <div className="mt-3 text-3xl font-black text-white sm:text-4xl">
-                      {formatNumber(stats.totalFiles)}
-                    </div>
-                  </div>
+                <p className="mt-5 max-w-3xl text-base leading-8 text-slate-300 sm:text-lg">
+                  Manage categories, files, coin purchases, announcements, and users from one premium command center.
+                </p>
 
-                  <div className="rounded-[24px] border border-white/12 bg-white/10 px-5 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-md">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-cyan-100/75">
-                      Pending Payments
-                    </div>
-                    <div className="mt-3 text-3xl font-black text-white sm:text-4xl">
-                      {formatNumber(stats.pendingUpgrades)}
-                    </div>
-                  </div>
+                <div className="mt-7 flex flex-wrap gap-3">
+                  <Link
+                    href="/admin/coin-purchases"
+                    className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-3 text-sm font-bold text-white shadow-[0_12px_30px_rgba(245,158,11,0.28)] transition hover:scale-[1.02]"
+                  >
+                    Check Coin Purchases
+                  </Link>
 
-                  <div className="rounded-[24px] border border-white/12 bg-white/10 px-5 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-md">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-cyan-100/75">
-                      Pending Coin Buys
-                    </div>
-                    <div className="mt-3 text-3xl font-black text-white sm:text-4xl">
-                      {formatNumber(stats.pendingCoinPurchases)}
-                    </div>
-                  </div>
+                  <Link
+                    href="/admin/users"
+                    className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/10 px-6 py-3 text-sm font-bold text-white shadow-[0_10px_24px_rgba(15,23,42,0.14)] backdrop-blur transition hover:bg-white/15"
+                  >
+                    Manage Users
+                  </Link>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {/* Stat Cards */}
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <StatCard
             label="Total Users"
             value={formatNumber(stats.totalUsers)}
@@ -399,25 +275,19 @@ export default function AdminDashboardPage() {
             accent="from-fuchsia-500 to-pink-600"
           />
           <StatCard
-            label="Pending Payments"
-            value={formatNumber(stats.pendingUpgrades)}
-            icon="💰"
-            accent="from-emerald-500 to-green-600"
-          />
-          <StatCard
-            label="Pending Coin Purchases"
+            label="Pending Coin Buys"
             value={formatNumber(stats.pendingCoinPurchases)}
             icon="🪙"
             accent="from-amber-500 to-orange-600"
           />
         </section>
 
-        <div className="mt-8 grid gap-8 xl:grid-cols-[1.25fr_0.95fr]">
+        <div className="mt-8">
           <PanelCard
             title="Quick Actions"
             subtitle="Open the most important admin pages faster."
           >
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               {quickActions.map((action) => (
                 <Link
                   key={action.href}
@@ -441,42 +311,6 @@ export default function AdminDashboardPage() {
                 </Link>
               ))}
             </div>
-          </PanelCard>
-
-          <PanelCard
-            title="Recent Activity"
-            subtitle="Latest payment and coin purchase entries."
-          >
-            {loading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 5 }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
-                  >
-                    <div className="h-4 w-40 animate-pulse rounded bg-slate-200" />
-                    <div className="mt-2 h-3 w-28 animate-pulse rounded bg-slate-200" />
-                  </div>
-                ))}
-              </div>
-            ) : recentRows.length === 0 ? (
-              <div className="rounded-[22px] border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center text-sm font-medium text-slate-500">
-                No recent admin activity found yet.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {recentRows.map((item) => (
-                  <Link
-                    key={item.id}
-                    href={item.href}
-                    className="block rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 transition hover:border-slate-300 hover:bg-white hover:shadow-sm"
-                  >
-                    <div className="text-base font-bold text-slate-950">{item.label}</div>
-                    <div className="mt-1 text-sm text-slate-500">{item.sublabel}</div>
-                  </Link>
-                ))}
-              </div>
-            )}
           </PanelCard>
         </div>
       </div>

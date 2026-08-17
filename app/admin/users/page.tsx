@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import AdminHeader from "@/app/components/AdminHeader"
 import { createClient } from "@/lib/supabase/client"
 
 type UserActivity = {
@@ -734,8 +733,6 @@ export default function AdminUsersPage() {
 
   return (
     <div className="min-h-screen bg-[#020617] text-slate-100">
-      <AdminHeader />
-
       <div className="mx-auto w-full max-w-[1800px] px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <section className="mb-6 overflow-hidden rounded-[32px] border border-blue-500/20 bg-[#04122b] shadow-[0_20px_55px_rgba(15,23,42,0.22)]">
           <div className="relative overflow-hidden">

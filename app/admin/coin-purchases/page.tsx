@@ -16,7 +16,6 @@ import {
   Wallet,
   XCircle,
 } from "lucide-react"
-import AdminHeader from "@/app/components/AdminHeader"
 import AdminToast from "@/app/components/AdminToast"
 import { createClient } from "@/lib/supabase/client"
 
@@ -417,8 +416,6 @@ export default function AdminCoinPurchasesPage() {
       `}</style>
 
       <div className="mx-auto w-full max-w-[1850px]">
-        <AdminHeader />
-
         <section className="relative mt-4 overflow-hidden rounded-[32px] border border-white/10 bg-slate-900/75 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.18),transparent_32%),radial-gradient(circle_at_top_right,rgba(99,102,241,0.18),transparent_28%),linear-gradient(135deg,#0f172a_0%,#0b1220_42%,#111827_100%)]" />
 
