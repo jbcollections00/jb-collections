@@ -138,25 +138,12 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // --- B. TOP DOWNLOADERS ---
-    // Subukang i-query ang 'downloads' table (fallback sa 'file_downloads' kung sakali)
-    let downloadLogs = null
-    const { data: dlData, error: dlError } = await supabase
-      .from("downloads")
+    // --- B. TOP DOWNLOADERS (Inayos: Direct 'download_logs' Table Query) ---
+    const { data: downloadLogs } = await supabase
+      .from("download_logs")
       .select("user_id")
       .gte("created_at", startIso)
       .lt("created_at", endIso)
-
-    if (!dlError) {
-      downloadLogs = dlData
-    } else {
-      const { data: fDlData } = await supabase
-        .from("file_downloads")
-        .select("user_id")
-        .gte("created_at", startIso)
-        .lt("created_at", endIso)
-      downloadLogs = fDlData
-    }
 
     const downloadersWinners = []
     if (downloadLogs && downloadLogs.length > 0) {

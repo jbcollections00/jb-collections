@@ -41,20 +41,22 @@ export default function HomePage() {
   const router = useRouter()
 
   const handleContinue = () => {
-    // Check if user is logged in via cookies, localStorage, or auth session
-    const isLoggedIn = 
-      typeof window !== "undefined" && 
-      (localStorage.getItem("token") !== null || localStorage.getItem("user") !== null)
-
-    if (isLoggedIn) {
-      router.push("/dashboard")
-    } else {
-      router.push("/login")
+    // Ligtas na pag-check sa client-side storage
+    if (typeof window !== "undefined") {
+      const hasToken = localStorage.getItem("token")
+      const hasUser = localStorage.getItem("user")
+      
+      if (hasToken || hasUser) {
+        router.push("/dashboard")
+      } else {
+        router.push("/login")
+      }
     }
   }
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white flex items-center justify-center">
+      {/* Background Gradient */}
       <div className="absolute inset-0 bg-[linear-gradient(135deg,#020617_0%,#0f172a_40%,#111827_100%)]" />
 
       {/* Animated Glow Blobs */}
@@ -70,6 +72,7 @@ export default function HomePage() {
         />
       </div>
 
+      {/* Grid Pattern Overlay */}
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.12)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.12)_1px,transparent_1px)] bg-[size:40px_40px] opacity-[0.06]" />
 
       {/* Floating Coins Effect */}
@@ -86,11 +89,12 @@ export default function HomePage() {
 
         <img
           src="/jb-coin.png"
-          alt="JB Coin"
+          alt="Center Rotating Coin"
           className="absolute left-1/2 top-1/2 w-40 sm:w-52 lg:w-64 -translate-x-1/2 -translate-y-1/2 opacity-20 animate-spin-slow drop-shadow-[0_0_40px_rgba(255,215,0,0.5)]"
         />
       </div>
 
+      {/* Main Content Card */}
       <main className="relative z-10 w-full max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="relative w-full overflow-hidden rounded-[34px] border border-white/10 bg-white/10 p-8 text-center shadow-[0_20px_100px_rgba(0,0,0,0.50)] backdrop-blur-xl sm:p-12 lg:p-16">
           
@@ -127,7 +131,6 @@ export default function HomePage() {
               Continue
             </button>
           </div>
-
         </div>
       </main>
 

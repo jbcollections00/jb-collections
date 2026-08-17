@@ -5,25 +5,31 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
-// Helper: Siguraduhing makuha ang Lunes 12:00 AM ng kasalukuyang linggo
-function getMondayStart(): string {
+// Helper: Siguraduhing makuha ang Lunes 12:00 AM ng kasalukuyang linggo (Manila Time)
+function getManilaMondayStart(): string {
   const now = new Date()
-  const day = now.getDay() // 0 = Sunday, 1 = Monday, ...
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1) // Set to Monday
+  const manilaNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Manila" }))
   
-  const monday = new Date(now)
-  monday.setDate(diff)
+  const day = manilaNow.getDay() // 0 = Sunday, 1 = Monday, ...
+  const diff = day === 0 ? 6 : day - 1 // Kunin ang diperensya pabalik sa Lunes
+  
+  const monday = new Date(manilaNow)
+  monday.setDate(manilaNow.getDate() - diff)
   monday.setHours(0, 0, 0, 0)
   
-  return monday.toISOString()
+  // I-format nang tama gamit ang +08:00 (Philippine Time)
+  const y = monday.getFullYear()
+  const m = String(monday.getMonth() + 1).padStart(2, "0")
+  const date = String(monday.getDate()).padStart(2, "0")
+  return `${y}-${m}-${date}T00:00:00+08:00`
 }
 
 export async function GET() {
   try {
     const supabase = await createClient()
 
-    // 1. Kunin ang Lunes 12:00 AM date string (mula sa RPC o fallback JS function)
-    let weekStart = getMondayStart()
+    // 1. Kunin ang Lunes 12:00 AM date string
+    let weekStart = getManilaMondayStart()
 
     try {
       const { data: weekData, error: weekError } = await supabase.rpc("get_week_start")
@@ -50,16 +56,16 @@ export async function GET() {
           avatar_url
         )
       `)
-      .eq("week_start", weekStart)
+      .gte("week_start", weekStart) // Siguraduhing tugma sa Manila Time format
       .order("total_coins", { ascending: false })
       .limit(50)
 
     if (!viewError && viewData && viewData.length > 0) {
       leaderboardData = viewData
     } else {
-      // Fallback: Direktang pagbasa mula sa 'coin_transactions' table
+      // Fallback: Direktang pagbasa mula sa 'coin_transactions' table (Pinakaligtas)
       const { data: txData, error: txError } = await supabase
-        .from("coin_transactions")
+        .from("coin_history")
         .select(`
           user_id,
           amount,
@@ -83,6 +89,8 @@ export async function GET() {
 
       txData?.forEach((tx: any) => {
         const uid = tx.user_id
+        if (!uid) return
+
         if (!userMap[uid]) {
           userMap[uid] = {
             user_id: uid,
@@ -95,7 +103,7 @@ export async function GET() {
 
       leaderboardData = Object.values(userMap).sort(
         (a: any, b: any) => b.total_coins - a.total_coins
-      )
+      ).slice(0, 50) // Kunin lang ang top 50
     }
 
     // 3. Format response at lagyan ng Rank at Prize Metadata
