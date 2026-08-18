@@ -1,6 +1,8 @@
 import "./globals.css"
 import type { Metadata } from "next"
 import Script from "next/script"
+import { cookies } from "next/headers"
+import { createServerClient } from "@supabase/ssr"
 import LayoutShell from "./components/LayoutShell"
 import BackgroundAds from "@/app/components/BackgroundAds"
 import ScriptElementGuard from "./components/ScriptElementGuard"
@@ -63,78 +65,121 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
+// Helper function to check if the current user is an admin
+async function getIsAdmin() {
+  try {
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
+        },
+      }
+    )
+
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) return false
+
+    // Check the profiles table using your existing schema
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_admin, role")
+      .eq("id", user.id)
+      .single()
+
+    return profile?.is_admin === true || profile?.role === "admin"
+  } catch (error) {
+    console.error("Error checking admin status:", error)
+    return false
+  }
+}
+
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const isAdmin = await getIsAdmin()
+
   return (
     <html lang="en">
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
-        {/* ✅ Google AdSense Script */}
-        <Script
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6646475793737493"
-          crossOrigin="anonymous"
-          strategy="afterInteractive"
-        />
-
-        {/* 🚀 Effective CPM Network Script */}
-        <Script
-          id="effective-cpm-ad"
-          src="https://pl30860037.effectivecpmnetwork.com/ab/fc/2b/abfc2b67797cad69eeb017f892ecfcd9.js"
-          strategy="afterInteractive"
-        />
-
-        {/* 🛡️ Client-side safe guard component */}
+        
+        {/* 🛡️ Client-side safe guard component (Runs for everyone) */}
         <ScriptElementGuard />
 
+        {/* Core Layout (Runs for everyone) */}
         <LayoutShell>{children}</LayoutShell>
 
-        {/* 🚨 Anti-AdBlock Detection Modal */}
-        <AdBlockDetector />
+        {/* 🛑 CONDITIONALLY RENDER ADS AND DETECTORS (Runs ONLY if NOT admin) */}
+        {!isAdmin && (
+          <>
+            {/* ✅ Google AdSense Script */}
+            <Script
+              async
+              src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6646475793737493"
+              crossOrigin="anonymous"
+              strategy="afterInteractive"
+            />
 
-        {/* 🔥 Background & Popunder Ads */}
-        <BackgroundAds />
+            {/* 🚀 Effective CPM Network Script */}
+            <Script
+              id="effective-cpm-ad"
+              src="https://pl30860037.effectivecpmnetwork.com/ab/fc/2b/abfc2b67797cad69eeb017f892ecfcd9.js"
+              strategy="afterInteractive"
+            />
 
-        {/* ExoClick Popunder Zone: 6002936 */}
-        <Script
-          id="exoclick-popunder"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                var adConfig = {
-                  "ads_host": "a.pemsrv.com",
-                  "syndication_host": "s.pemsrv.com",
-                  "idzone": 6002936,
-                  "popup_fallback": false,
-                  "popup_force": false,
-                  "chrome_enabled": true,
-                  "new_tab": false,
-                  "frequency_period": 1440,
-                  "frequency_count": 1,
-                  "trigger_method": 3,
-                  "trigger_class": "",
-                  "trigger_delay": 0,
-                  "capping_enabled": true,
-                  "tcf_enabled": true,
-                  "agego_cross_site_enabled": true,
-                  "only_inline": false
-                };
+            {/* 🚨 Anti-AdBlock Detection Modal */}
+            <AdBlockDetector />
 
-                var s = document.createElement("script");
-                s.type = "text/javascript";
-                s.async = true;
-                s.src = "https://a.pemsrv.com/popunder1000.js";
-                for (var key in adConfig) {
-                  s.setAttribute("data-exo-" + key, adConfig[key]);
-                }
-                document.body.appendChild(s);
-              })();
-            `,
-          }}
-        />
+            {/* 🔥 Background & Popunder Ads */}
+            <BackgroundAds />
+
+            {/* ExoClick Popunder Zone: 6002936 */}
+            <Script
+              id="exoclick-popunder"
+              strategy="afterInteractive"
+              dangerouslySetInnerHTML={{
+                __html: `
+                  (function() {
+                    var adConfig = {
+                      "ads_host": "a.pemsrv.com",
+                      "syndication_host": "s.pemsrv.com",
+                      "idzone": 6002936,
+                      "popup_fallback": false,
+                      "popup_force": false,
+                      "chrome_enabled": true,
+                      "new_tab": false,
+                      "frequency_period": 1440,
+                      "frequency_count": 1,
+                      "trigger_method": 3,
+                      "trigger_class": "",
+                      "trigger_delay": 0,
+                      "capping_enabled": true,
+                      "tcf_enabled": true,
+                      "agego_cross_site_enabled": true,
+                      "only_inline": false
+                    };
+
+                    var s = document.createElement("script");
+                    s.type = "text/javascript";
+                    s.async = true;
+                    s.src = "https://a.pemsrv.com/popunder1000.js";
+                    for (var key in adConfig) {
+                      s.setAttribute("data-exo-" + key, adConfig[key]);
+                    }
+                    document.body.appendChild(s);
+                  })();
+                `,
+              }}
+            />
+          </>
+        )}
       </body>
     </html>
   )
