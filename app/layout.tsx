@@ -4,6 +4,7 @@ import Script from "next/script"
 import LayoutShell from "./components/LayoutShell"
 import BackgroundAds from "@/app/components/BackgroundAds"
 import ScriptElementGuard from "./components/ScriptElementGuard"
+import AdBlockDetector from "./components/AdBlockDetector"
 
 function getSiteUrl() {
   return (
@@ -89,6 +90,9 @@ export default function RootLayout({
         <ScriptElementGuard />
 
         <LayoutShell>{children}</LayoutShell>
+
+        {/* 🚨 Anti-AdBlock Detection Modal */}
+        <AdBlockDetector />
 
         {/* 🔥 Background & Popunder Ads */}
         <BackgroundAds />
