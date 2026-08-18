@@ -628,7 +628,14 @@ function DashboardPageContent() {
       setTrendingFiles(Array.isArray(data.trending) ? data.trending : [])
       setTopFiles(Array.isArray(data.top) ? data.top : [])
       setLatestFiles(Array.isArray(data.latest) ? data.latest : [])
-      setRecentDownloads(Array.isArray(data.recent_downloads) ? data.recent_downloads : [])
+      
+      // Fixed: Filter recent downloads to ensure unique files
+      const rawRecent = Array.isArray(data.recent_downloads) ? data.recent_downloads : []
+      const uniqueRecentDownloads = rawRecent.filter(
+        (file, index, self) => index === self.findIndex((t) => t.id === file.id)
+      )
+      setRecentDownloads(uniqueRecentDownloads)
+
     } catch (error) {
       console.error("Error fetching homepage sections:", error)
       setTrendingFiles([])
