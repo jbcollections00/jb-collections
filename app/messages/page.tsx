@@ -2,9 +2,18 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Lock, Megaphone, ArrowLeft, Trash2 } from "lucide-react"
+import { Lock, Megaphone, ArrowLeft, Trash2, Paperclip, Download } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import SiteHeader from "@/app/components/SiteHeader"
+
+type AttachmentItem = {
+  id?: string
+  name?: string
+  file_name?: string
+  title?: string
+  url?: string
+  file_path?: string
+}
 
 type UserMessage = {
   id: string
@@ -14,6 +23,8 @@ type UserMessage = {
   body: string
   created_at: string
   is_read?: boolean
+  attachments?: AttachmentItem[] | string[] | null
+  attachment_url?: string | null
 }
 
 const STORAGE_KEY = "jb_deleted_message_ids"
@@ -38,6 +49,14 @@ function saveDismissedId(id: string) {
   } catch (err) {
     console.error("Failed to save deleted message state:", err)
   }
+}
+
+function isImageFile(url: string, name?: string) {
+  const fileStr = (name || url).toLowerCase()
+  return (
+    /\.(jpeg|jpg|gif|png|webp|svg)(\?.*)?$/i.test(fileStr) ||
+    url.startsWith("data:image/")
+  )
 }
 
 function MessagesPageContent() {
@@ -119,7 +138,6 @@ function MessagesPageContent() {
 
   async function loadMessages(activeUserId: string) {
     try {
-      // Query primary 'messages' table directly with fallback handling
       const { data, error: fetchErr } = await supabase
         .from("messages")
         .select("*")
@@ -136,11 +154,9 @@ function MessagesPageContent() {
         loadedList = (viewData as UserMessage[]) || []
       }
 
-      // Filter out locally deleted IDs
       const dismissed = getDismissedIds()
       const filteredList = loadedList.filter((msg) => !dismissed.includes(msg.id))
 
-      // Deduplicate broadcasts
       const uniqueList: UserMessage[] = []
       const seen = new Set<string>()
 
@@ -189,14 +205,11 @@ function MessagesPageContent() {
 
     setIsDeleting(true)
 
-    // 1. Save local state so refresh keeps it hidden
     saveDismissedId(targetId)
 
-    // 2. Attempt Supabase delete across tables
     await supabase.from("messages").delete().eq("id", targetId)
     await supabase.from("user_messages").delete().eq("id", targetId)
 
-    // 3. Update UI state
     const remainingMessages = messages.filter((m) => m.id !== targetId)
     setMessages(remainingMessages)
 
@@ -246,6 +259,47 @@ function MessagesPageContent() {
   function getTitle(msg: UserMessage | null) {
     if (!msg) return "Select an Announcement"
     return msg.title || msg.subject || "Announcement"
+  }
+
+  function parseAttachments(msg: UserMessage): AttachmentItem[] {
+    const list: AttachmentItem[] = []
+
+    if (msg.attachments) {
+      if (typeof msg.attachments === "string") {
+        const rawStr: string = msg.attachments
+        try {
+          const parsed = JSON.parse(rawStr)
+          if (Array.isArray(parsed)) {
+            parsed.forEach((item) => {
+              if (typeof item === "string") {
+                list.push({ url: item, name: item.split("/").pop() })
+              } else if (item && typeof item === "object") {
+                list.push(item as AttachmentItem)
+              }
+            })
+          }
+        } catch {
+          list.push({ url: rawStr, name: rawStr.split("/").pop() })
+        }
+      } else if (Array.isArray(msg.attachments)) {
+        msg.attachments.forEach((item) => {
+          if (typeof item === "string") {
+            list.push({ url: item, name: item.split("/").pop() })
+          } else if (item && typeof item === "object") {
+            list.push(item as AttachmentItem)
+          }
+        })
+      }
+    }
+
+    if (msg.attachment_url && !list.some((a) => a.url === msg.attachment_url)) {
+      list.push({
+        url: msg.attachment_url,
+        name: msg.attachment_url.split("/").pop() || "Attachment",
+      })
+    }
+
+    return list
   }
 
   return (
@@ -320,7 +374,7 @@ function MessagesPageContent() {
                   !showMobileList ? "flex" : "hidden lg:flex"
                 }`}
               >
-                {/* Header Pane with Delete Button */}
+                {/* Header Pane */}
                 <div className="border-b border-white/10 bg-[#0f172a] px-4 py-4 sm:px-6 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <button
@@ -341,7 +395,6 @@ function MessagesPageContent() {
                     </div>
                   </div>
 
-                  {/* Delete Button */}
                   {selectedMessage && (
                     <button
                       onClick={() => handleDeleteMessage(selectedMessage.id)}
@@ -365,6 +418,81 @@ function MessagesPageContent() {
                       <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">
                         {renderMessageBody(selectedMessage.body)}
                       </p>
+
+                      {/* Attachment List / Image Previews */}
+                      {(() => {
+                        const attachmentsList = parseAttachments(selectedMessage)
+                        if (!attachmentsList.length) return null
+
+                        return (
+                          <div className="mt-6 border-t border-white/10 pt-4 space-y-3">
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                              <Paperclip size={13} />
+                              <span>Attachments ({attachmentsList.length})</span>
+                            </div>
+
+                            <div className="space-y-3">
+                              {attachmentsList.map((file, idx) => {
+                                const fileName = file.name || file.file_name || file.title || "Attachment"
+                                const fileUrl = file.url || file.file_path || "#"
+                                const isImg = isImageFile(fileUrl, fileName)
+
+                                if (isImg) {
+                                  return (
+                                    <div
+                                      key={file.id || idx}
+                                      className="group relative overflow-hidden rounded-xl border border-white/10 bg-[#0f172a]"
+                                    >
+                                      <a
+                                        href={fileUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="block overflow-hidden"
+                                      >
+                                        <img
+                                          src={fileUrl}
+                                          alt={fileName}
+                                          className="max-h-96 w-full object-contain rounded-t-xl bg-black/40 transition-transform duration-300 group-hover:scale-[1.01]"
+                                        />
+                                      </a>
+                                      <div className="flex items-center justify-between p-3 text-xs bg-[#0f172a] border-t border-white/10">
+                                        <span className="truncate font-medium text-slate-300">{fileName}</span>
+                                        <a
+                                          href={fileUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center gap-1 text-cyan-400 font-bold hover:underline shrink-0 ml-2"
+                                        >
+                                          <Download size={14} />
+                                          <span>Open Full</span>
+                                        </a>
+                                      </div>
+                                    </div>
+                                  )
+                                }
+
+                                return (
+                                  <a
+                                    key={file.id || idx}
+                                    href={fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#0f172a] p-3 text-xs transition hover:border-cyan-500/50 hover:bg-[#111827]"
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400">
+                                        <Paperclip size={16} />
+                                      </div>
+                                      <span className="truncate font-semibold text-slate-200">{fileName}</span>
+                                    </div>
+                                    <Download size={15} className="text-slate-400 shrink-0" />
+                                  </a>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })()}
                     </div>
                   ) : (
                     <div className="flex h-full items-center justify-center text-sm text-slate-400">
