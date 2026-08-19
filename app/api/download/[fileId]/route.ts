@@ -277,7 +277,10 @@ export async function GET(
     const url = new URL(req.url)
     const mode = url.searchParams.get("mode")
     const boosted = url.searchParams.get("boost") === "1"
+    const unlocked = url.searchParams.get("unlocked") === "1"
+    const intentHeader = req.headers.get("x-jb-download-intent")
     const isStreamMode = mode === "stream"
+    const isConfirmedUnlock = unlocked || intentHeader === "button_confirm"
 
     const referer = req.headers.get("referer")
     const currentHost = req.nextUrl.hostname.replace(/^www\./, "")
@@ -499,6 +502,7 @@ export async function GET(
     const linkvertiseUrl = fileOnly.linkvertise_url?.trim() || ""
     const shouldUseLinkvertise =
       !isStreamMode &&
+      !isConfirmedUnlock &&
       membershipLevel === "standard" &&
       visibility === "free" &&
       fileOnly.monetization_enabled !== false &&

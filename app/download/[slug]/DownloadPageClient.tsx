@@ -190,7 +190,7 @@ export default function DownloadPageClient() {
   const [step, setStep] = useState<"waiting" | "ready" | "premium-only" | "platinum-only">(
     "waiting"
   )
-  const [countdown, setCountdown] = useState(3)
+  const [countdown, setCountdown] = useState(5)
   const [downloadReady, setDownloadReady] = useState(false)
   const [startingDownload, setStartingDownload] = useState(false)
   const [downloadError, setDownloadError] = useState("")
@@ -289,14 +289,12 @@ export default function DownloadPageClient() {
     if (!idOrSlug) return
     void loadPage()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idOrSlug, unlockedFromQuery])
+  }, [idOrSlug])
 
   useEffect(() => {
     if (checking) return
     if (!file) return
-    if (isPremiumUser) return
-    if (step !== "waiting") return
-    if (downloadReady) return
+    if (step !== "ready") return
     if (countdown <= 0) return
 
     const timer = window.setTimeout(() => {
@@ -304,7 +302,7 @@ export default function DownloadPageClient() {
     }, 1000)
 
     return () => window.clearTimeout(timer)
-  }, [checking, file, isPremiumUser, step, downloadReady, countdown])
+  }, [checking, file, step, countdown])
 
   useEffect(() => {
     if (!showPreviewModal) return
@@ -385,7 +383,7 @@ export default function DownloadPageClient() {
       setRequiredCoins(null)
       setCurrentCoins(null)
       setStep("waiting")
-      setCountdown(3)
+      setCountdown(5)
       setDownloadReady(false)
       setStartingDownload(false)
       setDownloadError("")
@@ -492,6 +490,7 @@ export default function DownloadPageClient() {
       }
 
       setStep("ready")
+      setCountdown(premium ? 0 : 5)
       setDownloadReady(true)
     } catch (err) {
       console.error("Download gate error:", err)
@@ -519,7 +518,7 @@ export default function DownloadPageClient() {
       void logEvent(
         "download_click",
         {
-          source: unlockedFromQuery ? "gate_after_unlock" : "confirmed_button",
+          source: "confirmed_button",
           membership_level: membershipLevel,
           estimated_coin_cost: estimatedCoinCost,
         },
@@ -571,40 +570,50 @@ export default function DownloadPageClient() {
         return
       }
 
+      if (data?.downloadUrl) {
+        if (typeof data?.coinsUsed === "number" && data.coinsUsed > 0) {
+          dispatchCoinPopup(-data.coinsUsed, "Download spend")
+          showRewardNotice(`-${data.coinsUsed} JB Coins used`, "info")
+        }
+
+        if (data?.rewarded) {
+          const rewardAmount = Number(data.rewardAmount ?? estimatedReward)
+          window.setTimeout(() => {
+            showRewardNotice(`+${rewardAmount} JB Coins earned`, "success")
+            dispatchCoinPopup(rewardAmount, "Download reward")
+          }, 900)
+        } else if (data?.alreadyRewardedToday) {
+          window.setTimeout(() => {
+            showRewardNotice("Already rewarded today", "info")
+            dispatchCoinPopup(0, "Already rewarded today")
+          }, 900)
+        }
+
+        window.setTimeout(() => {
+          window.location.href = data.downloadUrl
+        }, 850)
+        return
+      }
+
       if (data?.redirectUrl) {
-        window.location.href = data.redirectUrl
-        return
+        const isExternalGate = /linkvertise|shrinkme/i.test(data.redirectUrl)
+        const isSelf = typeof window !== "undefined" && data.redirectUrl.includes(window.location.pathname)
+
+        if (!isExternalGate && !isSelf) {
+          window.location.href = data.redirectUrl
+          return
+        }
+
+        if (file.file_url) {
+          window.location.href = file.file_url
+          return
+        }
       }
 
-      if (!data?.downloadUrl) {
-        const message = "Missing download URL from API"
-        showRewardNotice(message, "error")
-        setDownloadError(message)
-        setStartingDownload(false)
-        return
-      }
-
-      if (typeof data?.coinsUsed === "number" && data.coinsUsed > 0) {
-        dispatchCoinPopup(-data.coinsUsed, "Download spend")
-        showRewardNotice(`-${data.coinsUsed} JB Coins used`, "info")
-      }
-
-      if (data?.rewarded) {
-        const rewardAmount = Number(data.rewardAmount ?? estimatedReward)
-        window.setTimeout(() => {
-          showRewardNotice(`+${rewardAmount} JB Coins earned`, "success")
-          dispatchCoinPopup(rewardAmount, "Download reward")
-        }, 900)
-      } else if (data?.alreadyRewardedToday) {
-        window.setTimeout(() => {
-          showRewardNotice("Already rewarded today", "info")
-          dispatchCoinPopup(0, "Already rewarded today")
-        }, 900)
-      }
-
-      window.setTimeout(() => {
-        window.location.href = data.downloadUrl
-      }, 850)
+      const message = "Missing download URL from API"
+      showRewardNotice(message, "error")
+      setDownloadError(message)
+      setStartingDownload(false)
     } catch (err) {
       console.error("Download start error:", err)
       const message = err instanceof Error ? err.message : "Failed to start download."
@@ -675,12 +684,6 @@ export default function DownloadPageClient() {
 
   return (
     <>
-      <Script
-        id="adsterra-popunder"
-        strategy="afterInteractive"
-        src="https://pl28932734.effectivecpmnetwork.com/c2/ff/ba/c2ffba00507c2aa8f81f4682763f669e.js"
-      />
-
       <div className="min-h-screen bg-slate-50 px-4 py-8 pb-16">
         <div className="mx-auto max-w-5xl">
           <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
@@ -773,11 +776,13 @@ export default function DownloadPageClient() {
                       <button
                         type="button"
                         onClick={handleDownloadButtonClick}
-                        disabled={startingDownload}
+                        disabled={startingDownload || countdown > 0}
                         className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-500 px-6 py-4 text-sm font-black text-white shadow-md shadow-blue-500/10 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {startingDownload
                           ? "Initializing Secure Link..."
+                          : countdown > 0
+                          ? `⏳ PLEASE WAIT (${countdown}s)...`
                           : `⬇ DOWNLOAD — ${estimatedCoinCost} JB COINS`}
                       </button>
 
