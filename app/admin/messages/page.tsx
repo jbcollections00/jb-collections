@@ -130,13 +130,13 @@ export default function AdminMessagesPage() {
           const filePath = `${Date.now()}-${fileName}`
 
           const { error: uploadError } = await supabase.storage
-            .from("message_attachments")
+            .from("message-attachments")
             .upload(filePath, file)
 
           if (uploadError) throw new Error(`File upload failed: ${uploadError.message}`)
 
           const { data: publicUrlData } = supabase.storage
-            .from("message_attachments")
+            .from("message-attachments")
             .getPublicUrl(filePath)
 
           uploadedAttachments.push({
