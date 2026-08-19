@@ -66,8 +66,7 @@ function normalizeMembership(profile?: ProfileRow | null): MembershipLevel {
 
   if (role === "admin") return "admin"
   if (membership === "platinum") return "platinum"
-  if (membership === "premium") return "premium"
-  if (profile?.is_premium) return "premium"
+  if (membership === "premium" || profile?.is_premium) return "premium"
 
   return "standard"
 }
@@ -298,10 +297,7 @@ export async function GET(
           )
         }
       } catch {
-        return NextResponse.json(
-          { error: "Invalid referer header" },
-          { status: 403 }
-        )
+        return NextResponse.json({ error: "Invalid referer header" }, { status: 403 })
       }
     }
 
@@ -309,10 +305,7 @@ export async function GET(
     const adminDb = createAdminDb()
     const dbClient = adminDb || supabase
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
 
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -343,12 +336,8 @@ export async function GET(
 
       if (profileError) {
         console.error("Profile fetch error:", profileError)
-
         return NextResponse.json(
-          {
-            error: "Failed to read user coins",
-            details: profileError.message,
-          },
+          { error: "Failed to read user coins", details: profileError.message },
           { status: 500 }
         )
       }
@@ -357,10 +346,7 @@ export async function GET(
     }
 
     if (!profile) {
-      return NextResponse.json(
-        { error: "User profile not found" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "User profile not found" }, { status: 404 })
     }
 
     const membershipLevel = normalizeMembership(profile)
@@ -368,9 +354,7 @@ export async function GET(
 
     const baseFileQuery = supabase
       .from("files")
-      .select(
-        "id, title, slug, visibility, status, downloads_count, linkvertise_url, shrinkme_url, monetization_enabled"
-      )
+      .select("id, title, slug, visibility, status, downloads_count, linkvertise_url, shrinkme_url, monetization_enabled")
 
     const { data: fileData, error: fileError } = isUuid(fileId)
       ? await baseFileQuery.eq("id", fileId).maybeSingle()
@@ -403,9 +387,7 @@ export async function GET(
 
     const { data: versionsData, error: versionsError } = await supabase
       .from("file_versions")
-      .select(
-        "id, file_id, object_key, bucket_name, archive_type, mime_type, file_size_bytes, is_current"
-      )
+      .select("id, file_id, object_key, bucket_name, archive_type, mime_type, file_size_bytes, is_current")
       .eq("file_id", realFileId)
       .order("is_current", { ascending: false })
 
@@ -417,36 +399,17 @@ export async function GET(
     }
 
     if (!versionsData || versionsData.length === 0) {
-      return NextResponse.json(
-        { error: "No file_versions rows found for this file" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "No file_versions rows found for this file" }, { status: 404 })
     }
 
     const versions = versionsData as FileVersionRow[]
-    const currentVersion =
-      versions.find((v) => v.is_current === true) || versions[0] || null
+    const currentVersion = versions.find((v) => v.is_current === true) || versions[0] || null
 
-    if (!currentVersion) {
-      return NextResponse.json(
-        { error: "No current file version found." },
-        { status: 404 }
-      )
+    if (!currentVersion || !currentVersion.object_key?.trim()) {
+      return NextResponse.json({ error: "No valid current file version found" }, { status: 404 })
     }
 
-    if (!currentVersion.object_key?.trim()) {
-      return NextResponse.json(
-        { error: "Current version is missing object_key" },
-        { status: 404 }
-      )
-    }
-
-    const visibility = (fileOnly.visibility || "free").toLowerCase() as
-      | "free"
-      | "premium"
-      | "platinum"
-      | "private"
-
+    const visibility = (fileOnly.visibility || "free").toLowerCase() as "free" | "premium" | "platinum" | "private"
     let allowed = false
 
     switch (visibility) {
@@ -454,21 +417,13 @@ export async function GET(
         allowed = true
         break
       case "premium":
-        allowed =
-          membershipLevel === "premium" ||
-          membershipLevel === "platinum" ||
-          membershipLevel === "admin"
+        allowed = ["premium", "platinum", "admin"].includes(membershipLevel)
         break
       case "platinum":
-        allowed =
-          membershipLevel === "platinum" ||
-          membershipLevel === "admin"
+        allowed = ["platinum", "admin"].includes(membershipLevel)
         break
       case "private":
         allowed = membershipLevel === "admin"
-        break
-      default:
-        allowed = false
         break
     }
 
@@ -486,17 +441,12 @@ export async function GET(
         console.warn("Failed logging denied download:", logError)
       }
 
-      return NextResponse.json(
-        {
-          error:
-            visibility === "platinum"
-              ? "Platinum membership required"
-              : visibility === "premium"
-                ? "Premium membership required"
-                : "You do not have access to this file",
-        },
-        { status: 403 }
-      )
+      const errorMsg =
+        visibility === "platinum" ? "Platinum membership required" :
+        visibility === "premium" ? "Premium membership required" :
+        "You do not have access to this file"
+
+      return NextResponse.json({ error: errorMsg }, { status: 403 })
     }
 
     const linkvertiseUrl = fileOnly.linkvertise_url?.trim() || ""
@@ -568,9 +518,7 @@ export async function GET(
         p_user_id: user.id,
         p_amount: -downloadCoinCost,
         p_type: boosted ? "boosted_download_spend" : "download_spend",
-        p_description: boosted
-          ? `Boosted download spend for ${fileOnly.title || fileOnly.slug || realFileId}`
-          : `Download spend for ${fileOnly.title || fileOnly.slug || realFileId}`,
+        p_description: `Download spend for ${fileOnly.title || fileOnly.slug || realFileId}`,
         p_reference: boosted
           ? `boosted_download_spend:${user.id}:${realFileId}:${Date.now()}`
           : `download_spend:${user.id}:${realFileId}:${Date.now()}`,
@@ -578,19 +526,14 @@ export async function GET(
 
       if (spendError) {
         console.error("Download coin spend error:", spendError)
-
         return NextResponse.json(
-          {
-            error: "Failed to deduct JB Coins",
-            details: spendError.message,
-          },
+          { error: "Failed to deduct JB Coins", details: spendError.message },
           { status: 500 }
         )
       }
     }
 
     const safeFilename = buildSafeFilename(fileOnly, currentVersion)
-
     const signedUrl = await getSignedDownloadUrl({
       key: currentVersion.object_key.trim(),
       bucket: currentVersion.bucket_name?.trim() || undefined,
@@ -608,19 +551,17 @@ export async function GET(
         user_agent: req.headers.get("user-agent"),
       })
 
-      if (logErr) {
-        console.warn("Download log insert warning:", logErr.message)
-      }
+      if (logErr) console.warn("Download log insert warning:", logErr.message)
     } catch (logErr) {
       console.warn("Error inserting into download_logs:", logErr)
     }
 
+    // Note: Incrementing via RPC is recommended to avoid race conditions. 
+    // Example: await dbClient.rpc('increment_downloads_count', { row_id: realFileId })
     try {
       await dbClient
         .from("files")
-        .update({
-          downloads_count: (fileOnly.downloads_count || 0) + 1,
-        })
+        .update({ downloads_count: (fileOnly.downloads_count || 0) + 1 })
         .eq("id", realFileId)
     } catch (countErr) {
       console.warn("Error updating downloads_count:", countErr)
@@ -642,17 +583,9 @@ export async function GET(
       })
 
       if (rewardResult.awarded > 0) {
-        rewardResponse = {
-          rewarded: true,
-          alreadyRewardedToday: false,
-          rewardAmount: rewardResult.awarded,
-        }
+        rewardResponse = { rewarded: true, alreadyRewardedToday: false, rewardAmount: rewardResult.awarded }
       } else if (rewardResult.reason === "already_rewarded_today") {
-        rewardResponse = {
-          rewarded: false,
-          alreadyRewardedToday: true,
-          rewardAmount: 0,
-        }
+        rewardResponse = { rewarded: false, alreadyRewardedToday: true, rewardAmount: 0 }
       }
     } catch (rewardError) {
       console.error("Download coin reward error:", rewardError)
@@ -670,18 +603,12 @@ export async function GET(
       })
     }
 
-    if (isStreamMode) {
-      return NextResponse.redirect(signedUrl, { status: 302 })
-    }
-
     return NextResponse.redirect(signedUrl, { status: 302 })
+
   } catch (error) {
     console.error("Download route error:", error)
-
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Internal server error",
-      },
+      { error: error instanceof Error ? error.message : "Internal server error" },
       { status: 500 }
     )
   }

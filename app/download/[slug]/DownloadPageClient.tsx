@@ -445,6 +445,11 @@ export default function DownloadPageClient() {
       setIsPremiumUser(premium)
       setIsPlatinumUser(platinum)
 
+      const initialCoins = refreshData?.coins ?? refreshData?.jb_coins ?? null
+      if (typeof initialCoins === "number") {
+        setCurrentCoins(initialCoins)
+      }
+
       void incrementViews(realFileId)
 
       if (foundFile.category_id) {
@@ -552,17 +557,17 @@ export default function DownloadPageClient() {
 
       const data = await res.json().catch(() => null)
 
-      if (!res.ok) {
-        if (
-          res.status === 402 ||
-          data?.error?.toLowerCase?.().includes("coin") ||
-          data?.requiredCoins
-        ) {
+if (!res.ok) {
+        // STRICT CHECK: Only show the modal if the server explicitly returns 402 Insufficient Funds
+        if (res.status === 402) {
           setRequiredCoins(Number(data?.requiredCoins ?? data?.required ?? estimatedCoinCost))
-          setCurrentCoins(Number(data?.currentCoins ?? data?.balance ?? 0))
+          setCurrentCoins(Number(data?.currentCoins ?? data?.coins ?? data?.jb_coins ?? data?.balance ?? 0))
           setShowInsufficientCoins(true)
+          setStartingDownload(false)
+          return // Stop execution here so it doesn't trigger the generic error below
         }
 
+        // Catch-all for 500 Internal Server Errors and other failures
         const message = data?.error || "Failed to start download"
         showRewardNotice(message, "error")
         setDownloadError(message)
