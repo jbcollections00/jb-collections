@@ -507,6 +507,11 @@ export default function DownloadPageClient() {
 
   function handleDownloadButtonClick() {
     if (startingDownload || !file?.id) return
+
+    // Open Adsterra Smartlink directly on click event to bypass browser popup blockers
+    const ADSTERRA_LINK = "https://www.effectivecpmnetwork.com/tw8ajp18mf?key=786d474da794ee7cd3596da3aab40fcc"
+    window.open(ADSTERRA_LINK, "_blank")
+
     setDownloadError("")
     setShowCoinConfirm(true)
   }
@@ -557,7 +562,7 @@ export default function DownloadPageClient() {
 
       const data = await res.json().catch(() => null)
 
-if (!res.ok) {
+      if (!res.ok) {
         // STRICT CHECK: Only show the modal if the server explicitly returns 402 Insufficient Funds
         if (res.status === 402) {
           setRequiredCoins(Number(data?.requiredCoins ?? data?.required ?? estimatedCoinCost))
