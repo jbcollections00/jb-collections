@@ -85,6 +85,7 @@ function MessagesPageContent() {
     void initializePage()
   }, [])
 
+  // Sync selection based on URL changes
   useEffect(() => {
     if (loading || !messages.length || !messageFromUrl) return
     const exists = messages.some((item) => item.id === messageFromUrl)
@@ -93,6 +94,16 @@ function MessagesPageContent() {
     setSelectedMessageId(messageFromUrl)
     setShowMobileList(false)
   }, [messageFromUrl, messages, loading, selectedMessageId])
+
+  // AUTO-READ WATCHER: Ensures any selected message is automatically marked as read
+  useEffect(() => {
+    if (selectedMessageId) {
+      const currentMsg = messages.find((m) => m.id === selectedMessageId)
+      if (currentMsg && !currentMsg.is_read) {
+        markAsRead(selectedMessageId)
+      }
+    }
+  }, [selectedMessageId, messages])
 
   function syncUrl(messageId: string | null) {
     const params = new URLSearchParams(searchParams.toString())
@@ -112,7 +123,7 @@ function MessagesPageContent() {
     syncUrl(messageId)
     setSelectedMessageId(messageId)
     setShowMobileList(false)
-    markAsRead(messageId)
+    // Removed manual markAsRead here because the watcher effect handles it perfectly now.
   }
 
   async function initializePage() {
@@ -155,7 +166,23 @@ function MessagesPageContent() {
       }
 
       const dismissed = getDismissedIds()
-      const filteredList = loadedList.filter((msg) => !dismissed.includes(msg.id))
+      let filteredList = loadedList.filter((msg) => !dismissed.includes(msg.id))
+
+      // Apply LocalStorage read state for global announcements on load
+      if (typeof window !== "undefined") {
+        try {
+          const readStorageKey = "jb_read_announcements";
+          const localReadIds = JSON.parse(localStorage.getItem(readStorageKey) || "[]");
+          filteredList = filteredList.map(msg => {
+            if (!msg.user_id && localReadIds.includes(msg.id)) {
+              return { ...msg, is_read: true };
+            }
+            return msg;
+          });
+        } catch (err) {
+          console.error("Error reading local state:", err);
+        }
+      }
 
       const uniqueList: UserMessage[] = []
       const seen = new Set<string>()
@@ -179,6 +206,7 @@ function MessagesPageContent() {
         if (initialId) {
           syncUrl(initialId)
           setSelectedMessageId(initialId)
+          setShowMobileList(false) // Forcing content view so it isn't stuck on list view
         }
       } else {
         syncUrl(null)
@@ -190,14 +218,34 @@ function MessagesPageContent() {
   }
 
   function markAsRead(messageId: string) {
+    const targetMsg = messages.find((m) => m.id === messageId)
+    
+    // Update local UI immediately
     setMessages((prev) =>
       prev.map((msg) => (msg.id === messageId ? { ...msg, is_read: true } : msg))
     )
 
-    void supabase
-      .from("messages")
-      .update({ is_read: true })
-      .eq("id", messageId)
+    if (!targetMsg) return
+
+    if (targetMsg.user_id) {
+      void supabase
+        .from("messages")
+        .update({ is_read: true })
+        .eq("id", messageId)
+        .then(({ error }) => {
+          if (error) console.error("Failed to update DB read status:", error)
+        })
+    } else {
+      try {
+        const readStorageKey = "jb_read_announcements"
+        const currentRead = JSON.parse(localStorage.getItem(readStorageKey) || "[]")
+        if (!currentRead.includes(messageId)) {
+          localStorage.setItem(readStorageKey, JSON.stringify([...currentRead, messageId]))
+        }
+      } catch (err) {
+        console.error("Failed to save read state locally:", err)
+      }
+    }
   }
 
   async function handleDeleteMessage(targetId: string) {

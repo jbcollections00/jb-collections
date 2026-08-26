@@ -16,7 +16,6 @@ type UserProfile = {
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "🏠" },
-  // { label: "Messages", href: "/messages", icon: "💬" },
   { label: "Profile", href: "/profile", icon: "👤" },
   { label: "Leaderboard", href: "/leaderboard", icon: "🏆" },
   { label: "Buy COINS", href: "/upgrade", icon: "🪙" },
@@ -75,31 +74,61 @@ export default function SiteHeader() {
     if (!userId) return
 
     try {
-      // 1. Fetch from main 'messages' table
+      // 1. Fetch from database (Added title, subject, body para sa deduplication)
       const { data: primaryData } = await supabase
         .from("messages")
-        .select("id, is_read")
+        .select("id, is_read, user_id, title, subject, body")
         .or(`user_id.eq.${userId},user_id.is.null`)
+        .order("created_at", { ascending: false })
 
       let allMessages = primaryData || []
 
-      // 2. Fallback to 'user_messages' if primary query returned nothing
       if (!allMessages.length) {
         const { data: fallbackData } = await supabase
           .from("user_messages")
-          .select("id, is_read")
+          .select("id, is_read, user_id, title, subject, body")
           .or(`user_id.eq.${userId},user_id.is.null`)
+          .order("created_at", { ascending: false })
         
         allMessages = fallbackData || []
       }
 
-      // 3. Filter out locally deleted IDs and messages that are already read
+      // 2. Filter out dismissed items
       const dismissed = getDismissedIds()
-      const unreadList = allMessages.filter(
-        (msg) => !msg.is_read && !dismissed.includes(msg.id)
-      )
+      let validMessages = allMessages.filter(msg => !dismissed.includes(msg.id))
 
-      setUnreadCount(unreadList.length)
+      // 3. Apply LocalStorage logic for global announcements
+      let localReadIds: string[] = []
+      if (typeof window !== "undefined") {
+        try {
+          localReadIds = JSON.parse(localStorage.getItem("jb_read_announcements") || "[]")
+        } catch (e) {}
+      }
+
+      validMessages = validMessages.map(msg => {
+        if (!msg.user_id && localReadIds.includes(msg.id)) {
+          return { ...msg, is_read: true }
+        }
+        return msg
+      })
+
+      // 4. Exact Deduplication Logic (Kapareho ng sa Messages Page)
+      const uniqueList: any[] = []
+      const seen = new Set<string>()
+
+      for (const item of validMessages) {
+        const titleText = item.title || item.subject || "Announcement"
+        const key = `${titleText}-${item.body}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          uniqueList.push(item)
+        }
+      }
+
+      // 5. Count final unread
+      const finalUnreadCount = uniqueList.filter(msg => !msg.is_read).length
+      setUnreadCount(finalUnreadCount)
+
     } catch (err) {
       console.error("Error fetching unread count:", err)
     }
@@ -128,6 +157,18 @@ export default function SiteHeader() {
     }
 
     void init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Auto-refresh interval (Checks every 2 seconds quietly)
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (currentUserIdRef.current) {
+        void checkUnreadMessages()
+      }
+    }, 2000)
+
+    return () => clearInterval(intervalId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

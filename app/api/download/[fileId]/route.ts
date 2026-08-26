@@ -541,31 +541,9 @@ export async function GET(
       downloadFilename: safeFilename,
     })
 
-    try {
-      const { error: logErr } = await dbClient.from("download_logs").insert({
-        user_id: user.id,
-        file_id: realFileId,
-        file_version_id: currentVersion.id,
-        result: boosted ? "success_boosted" : "success",
-        ip_address: getClientIp(req),
-        user_agent: req.headers.get("user-agent"),
-      })
-
-      if (logErr) console.warn("Download log insert warning:", logErr.message)
-    } catch (logErr) {
-      console.warn("Error inserting into download_logs:", logErr)
-    }
-
-    // Note: Incrementing via RPC is recommended to avoid race conditions. 
-    // Example: await dbClient.rpc('increment_downloads_count', { row_id: realFileId })
-    try {
-      await dbClient
-        .from("files")
-        .update({ downloads_count: (fileOnly.downloads_count || 0) + 1 })
-        .eq("id", realFileId)
-    } catch (countErr) {
-      console.warn("Error updating downloads_count:", countErr)
-    }
+    // DAGDAG NA LOGIC: Siguraduhing magbibilang lang at magbibigay ng coins
+    // kung ang request ay confirmed click (via header) o diretsong redirect.
+    const isActualDownloadAction = isConfirmedUnlock || mode !== "json"
 
     let rewardResponse = {
       rewarded: false,
@@ -573,22 +551,50 @@ export async function GET(
       rewardAmount: 0,
     }
 
-    try {
-      const rewardResult = await awardDownloadCoins({
-        userId: user.id,
-        fileId: realFileId,
-        fileTitle: fileOnly.title || fileOnly.slug || realFileId,
-        membershipLevel,
-        boosted,
-      })
+    if (isActualDownloadAction) {
+      try {
+        const { error: logErr } = await dbClient.from("download_logs").insert({
+          user_id: user.id,
+          file_id: realFileId,
+          file_version_id: currentVersion.id,
+          result: boosted ? "success_boosted" : "success",
+          ip_address: getClientIp(req),
+          user_agent: req.headers.get("user-agent"),
+        })
 
-      if (rewardResult.awarded > 0) {
-        rewardResponse = { rewarded: true, alreadyRewardedToday: false, rewardAmount: rewardResult.awarded }
-      } else if (rewardResult.reason === "already_rewarded_today") {
-        rewardResponse = { rewarded: false, alreadyRewardedToday: true, rewardAmount: 0 }
+        if (logErr) console.warn("Download log insert warning:", logErr.message)
+      } catch (logErr) {
+        console.warn("Error inserting into download_logs:", logErr)
       }
-    } catch (rewardError) {
-      console.error("Download coin reward error:", rewardError)
+
+      // Note: Incrementing via RPC is recommended to avoid race conditions. 
+      // Example: await dbClient.rpc('increment_downloads_count', { row_id: realFileId })
+      try {
+        await dbClient
+          .from("files")
+          .update({ downloads_count: (fileOnly.downloads_count || 0) + 1 })
+          .eq("id", realFileId)
+      } catch (countErr) {
+        console.warn("Error updating downloads_count:", countErr)
+      }
+
+      try {
+        const rewardResult = await awardDownloadCoins({
+          userId: user.id,
+          fileId: realFileId,
+          fileTitle: fileOnly.title || fileOnly.slug || realFileId,
+          membershipLevel,
+          boosted,
+        })
+
+        if (rewardResult.awarded > 0) {
+          rewardResponse = { rewarded: true, alreadyRewardedToday: false, rewardAmount: rewardResult.awarded }
+        } else if (rewardResult.reason === "already_rewarded_today") {
+          rewardResponse = { rewarded: false, alreadyRewardedToday: true, rewardAmount: 0 }
+        }
+      } catch (rewardError) {
+        console.error("Download coin reward error:", rewardError)
+      }
     }
 
     if (mode === "json") {
