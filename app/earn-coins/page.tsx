@@ -7,6 +7,13 @@ import PresenceTracker from "@/app/components/PresenceTracker"
 import SiteHeader from "@/app/components/SiteHeader"
 import DailyRewardCard from "@/app/components/DailyRewardCard"
 
+// Declare Monetag global window object for TypeScript safety
+declare global {
+  interface Window {
+    show_11699131?: ((format?: string | object) => Promise<void>) & ((options: object) => void)
+  }
+}
+
 type OfferwallProvider = "cpagrip" | "cpx"
 
 interface ProviderConfig {
@@ -34,7 +41,7 @@ function EarnCoinsPageContent() {
   const [cooldown, setCooldown] = useState(0)
   const [claiming, setClaiming] = useState(false)
 
-  // Array of 4 Direct Ad Links for rotation
+  // Array of Direct CPM Links for rotation or fallback
   const AD_LINKS = [
     "https://www.profitableratecpmnetwork.com/pyuze51wkf?key=089f5accce969646a828061bc3a846f2",
     "https://www.profitableratecpmnetwork.com/tw8ajp18mf?key=786d474da794ee7cd3596da3aab40fcc",
@@ -75,6 +82,26 @@ function EarnCoinsPageContent() {
     void checkUser()
   }, [router, supabase])
 
+  // --- MONETAG IN-APP INTERSTITIAL INITIALIZATION ---
+  useEffect(() => {
+    if (typeof window !== "undefined" && typeof window.show_11699131 === "function") {
+      try {
+        window.show_11699131({
+          type: 'inApp',
+          inAppSettings: {
+            frequency: 2,
+            capping: 0.1,
+            interval: 30,
+            timeout: 5,
+            everyPage: false
+          }
+        })
+      } catch (err) {
+        console.error("Failed to initialize Monetag In-App ad:", err)
+      }
+    }
+  }, [])
+
   useEffect(() => {
     let interval: NodeJS.Timeout
     if (isWatching && cooldown > 0) {
@@ -83,14 +110,26 @@ function EarnCoinsPageContent() {
     return () => clearInterval(interval)
   }, [isWatching, cooldown])
 
-  // --- NEW AD WATCH LOGIC (10 per ad, +25 on 5th) ---
+  // --- MONETAG REWARDED POPUP / FALLBACK WATCH LOGIC ---
   const handleWatchAd = () => {
-    // Selects a random link from the array
-    const randomLink = AD_LINKS[Math.floor(Math.random() * AD_LINKS.length)]
-    
-    window.open(randomLink, "_blank")
     setIsWatching(true)
     setCooldown(10)
+
+    if (typeof window !== "undefined" && typeof window.show_11699131 === "function") {
+      window.show_11699131('pop')
+        .then(() => {
+          console.log("Monetag Rewarded Ad completed successfully")
+        })
+        .catch((e) => {
+          console.warn("Monetag Ad error/closed, launching direct link fallback:", e)
+          const randomLink = AD_LINKS[Math.floor(Math.random() * AD_LINKS.length)]
+          window.open(randomLink, "_blank")
+        })
+    } else {
+      // Fallback kung hindi nakakonekta ang script
+      const randomLink = AD_LINKS[Math.floor(Math.random() * AD_LINKS.length)]
+      window.open(randomLink, "_blank")
+    }
   }
 
   const handleClaimProgress = async () => {

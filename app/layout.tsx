@@ -142,6 +142,14 @@ export default async function RootLayout({
               strategy="afterInteractive"
             />
 
+            {/* 🎬 Monetag Interstitial / Rewarded SDK Zone 11699131 */}
+            <Script
+              src="https://libtl.com/sdk.js"
+              data-zone="11699131"
+              data-sdk="show_11699131"
+              strategy="afterInteractive"
+            />
+
             {/* ✅ Google AdSense Script */}
             <Script
               async
