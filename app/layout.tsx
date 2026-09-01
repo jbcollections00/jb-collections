@@ -7,6 +7,7 @@ import LayoutShell from "./components/LayoutShell"
 import BackgroundAds from "@/app/components/BackgroundAds"
 import ScriptElementGuard from "./components/ScriptElementGuard"
 import AdBlockDetector from "./components/AdBlockDetector"
+import TelegramAutoAuth from "./components/TelegramAutoAuth"
 
 function getSiteUrl() {
   return (
@@ -125,6 +126,9 @@ export default async function RootLayout({
       </head>
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
         
+        {/* ✈️ Auto-Authenticate Telegram Mini App Users */}
+        <TelegramAutoAuth />
+
         {/* 🛡️ Client-side safe guard component (Runs for everyone) */}
         <ScriptElementGuard />
 
