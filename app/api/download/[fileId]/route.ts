@@ -71,9 +71,9 @@ function normalizeMembership(profile?: ProfileRow | null): MembershipLevel {
 
 function getBaseDownloadCoinCost(level: MembershipLevel): number {
   if (level === "admin") return 0
-  if (level === "platinum") return 10
-  if (level === "premium") return 15
-  return 20
+  if (level === "platinum") return 30
+  if (level === "premium") return 40
+  return 50
 }
 
 function getDownloadCoinCost(level: MembershipLevel, file?: FileRow | null, boosted = false): number {
@@ -92,7 +92,7 @@ function getDownloadCoinCost(level: MembershipLevel, file?: FileRow | null, boos
 
 function getDownloadRewardAmount(level: MembershipLevel, boosted = false): number {
   if (level === "admin") return 0
-  let reward = level === "platinum" ? 1 : level === "premium" ? 2 : 3
+  let reward = level === "platinum" ? 3 : level === "premium" ? 4 : 5
   if (boosted) reward += DOWNLOAD_BOOST_EXTRA_REWARD
   return reward
 }
@@ -269,7 +269,6 @@ export async function GET(
     const membershipLevel = normalizeMembership(profile)
     const userCoins = Number(profile.coins || 0)
 
-    // Tinanggal ang linkvertise_url at shrinkme_url sa select para mas malinis
     const baseFileQuery = supabase.from("files").select("id, title, slug, visibility, status, downloads_count, monetization_enabled")
     const { data: fileData, error: fileError } = isUuid(fileId)
       ? await baseFileQuery.eq("id", fileId).maybeSingle()
@@ -314,22 +313,20 @@ export async function GET(
     }
 
     if (!allowed) {
-      await dbClient.from("download_logs").insert({
+      void dbClient.from("download_logs").insert({
         user_id: user.id, file_id: realFileId, file_version_id: currentVersion.id,
         result: "denied", ip_address: getClientIp(req), user_agent: req.headers.get("user-agent"),
-      }).catch(() => {})
+      })
 
       const errorMsg = visibility === "platinum" ? "Platinum membership required" : visibility === "premium" ? "Premium membership required" : "You do not have access to this file"
       return NextResponse.json({ error: errorMsg }, { status: 403 })
     }
 
-    // LINKVERTISE LOGIC COMPLETELY REMOVED HERE
-
     if (downloadCoinCost > 0 && userCoins < downloadCoinCost) {
-      await dbClient.from("download_logs").insert({
+      void dbClient.from("download_logs").insert({
         user_id: user.id, file_id: realFileId, file_version_id: currentVersion.id,
         result: "insufficient_coins", ip_address: getClientIp(req), user_agent: req.headers.get("user-agent"),
-      }).catch(() => {})
+      })
 
       return NextResponse.json({ error: "Not enough JB Coins", requiredCoins: downloadCoinCost, currentCoins: userCoins }, { status: 402 })
     }
@@ -360,14 +357,16 @@ export async function GET(
     let rewardResponse = { rewarded: false, alreadyRewardedToday: false, rewardAmount: 0 }
 
     if (isActualDownloadAction) {
-      await dbClient.from("download_logs").insert({
+      void dbClient.from("download_logs").insert({
         user_id: user.id, file_id: realFileId, file_version_id: currentVersion.id,
         result: boosted ? "success_boosted" : "success", ip_address: getClientIp(req), user_agent: req.headers.get("user-agent"),
-      }).catch(() => {})
-
-      await dbClient.rpc('increment_downloads_count', { row_id: realFileId }).catch(async () => {
-         await dbClient.from("files").update({ downloads_count: (fileOnly.downloads_count || 0) + 1 }).eq("id", realFileId)
       })
+
+      try {
+        await dbClient.rpc('increment_downloads_count', { row_id: realFileId })
+      } catch {
+        await dbClient.from("files").update({ downloads_count: (fileOnly.downloads_count || 0) + 1 }).eq("id", realFileId)
+      }
 
       try {
         const rewardResult = await awardDownloadCoins({
