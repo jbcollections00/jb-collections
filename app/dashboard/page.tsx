@@ -132,7 +132,7 @@ function getFileTitle(file: HomeFile) {
 }
 
 function getFileHref(file: HomeFile) {
-  return `/download/${file.id}`
+  return `/download/${file.slug || file.id}`
 }
 
 function getCurrentUserName(profile: CurrentUserProfile | null) {
