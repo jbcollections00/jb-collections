@@ -279,7 +279,7 @@ function RankBadge({ rank }: { rank: number }) {
   )
 }
 
-function HomeFileCard({ file, rank }: { file: HomeFile; rank?: number }) {
+function HomeFileCard({ file, rank, isLiveActivity = false }: { file: HomeFile; rank?: number; isLiveActivity?: boolean }) {
   const image = getFileImage(file)
   const title = getFileTitle(file)
   const downloadCount = Number(file.downloads_count || 0)
@@ -327,24 +327,30 @@ function HomeFileCard({ file, rank }: { file: HomeFile; rank?: number }) {
             {title}
           </h3>
 
-          {file.user_name ? (
-            <p className="mt-2 text-center text-xs font-medium text-slate-400 truncate">
-              By <span className="text-cyan-300 font-semibold">{file.user_name}</span>
-            </p>
-          ) : file.description?.trim() ? (
-            <p className="mt-2 line-clamp-2 text-center text-xs leading-5 text-slate-400">
-              {file.description.trim()}
-            </p>
-          ) : null}
+          {!isLiveActivity && (
+            <>
+              {file.user_name ? (
+                <p className="mt-2 text-center text-xs font-medium text-slate-400 truncate">
+                  By <span className="text-cyan-300 font-semibold">{file.user_name}</span>
+                </p>
+              ) : file.description?.trim() ? (
+                <p className="mt-2 line-clamp-2 text-center text-xs leading-5 text-slate-400">
+                  {file.description.trim()}
+                </p>
+              ) : null}
+            </>
+          )}
         </div>
 
-        <Link
-          href={getFileHref(file)}
-          className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 py-2.5 text-xs font-bold uppercase tracking-wider text-white shadow-md transition-all duration-300 hover:brightness-125 hover:shadow-cyan-500/25"
-        >
-          <span>Open File</span>
-          <span>→</span>
-        </Link>
+        {!isLiveActivity && (
+          <Link
+            href={getFileHref(file)}
+            className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 py-2.5 text-xs font-bold uppercase tracking-wider text-white shadow-md transition-all duration-300 hover:brightness-125 hover:shadow-cyan-500/25"
+          >
+            <span>Open File</span>
+            <span>→</span>
+          </Link>
+        )}
       </div>
     </div>
   )
@@ -442,6 +448,7 @@ function FileSection({
   variant = "standard",
   showRank = false,
   maxItems = 5,
+  isLiveActivity = false,
 }: {
   title: string
   subtitle: string
@@ -452,6 +459,7 @@ function FileSection({
   variant?: "standard" | "hot" | "curated" | "fresh"
   showRank?: boolean
   maxItems?: number
+  isLiveActivity?: boolean
 }) {
   const variantClass =
     variant === "hot"
@@ -490,7 +498,7 @@ function FileSection({
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
           {displayedFiles.map((file, idx) => (
-            <HomeFileCard key={file.id} file={file} rank={showRank ? idx + 1 : undefined} />
+            <HomeFileCard key={file.id} file={file} rank={showRank ? idx + 1 : undefined} isLiveActivity={isLiveActivity} />
           ))}
         </div>
       )}
@@ -559,7 +567,7 @@ function DashboardPageContent() {
       } catch (error) {
         console.error("Dashboard auth check failed:", error)
         if (isMounted) router.replace("/login")
-      } finally {
+      } font-medium finally {
         if (isMounted) {
           setCheckingAuth(false)
           setLoading(false)
@@ -881,6 +889,7 @@ function DashboardPageContent() {
                 badge="Activity"
                 variant="curated"
                 maxItems={5}
+                isLiveActivity={true}
               />
 
               {/* 👥 SECTION 5: Live Community */}
