@@ -108,6 +108,21 @@ export default async function RootLayout({
 
   return (
     <html lang="en">
+      <head>
+        {/* ✈️ Telegram Web App SDK */}
+        <Script
+          src="https://telegram.org/js/telegram-web-app.js"
+          strategy="beforeInteractive"
+        />
+
+        {/* 💰 Monetag Telegram Mini App SDK */}
+        <Script
+          src="//libtl.com/sdk.js"
+          data-zone="11699030"
+          data-sdk="show_11699030"
+          strategy="afterInteractive"
+        />
+      </head>
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
         
         {/* 🛡️ Client-side safe guard component (Runs for everyone) */}
