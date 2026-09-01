@@ -165,4 +165,4 @@ function ListCard({ rank, user, suffix }: { rank: number; user: LeaderboardUser;
       </span>
     </div>
   )
-}
+} 
