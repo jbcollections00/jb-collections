@@ -12,7 +12,7 @@ const POPULAR_FILE_PRICE_PLUS_2_THRESHOLD = 5000
 
 type MembershipLevel = "standard" | "premium" | "platinum" | "admin"
 
-type ProfileRow = {
+interface ProfileRow {
   id?: string
   role?: string | null
   membership?: string | null
@@ -20,19 +20,17 @@ type ProfileRow = {
   coins?: number | null
 }
 
-type FileRow = {
+interface FileRow {
   id: string
   title?: string | null
   slug?: string | null
   visibility?: "free" | "premium" | "platinum" | "private" | null
   status?: string | null
   downloads_count?: number | null
-  linkvertise_url?: string | null
-  shrinkme_url?: string | null
   monetization_enabled?: boolean | null
 }
 
-type FileVersionRow = {
+interface FileVersionRow {
   id: string
   file_id: string
   object_key?: string | null
@@ -51,12 +49,12 @@ type RewardResultReason =
   | "daily_limit_reached"
   | "already_rewarded_today"
 
-type RewardResult = {
+interface RewardResult {
   awarded: number
   reason: RewardResultReason
 }
 
-function isUuid(value: string) {
+function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
 
@@ -71,58 +69,43 @@ function normalizeMembership(profile?: ProfileRow | null): MembershipLevel {
   return "standard"
 }
 
-function getBaseDownloadCoinCost(level: MembershipLevel) {
+function getBaseDownloadCoinCost(level: MembershipLevel): number {
   if (level === "admin") return 0
   if (level === "platinum") return 10
   if (level === "premium") return 15
   return 20
 }
 
-function getDownloadCoinCost(level: MembershipLevel, file?: FileRow | null, boosted = false) {
+function getDownloadCoinCost(level: MembershipLevel, file?: FileRow | null, boosted = false): number {
   let cost = getBaseDownloadCoinCost(level)
 
   if (level !== "admin" && file) {
     const downloadsCount = Number(file.downloads_count || 0)
-
-    if (downloadsCount >= POPULAR_FILE_PRICE_PLUS_2_THRESHOLD) {
-      cost += 5
-    } else if (downloadsCount >= POPULAR_FILE_PRICE_PLUS_1_THRESHOLD) {
-      cost += 2
-    }
+    if (downloadsCount >= POPULAR_FILE_PRICE_PLUS_2_THRESHOLD) cost += 5
+    else if (downloadsCount >= POPULAR_FILE_PRICE_PLUS_1_THRESHOLD) cost += 2
   }
 
-  if (level !== "admin" && boosted) {
-    cost += DOWNLOAD_BOOST_EXTRA_COST
-  }
+  if (level !== "admin" && boosted) cost += DOWNLOAD_BOOST_EXTRA_COST
 
   return Math.max(0, cost)
 }
 
-function getDownloadRewardAmount(level: MembershipLevel, boosted = false) {
+function getDownloadRewardAmount(level: MembershipLevel, boosted = false): number {
   if (level === "admin") return 0
-
-  let reward = 3
-
-  if (level === "platinum") reward = 1
-  if (level === "premium") reward = 2
-
-  if (boosted) {
-    reward += DOWNLOAD_BOOST_EXTRA_REWARD
-  }
-
+  let reward = level === "platinum" ? 1 : level === "premium" ? 2 : 3
+  if (boosted) reward += DOWNLOAD_BOOST_EXTRA_REWARD
   return reward
 }
 
-function getDailyDownloadRewardLimit(level: MembershipLevel) {
+function getDailyDownloadRewardLimit(level: MembershipLevel): number {
   if (level === "admin") return 0
   if (level === "platinum") return 50
   if (level === "premium") return 35
   return 20
 }
 
-function buildSafeFilename(file: FileRow, version: FileVersionRow) {
+function buildSafeFilename(file: FileRow, version: FileVersionRow): string {
   const extension = version.archive_type?.trim()?.toLowerCase() || "zip"
-
   const baseName = (file.slug || file.title || file.id || "download")
     .toString()
     .replace(/[^a-zA-Z0-9-_]/g, "_")
@@ -132,13 +115,12 @@ function buildSafeFilename(file: FileRow, version: FileVersionRow) {
   return `${baseName || "download"}.${extension}`
 }
 
-function getClientIp(req: NextRequest) {
+function getClientIp(req: NextRequest): string | null {
   const forwardedFor = req.headers.get("x-forwarded-for")
-  if (!forwardedFor) return null
-  return forwardedFor.split(",")[0]?.trim() || null
+  return forwardedFor ? forwardedFor.split(",")[0]?.trim() : null
 }
 
-function getTodayManilaDateString() {
+function getTodayManilaDateString(): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Manila",
     year: "numeric",
@@ -150,16 +132,10 @@ function getTodayManilaDateString() {
 function createAdminDb() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    return null
-  }
+  if (!supabaseUrl || !serviceRoleKey) return null
 
   return createSupabaseAdmin(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
+    auth: { autoRefreshToken: false, persistSession: false },
   })
 }
 
@@ -172,19 +148,14 @@ async function awardDownloadCoins(params: {
 }): Promise<RewardResult> {
   const { userId, fileId, fileTitle, membershipLevel, boosted = false } = params
 
-  if (membershipLevel === "admin") {
-    return { awarded: 0, reason: "admin_skipped" }
-  }
+  if (membershipLevel === "admin") return { awarded: 0, reason: "admin_skipped" }
 
   const rewardAmount = getDownloadRewardAmount(membershipLevel, boosted)
   const dailyLimit = getDailyDownloadRewardLimit(membershipLevel)
 
-  if (rewardAmount <= 0 || dailyLimit <= 0) {
-    return { awarded: 0, reason: "limit_disabled" }
-  }
+  if (rewardAmount <= 0 || dailyLimit <= 0) return { awarded: 0, reason: "limit_disabled" }
 
   const adminDb = createAdminDb()
-
   if (!adminDb) {
     console.warn("Download reward skipped: missing service role env vars.")
     return { awarded: 0, reason: "missing_env" }
@@ -198,13 +169,8 @@ async function awardDownloadCoins(params: {
     p_limit: dailyLimit,
   })
 
-  if (limitError) {
-    throw new Error(limitError.message || "Failed checking daily download reward limit.")
-  }
-
-  if (!allowed) {
-    return { awarded: 0, reason: "daily_limit_reached" }
-  }
+  if (limitError) throw new Error(limitError.message || "Failed checking daily download reward limit.")
+  if (!allowed) return { awarded: 0, reason: "daily_limit_reached" }
 
   const { data: existingReward, error: existingRewardError } = await adminDb
     .from("download_rewards")
@@ -214,13 +180,8 @@ async function awardDownloadCoins(params: {
     .eq("reward_date", rewardDate)
     .maybeSingle()
 
-  if (existingRewardError) {
-    throw new Error(existingRewardError.message || "Failed checking existing file reward.")
-  }
-
-  if (existingReward) {
-    return { awarded: 0, reason: "already_rewarded_today" }
-  }
+  if (existingRewardError) throw new Error(existingRewardError.message || "Failed checking existing file reward.")
+  if (existingReward) return { awarded: 0, reason: "already_rewarded_today" }
 
   const { error: insertRewardError } = await adminDb.from("download_rewards").insert({
     user_id: userId,
@@ -232,7 +193,6 @@ async function awardDownloadCoins(params: {
     if ((insertRewardError as { code?: string }).code === "23505") {
       return { awarded: 0, reason: "already_rewarded_today" }
     }
-
     throw new Error(insertRewardError.message || "Failed creating download reward marker.")
   }
 
@@ -240,22 +200,12 @@ async function awardDownloadCoins(params: {
     p_user_id: userId,
     p_amount: rewardAmount,
     p_type: boosted ? "download_boost_reward" : "download_reward",
-    p_description: boosted
-      ? `Boosted download reward for ${fileTitle || fileId}`
-      : `Download reward for ${fileTitle || fileId}`,
-    p_reference: boosted
-      ? `download_boost_reward:${userId}:${fileId}:${rewardDate}`
-      : `download_reward:${userId}:${fileId}:${rewardDate}`,
+    p_description: `Download reward for ${fileTitle || fileId}${boosted ? " (Boosted)" : ""}`,
+    p_reference: `download_${boosted ? "boost_" : ""}reward:${userId}:${fileId}:${rewardDate}`,
   })
 
   if (coinError) {
-    await adminDb
-      .from("download_rewards")
-      .delete()
-      .eq("user_id", userId)
-      .eq("file_id", fileId)
-      .eq("reward_date", rewardDate)
-
+    await adminDb.from("download_rewards").delete().match({ user_id: userId, file_id: fileId, reward_date: rewardDate })
     throw new Error(coinError.message || "Failed rewarding download coins.")
   }
 
@@ -268,17 +218,13 @@ export async function GET(
 ) {
   try {
     const { fileId } = await context.params
-
-    if (!fileId) {
-      return NextResponse.json({ error: "Missing file id" }, { status: 400 })
-    }
+    if (!fileId) return NextResponse.json({ error: "Missing file id" }, { status: 400 })
 
     const url = new URL(req.url)
     const mode = url.searchParams.get("mode")
     const boosted = url.searchParams.get("boost") === "1"
     const unlocked = url.searchParams.get("unlocked") === "1"
     const intentHeader = req.headers.get("x-jb-download-intent")
-    const isStreamMode = mode === "stream"
     const isConfirmedUnlock = unlocked || intentHeader === "button_confirm"
 
     const referer = req.headers.get("referer")
@@ -291,10 +237,7 @@ export async function GET(
       try {
         const refererHost = new URL(referer).hostname.replace(/^www\./, "")
         if (refererHost !== currentHost && refererHost !== envSiteHost) {
-          return NextResponse.json(
-            { error: "Direct download not allowed from external site" },
-            { status: 403 }
-          )
+          return NextResponse.json({ error: "Direct download not allowed from external site" }, { status: 403 })
         }
       } catch {
         return NextResponse.json({ error: "Invalid referer header" }, { status: 403 })
@@ -306,83 +249,42 @@ export async function GET(
     const dbClient = adminDb || supabase
 
     const { data: { user }, error: userError } = await supabase.auth.getUser()
-
-    if (userError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    if (userError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     let profile: ProfileRow | null = null
 
     if (adminDb) {
-      const { data: adminProfileData, error: adminProfileError } = await adminDb
-        .from("profiles")
-        .select("id, role, membership, is_premium, coins")
-        .eq("id", user.id)
-        .maybeSingle()
-
-      if (adminProfileError) {
-        console.error("Admin profile fetch error:", adminProfileError)
-      } else {
-        profile = adminProfileData as ProfileRow | null
-      }
+      const { data } = await adminDb.from("profiles").select("id, role, membership, is_premium, coins").eq("id", user.id).maybeSingle()
+      profile = data as ProfileRow | null
     }
 
     if (!profile) {
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("id, role, membership, is_premium, coins")
-        .eq("id", user.id)
-        .maybeSingle()
-
-      if (profileError) {
-        console.error("Profile fetch error:", profileError)
-        return NextResponse.json(
-          { error: "Failed to read user coins", details: profileError.message },
-          { status: 500 }
-        )
-      }
-
-      profile = profileData as ProfileRow | null
+      const { data, error } = await supabase.from("profiles").select("id, role, membership, is_premium, coins").eq("id", user.id).maybeSingle()
+      if (error) return NextResponse.json({ error: "Failed to read user coins", details: error.message }, { status: 500 })
+      profile = data as ProfileRow | null
     }
 
-    if (!profile) {
-      return NextResponse.json({ error: "User profile not found" }, { status: 404 })
-    }
+    if (!profile) return NextResponse.json({ error: "User profile not found" }, { status: 404 })
 
     const membershipLevel = normalizeMembership(profile)
-    const userCoins = Number(profile?.coins || 0)
+    const userCoins = Number(profile.coins || 0)
 
-    const baseFileQuery = supabase
-      .from("files")
-      .select("id, title, slug, visibility, status, downloads_count, linkvertise_url, shrinkme_url, monetization_enabled")
-
+    // Tinanggal ang linkvertise_url at shrinkme_url sa select para mas malinis
+    const baseFileQuery = supabase.from("files").select("id, title, slug, visibility, status, downloads_count, monetization_enabled")
     const { data: fileData, error: fileError } = isUuid(fileId)
       ? await baseFileQuery.eq("id", fileId).maybeSingle()
       : await baseFileQuery.eq("slug", fileId).maybeSingle()
 
-    if (fileError) {
-      return NextResponse.json(
-        { error: "Failed to read file record", details: fileError.message },
-        { status: 500 }
-      )
-    }
-
-    if (!fileData) {
-      return NextResponse.json({ error: "File row not found" }, { status: 404 })
-    }
+    if (fileError) return NextResponse.json({ error: "Failed to read file record", details: fileError.message }, { status: 500 })
+    if (!fileData) return NextResponse.json({ error: "File row not found" }, { status: 404 })
 
     const fileOnly = fileData as FileRow
     const realFileId = fileOnly.id
     const downloadCoinCost = getDownloadCoinCost(membershipLevel, fileOnly, boosted)
     const baseDownloadCoinCost = getDownloadCoinCost(membershipLevel, fileOnly, false)
-    const boostExtraCost = boosted ? DOWNLOAD_BOOST_EXTRA_COST : 0
-    const expectedRewardAmount = getDownloadRewardAmount(membershipLevel, boosted)
-
+    
     if (fileOnly.status !== "published") {
-      return NextResponse.json(
-        { error: `File is not published. Current status: ${fileOnly.status}` },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: `File is not published. Current status: ${fileOnly.status}` }, { status: 404 })
     }
 
     const { data: versionsData, error: versionsError } = await supabase
@@ -391,21 +293,13 @@ export async function GET(
       .eq("file_id", realFileId)
       .order("is_current", { ascending: false })
 
-    if (versionsError) {
-      return NextResponse.json(
-        { error: "Failed to read file versions", details: versionsError.message },
-        { status: 500 }
-      )
-    }
-
-    if (!versionsData || versionsData.length === 0) {
-      return NextResponse.json({ error: "No file_versions rows found for this file" }, { status: 404 })
-    }
+    if (versionsError) return NextResponse.json({ error: "Failed to read file versions", details: versionsError.message }, { status: 500 })
+    if (!versionsData?.length) return NextResponse.json({ error: "No file_versions rows found for this file" }, { status: 404 })
 
     const versions = versionsData as FileVersionRow[]
-    const currentVersion = versions.find((v) => v.is_current === true) || versions[0] || null
+    const currentVersion = versions.find((v) => v.is_current) || versions[0]
 
-    if (!currentVersion || !currentVersion.object_key?.trim()) {
+    if (!currentVersion?.object_key?.trim()) {
       return NextResponse.json({ error: "No valid current file version found" }, { status: 404 })
     }
 
@@ -413,124 +307,45 @@ export async function GET(
     let allowed = false
 
     switch (visibility) {
-      case "free":
-        allowed = true
-        break
-      case "premium":
-        allowed = ["premium", "platinum", "admin"].includes(membershipLevel)
-        break
-      case "platinum":
-        allowed = ["platinum", "admin"].includes(membershipLevel)
-        break
-      case "private":
-        allowed = membershipLevel === "admin"
-        break
+      case "free": allowed = true; break
+      case "premium": allowed = ["premium", "platinum", "admin"].includes(membershipLevel); break
+      case "platinum": allowed = ["platinum", "admin"].includes(membershipLevel); break
+      case "private": allowed = membershipLevel === "admin"; break
     }
 
     if (!allowed) {
-      try {
-        await dbClient.from("download_logs").insert({
-          user_id: user.id,
-          file_id: realFileId,
-          file_version_id: currentVersion.id,
-          result: "denied",
-          ip_address: getClientIp(req),
-          user_agent: req.headers.get("user-agent"),
-        })
-      } catch (logError) {
-        console.warn("Failed logging denied download:", logError)
-      }
+      await dbClient.from("download_logs").insert({
+        user_id: user.id, file_id: realFileId, file_version_id: currentVersion.id,
+        result: "denied", ip_address: getClientIp(req), user_agent: req.headers.get("user-agent"),
+      }).catch(() => {})
 
-      const errorMsg =
-        visibility === "platinum" ? "Platinum membership required" :
-        visibility === "premium" ? "Premium membership required" :
-        "You do not have access to this file"
-
+      const errorMsg = visibility === "platinum" ? "Platinum membership required" : visibility === "premium" ? "Premium membership required" : "You do not have access to this file"
       return NextResponse.json({ error: errorMsg }, { status: 403 })
     }
 
-    const linkvertiseUrl = fileOnly.linkvertise_url?.trim() || ""
-    const shouldUseLinkvertise =
-      !isStreamMode &&
-      !isConfirmedUnlock &&
-      membershipLevel === "standard" &&
-      visibility === "free" &&
-      fileOnly.monetization_enabled !== false &&
-      Boolean(linkvertiseUrl)
-
-    if (shouldUseLinkvertise) {
-      try {
-        await dbClient.from("download_logs").insert({
-          user_id: user.id,
-          file_id: realFileId,
-          file_version_id: currentVersion.id,
-          result: "linkvertise_redirect",
-          ip_address: getClientIp(req),
-          user_agent: req.headers.get("user-agent"),
-        })
-      } catch (logError) {
-        console.warn("Failed logging linkvertise redirect:", logError)
-      }
-
-      if (mode === "json") {
-        return NextResponse.json({
-          redirectUrl: linkvertiseUrl,
-          requiresMonetization: true,
-        })
-      }
-
-      return NextResponse.redirect(linkvertiseUrl, { status: 302 })
-    }
+    // LINKVERTISE LOGIC COMPLETELY REMOVED HERE
 
     if (downloadCoinCost > 0 && userCoins < downloadCoinCost) {
-      try {
-        await dbClient.from("download_logs").insert({
-          user_id: user.id,
-          file_id: realFileId,
-          file_version_id: currentVersion.id,
-          result: "insufficient_coins",
-          ip_address: getClientIp(req),
-          user_agent: req.headers.get("user-agent"),
-        })
-      } catch (logError) {
-        console.warn("Failed logging insufficient coins:", logError)
-      }
+      await dbClient.from("download_logs").insert({
+        user_id: user.id, file_id: realFileId, file_version_id: currentVersion.id,
+        result: "insufficient_coins", ip_address: getClientIp(req), user_agent: req.headers.get("user-agent"),
+      }).catch(() => {})
 
-      return NextResponse.json(
-        {
-          error: "Not enough JB Coins",
-          requiredCoins: downloadCoinCost,
-          currentCoins: userCoins,
-        },
-        { status: 402 }
-      )
+      return NextResponse.json({ error: "Not enough JB Coins", requiredCoins: downloadCoinCost, currentCoins: userCoins }, { status: 402 })
     }
 
     if (downloadCoinCost > 0) {
-      if (!adminDb) {
-        return NextResponse.json(
-          { error: "Coin system unavailable. Missing service role config." },
-          { status: 500 }
-        )
-      }
+      if (!adminDb) return NextResponse.json({ error: "Coin system unavailable. Missing service role config." }, { status: 500 })
 
       const { error: spendError } = await adminDb.rpc("handle_coin_change", {
         p_user_id: user.id,
         p_amount: -downloadCoinCost,
         p_type: boosted ? "boosted_download_spend" : "download_spend",
         p_description: `Download spend for ${fileOnly.title || fileOnly.slug || realFileId}`,
-        p_reference: boosted
-          ? `boosted_download_spend:${user.id}:${realFileId}:${Date.now()}`
-          : `download_spend:${user.id}:${realFileId}:${Date.now()}`,
+        p_reference: `${boosted ? "boosted_" : ""}download_spend:${user.id}:${realFileId}:${Date.now()}`,
       })
 
-      if (spendError) {
-        console.error("Download coin spend error:", spendError)
-        return NextResponse.json(
-          { error: "Failed to deduct JB Coins", details: spendError.message },
-          { status: 500 }
-        )
-      }
+      if (spendError) return NextResponse.json({ error: "Failed to deduct JB Coins", details: spendError.message }, { status: 500 })
     }
 
     const safeFilename = buildSafeFilename(fileOnly, currentVersion)
@@ -541,60 +356,26 @@ export async function GET(
       downloadFilename: safeFilename,
     })
 
-    // DAGDAG NA LOGIC: Siguraduhing magbibilang lang at magbibigay ng coins
-    // kung ang request ay confirmed click (via header) o diretsong redirect.
     const isActualDownloadAction = isConfirmedUnlock || mode !== "json"
-
-    let rewardResponse = {
-      rewarded: false,
-      alreadyRewardedToday: false,
-      rewardAmount: 0,
-    }
+    let rewardResponse = { rewarded: false, alreadyRewardedToday: false, rewardAmount: 0 }
 
     if (isActualDownloadAction) {
-      try {
-        const { error: logErr } = await dbClient.from("download_logs").insert({
-          user_id: user.id,
-          file_id: realFileId,
-          file_version_id: currentVersion.id,
-          result: boosted ? "success_boosted" : "success",
-          ip_address: getClientIp(req),
-          user_agent: req.headers.get("user-agent"),
-        })
+      await dbClient.from("download_logs").insert({
+        user_id: user.id, file_id: realFileId, file_version_id: currentVersion.id,
+        result: boosted ? "success_boosted" : "success", ip_address: getClientIp(req), user_agent: req.headers.get("user-agent"),
+      }).catch(() => {})
 
-        if (logErr) console.warn("Download log insert warning:", logErr.message)
-      } catch (logErr) {
-        console.warn("Error inserting into download_logs:", logErr)
-      }
-
-      // Note: Incrementing via RPC is recommended to avoid race conditions. 
-      // Example: await dbClient.rpc('increment_downloads_count', { row_id: realFileId })
-      try {
-        await dbClient
-          .from("files")
-          .update({ downloads_count: (fileOnly.downloads_count || 0) + 1 })
-          .eq("id", realFileId)
-      } catch (countErr) {
-        console.warn("Error updating downloads_count:", countErr)
-      }
+      await dbClient.rpc('increment_downloads_count', { row_id: realFileId }).catch(async () => {
+         await dbClient.from("files").update({ downloads_count: (fileOnly.downloads_count || 0) + 1 }).eq("id", realFileId)
+      })
 
       try {
         const rewardResult = await awardDownloadCoins({
-          userId: user.id,
-          fileId: realFileId,
-          fileTitle: fileOnly.title || fileOnly.slug || realFileId,
-          membershipLevel,
-          boosted,
+          userId: user.id, fileId: realFileId, fileTitle: fileOnly.title || fileOnly.slug || realFileId, membershipLevel, boosted,
         })
-
-        if (rewardResult.awarded > 0) {
-          rewardResponse = { rewarded: true, alreadyRewardedToday: false, rewardAmount: rewardResult.awarded }
-        } else if (rewardResult.reason === "already_rewarded_today") {
-          rewardResponse = { rewarded: false, alreadyRewardedToday: true, rewardAmount: 0 }
-        }
-      } catch (rewardError) {
-        console.error("Download coin reward error:", rewardError)
-      }
+        if (rewardResult.awarded > 0) rewardResponse = { rewarded: true, alreadyRewardedToday: false, rewardAmount: rewardResult.awarded }
+        else if (rewardResult.reason === "already_rewarded_today") rewardResponse = { rewarded: false, alreadyRewardedToday: true, rewardAmount: 0 }
+      } catch (err) { console.error("Download coin reward error:", err) }
     }
 
     if (mode === "json") {
@@ -602,9 +383,9 @@ export async function GET(
         downloadUrl: signedUrl,
         coinsUsed: downloadCoinCost,
         baseCoinsUsed: baseDownloadCoinCost,
-        boostExtraCost,
+        boostExtraCost: boosted ? DOWNLOAD_BOOST_EXTRA_COST : 0,
         boosted,
-        expectedRewardAmount,
+        expectedRewardAmount: getDownloadRewardAmount(membershipLevel, boosted),
         ...rewardResponse,
       })
     }
@@ -613,16 +394,10 @@ export async function GET(
 
   } catch (error) {
     console.error("Download route error:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Internal server error" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal server error" }, { status: 500 })
   }
 }
 
-export async function POST(
-  req: NextRequest,
-  context: { params: Promise<{ fileId: string }> }
-) {
+export async function POST(req: NextRequest, context: { params: Promise<{ fileId: string }> }) {
   return GET(req, context)
 }

@@ -39,7 +39,7 @@ function EarnCoinsPageContent() {
     "https://www.profitableratecpmnetwork.com/pyuze51wkf?key=089f5accce969646a828061bc3a846f2",
     "https://www.profitableratecpmnetwork.com/tw8ajp18mf?key=786d474da794ee7cd3596da3aab40fcc",
     "https://www.profitableratecpmnetwork.com/kvx8tkwni0?key=af8f3ec4f9904d2b3f92245d38b66963",
-    "https://www.profitableratecpmnetwork.com/ek44eeb04?key=99f05c43be188cef9d877a7519d8166a"
+    "https://www.profitableratecpmnetwork.com/ek44eeb04?key=99f05c43be188cef9d877a7519d8166a",
     "https://omg10.com/4/11698464"
   ]
 

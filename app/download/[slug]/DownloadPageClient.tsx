@@ -152,16 +152,16 @@ function getShortDescription(file: FileRow | null) {
 
 function getDownloadCoinCost(level: MembershipLevel) {
   if (level === "admin") return 0
-  if (level === "platinum") return 10
-  if (level === "premium") return 15
-  return 20
+  if (level === "platinum") return 30
+  if (level === "premium") return 40
+  return 50
 }
 
 function getRewardAmount(level: MembershipLevel) {
   if (level === "admin") return 0
-  if (level === "platinum") return 1
-  if (level === "premium") return 2
-  return 3
+  if (level === "platinum") return 3
+  if (level === "premium") return 4
+  return 5
 }
 
 export default function DownloadPageClient() {
