@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import PresenceTracker from "@/app/components/PresenceTracker"
 import DailyRewardCard from "@/app/components/DailyRewardCard"
-import TopDownloaderAd from "@/app/components/TopDownloaderAd"
 import RewardedAdButton from "@/app/components/RewardedAdButton"
 
 type Category = {
@@ -150,105 +149,6 @@ function getInitials(name: string) {
   if (parts.length === 0) return "C"
   if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase()
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-}
-
-// --- WEEKLY LEADERBOARD POPUP MODAL ---
-function WeeklyLeaderboardModal() {
-  const [isOpen, setIsOpen] = useState(false)
-  const router = useRouter()
-
-  useEffect(() => {
-    const hasSeenModal = sessionStorage.getItem("hasSeenLeaderboardModal")
-    if (!hasSeenModal) {
-      const timer = setTimeout(() => {
-        setIsOpen(true)
-      }, 1200)
-      return () => clearTimeout(timer)
-    }
-  }, [])
-
-  const handleClose = () => {
-    sessionStorage.setItem("hasSeenLeaderboardModal", "true")
-    setIsOpen(false)
-  }
-
-  const handleAction = () => {
-    handleClose()
-    router.push("/leaderboard")
-  }
-
-  if (!isOpen) return null
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
-      <div 
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
-        onClick={handleClose}
-      />
-      
-      <div className="relative w-full max-w-md overflow-hidden rounded-[24px] border border-amber-500/20 bg-slate-900/95 p-6 text-center shadow-[0_0_50px_rgba(234,179,8,0.25)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-300 text-white">
-        <button 
-          onClick={handleClose}
-          className="absolute right-4 top-4 rounded-full p-1 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
-          </svg>
-        </button>
-
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-amber-400/40 bg-gradient-to-br from-amber-400/20 to-yellow-600/20 shadow-[0_0_30px_rgba(234,179,8,0.3)]">
-          <span className="text-3xl">🏆</span>
-        </div>
-
-        <h2 className="text-2xl font-black text-white">
-          Weekly Race is Live!
-        </h2>
-        
-        <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-left shadow-inner">
-          <p className="mb-2 text-sm font-bold text-amber-400">Paano Sumali at Manalo ng JB Coins:</p>
-          <ol className="list-decimal space-y-2 pl-4 text-[13px] font-medium text-slate-300">
-            <li>Kumita ng coins sa pamamagitan ng daily check-ins, tasks, at activities.</li>
-            <li>Nagsisimula ang race tuwing <strong className="text-white">Lunes (12:00 AM)</strong> at nagre-reset tuwing <strong className="text-white">Linggo (11:59 PM)</strong>.</li>
-            <li>Ang Top 3 members na may pinakamaming naipong coins ngayong linggo ay mananalo ng rewards!</li>
-          </ol>
-
-          <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-slate-950/80 p-3 text-center border border-white/10">
-            <div>
-              <p className="text-[11px] text-amber-400 font-bold">🥇 1st Place</p>
-              <p className="text-sm font-black text-white">+500 JB</p>
-            </div>
-            <div>
-              <p className="text-[11px] text-slate-300 font-bold">🥈 2nd Place</p>
-              <p className="text-sm font-black text-white">+300 JB</p>
-            </div>
-            <div>
-              <p className="text-[11px] text-amber-600 font-bold">🥉 3rd Place</p>
-              <p className="text-sm font-black text-white">+200 JB</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-full bg-slate-800/60 py-1.5 text-xs font-bold text-amber-300 border border-amber-500/20">
-          🔥 1,000 JB Coins Total Prize Pool Every Week!
-        </div>
-
-        <div className="mt-6 flex flex-col gap-3">
-          <button 
-            onClick={handleAction}
-            className="w-full rounded-xl bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 py-3 font-bold text-slate-950 shadow-lg shadow-amber-500/25 transition-all hover:scale-[1.02] hover:shadow-amber-500/40"
-          >
-            View Leaderboard Now
-          </button>
-          <button 
-            onClick={handleClose}
-            className="w-full rounded-xl py-2.5 font-semibold text-slate-400 transition-colors hover:bg-white/5 hover:text-white text-xs"
-          >
-            Maybe Later
-          </button>
-        </div>
-      </div>
-    </div>
-  )
 }
 
 function RankBadge({ rank }: { rank: number }) {
@@ -708,9 +608,6 @@ function DashboardPageContent() {
   return (
     <>
       <PresenceTracker />
-      
-      {/* 🏆 WEEKLY LEADERBOARD POPUP */}
-      <WeeklyLeaderboardModal />
 
       <div className="relative min-h-screen bg-[#030712] text-slate-100 selection:bg-cyan-500 selection:text-slate-950">
         {/* Glowing Background Elements */}
@@ -726,14 +623,6 @@ function DashboardPageContent() {
           <RewardedAdButton />
 
           <DailyRewardCard />
-
-          {/* 🚀 TOP DOWNLOADER PROMO AD BANNER */}
-          <TopDownloaderAd
-            targetUrl="/leaderboard"
-            title="⚡ Rank #1 Top Downloader Gets Bonus Coins & Perks!"
-            description="I-download ang pinakabagong files araw-araw, humabol sa rankings, at manalo ng exclusive JB Coins rewards!"
-            badgeText="TOP DOWNLOADER RACE"
-          />
 
           <section className="overflow-hidden rounded-[36px] border border-white/10 bg-slate-900/40 shadow-2xl backdrop-blur-2xl">
             {/* HERO BANNER */}
