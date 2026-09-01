@@ -7,6 +7,8 @@ import {
   Gem,
   ArrowRight,
   CheckCircle2,
+  Coins,
+  Sparkles,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import SiteHeader from "@/app/components/SiteHeader"
@@ -46,11 +48,20 @@ function formatPeso(value: number) {
 }
 
 function StorePageContent() {
-  useMemo(() => createClient(), [])
+  const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
 
   const [selectedPackageId, setSelectedPackageId] = useState("php1000")
   const [showCheckoutModal, setShowCheckoutModal] = useState(false)
+  const [isRedeeming, setIsRedeeming] = useState<string | null>(null)
+  const [redeemError, setRedeemError] = useState("")
+  const [redeemSuccess, setRedeemSuccess] = useState("")
+
+  // Membership Prices in JB Coins
+  const MEMBERSHIP_PRICES = {
+    premium: 7000,   // 7,000 JB Coins for 30 days
+    platinum: 10000, // 10,000 JB Coins for 30 days
+  }
 
   const packages: CoinPackage[] = [
     {
@@ -172,18 +183,85 @@ function StorePageContent() {
     router.push(`/payment?${params.toString()}`)
   }
 
+  async function handleRedeemTier(tier: "premium" | "platinum") {
+    try {
+      setIsRedeeming(tier)
+      setRedeemError("")
+      setRedeemSuccess("")
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setRedeemError("Kailangan mong mag-login muna para makapag-redeem.")
+        return
+      }
+
+      const price = MEMBERSHIP_PRICES[tier]
+
+      // Call handle_coin_change RPC function to deduct coins
+      const { data, error } = await supabase.rpc("handle_coin_change", {
+        p_user_id: user.id,
+        p_amount: -price,
+        p_type: `membership_redeem_${tier}`,
+        p_description: `Redeemed ${tier.toUpperCase()} Membership (30 Days)`,
+        p_reference: `REDEEM-${tier.toUpperCase()}-${Date.now()}`
+      })
+
+      if (error) {
+        if (error.message.includes("Insufficient")) {
+          throw new Error(`Kulang ang iyong JB Coins. Kailangan ng ${formatCoins(price)}.`)
+        }
+        throw new Error(error.message)
+      }
+
+      // Calculate 30 days expiration
+      const expiresAt = new Date()
+      expiresAt.setDate(expiresAt.getDate() + 30)
+
+      // Update user profile membership tier
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          membership_tier: tier,
+          tier_expires_at: expiresAt.toISOString(),
+        })
+        .eq("id", user.id)
+
+      if (profileError) throw new Error("Nagka-error sa pag-update ng membership status.")
+
+      setRedeemSuccess(`Tagumpay! Na-activate na ang iyong 30-Day ${tier.toUpperCase()} Membership!`)
+      router.refresh()
+    } catch (err: unknown) {
+      setRedeemError(err instanceof Error ? err.message : "Bumagsak ang redemption request.")
+    } finally {
+      setIsRedeeming(null)
+    }
+  }
+
   return (
     <>
       <SiteHeader />
 
       <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.18),transparent_24%),linear-gradient(180deg,#020617_0%,#0f172a_45%,#111827_100%)] px-4 pb-10 pt-24 text-white">
         <div className="mx-auto w-full max-w-7xl">
+          {/* Global Alert Notices */}
+          {redeemError ? (
+            <div className="mb-6 rounded-2xl border border-red-400/20 bg-red-500/10 px-5 py-4 text-sm font-bold text-red-200">
+              ⚠️ {redeemError}
+            </div>
+          ) : null}
+
+          {redeemSuccess ? (
+            <div className="mb-6 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-5 py-4 text-sm font-bold text-emerald-200">
+              🎉 {redeemSuccess}
+            </div>
+          ) : null}
+
           {/* Membership Comparison Section */}
           <section className="rounded-[32px] border border-white/10 bg-slate-900/70 p-6 shadow-xl backdrop-blur sm:p-8">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.24em] text-amber-200">Membership Comparison</p>
-                <h2 className="mt-2 text-2xl font-black text-white sm:text-3xl">Make upgrading feel worth it.</h2>
+                <p className="text-xs font-black uppercase tracking-[0.24em] text-amber-200">Membership Tiers</p>
+                <h2 className="mt-2 text-2xl font-black text-white sm:text-3xl">Redeem Membership with JB Coins</h2>
               </div>
 
               <div className="inline-flex w-fit items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.22em] text-amber-200 shadow-[0_0_25px_rgba(251,191,36,0.16)]">
@@ -192,56 +270,95 @@ function StorePageContent() {
             </div>
 
             <div className="mt-6 grid gap-5 lg:grid-cols-3">
-              <article className="rounded-[28px] border border-white/10 bg-white/5 p-6 transition duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.07]">
-                <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">
-                  Free
-                </div>
-                <h3 className="mt-4 text-2xl font-black text-white">Free Plan</h3>
-                <p className="mt-2 text-sm text-slate-400">For casual users who just want basic access.</p>
+              {/* FREE TIER */}
+              <article className="flex flex-col justify-between rounded-[28px] border border-white/10 bg-white/5 p-6 transition duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.07]">
+                <div>
+                  <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">
+                    Free
+                  </div>
+                  <h3 className="mt-4 text-2xl font-black text-white">Free Plan</h3>
+                  <p className="mt-2 text-sm text-slate-400">For casual users who just want basic access.</p>
 
-                <div className="mt-5 space-y-3">
-                  <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200">Limited downloads</div>
-                  <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200">Ads enabled</div>
-                  <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200">Basic access only</div>
-                  <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200">No exclusive content</div>
+                  <div className="mt-5 space-y-3">
+                    <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200">Limited downloads</div>
+                    <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200">Ads enabled</div>
+                    <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200">Basic access only</div>
+                  </div>
+                </div>
+
+                <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/40 p-4 text-center text-xs font-bold text-slate-400">
+                  Current Default Plan
                 </div>
               </article>
 
-              <article className="relative rounded-[28px] border border-amber-400/40 bg-[linear-gradient(180deg,rgba(251,191,36,0.16),rgba(15,23,42,0.78))] p-6 shadow-[0_20px_60px_rgba(251,191,36,0.14)] ring-2 ring-amber-400/20 transition duration-300 hover:-translate-y-1 hover:shadow-[0_28px_70px_rgba(251,191,36,0.18)]">
+              {/* PREMIUM TIER */}
+              <article className="relative flex flex-col justify-between rounded-[28px] border border-amber-400/40 bg-[linear-gradient(180deg,rgba(251,191,36,0.16),rgba(15,23,42,0.78))] p-6 shadow-[0_20px_60px_rgba(251,191,36,0.14)] ring-2 ring-amber-400/20 transition duration-300 hover:-translate-y-1 hover:shadow-[0_28px_70px_rgba(251,191,36,0.18)]">
                 <div className="absolute -top-4 right-4 rounded-full bg-amber-400 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-950 shadow-[0_10px_30px_rgba(251,191,36,0.35)]">
                   Most Popular
                 </div>
 
-                <div className="inline-flex rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-amber-200">
-                  Premium
-                </div>
-                <h3 className="mt-4 text-2xl font-black text-white">Premium Plan</h3>
-                <p className="mt-2 text-sm text-slate-300">The best balance of value, status, and stronger features.</p>
+                <div>
+                  <div className="inline-flex rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-amber-200">
+                    Premium
+                  </div>
+                  <h3 className="mt-4 text-2xl font-black text-white">Premium Plan</h3>
+                  <p className="mt-2 text-sm text-slate-300">The best balance of value, status, and stronger features.</p>
 
-                <div className="mt-5 space-y-3">
-                  <div className="rounded-2xl border border-amber-400/20 bg-black/20 px-4 py-3 text-sm text-slate-100">More downloads</div>
-                  <div className="rounded-2xl border border-amber-400/20 bg-black/20 px-4 py-3 text-sm text-slate-100">Reduced ads</div>
-                  <div className="rounded-2xl border border-amber-400/20 bg-black/20 px-4 py-3 text-sm text-slate-100">Priority access</div>
-                  <div className="rounded-2xl border border-amber-400/20 bg-black/20 px-4 py-3 text-sm text-slate-100">Extra premium value</div>
+                  <div className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-amber-400/30 bg-amber-500/20 px-4 py-2 text-base font-black text-amber-300">
+                    <Coins size={18} /> {formatCoins(MEMBERSHIP_PRICES.premium)} / 30 Days
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    <div className="rounded-2xl border border-amber-400/20 bg-black/20 px-4 py-3 text-sm text-slate-100">More downloads</div>
+                    <div className="rounded-2xl border border-amber-400/20 bg-black/20 px-4 py-3 text-sm text-slate-100">Reduced ads</div>
+                    <div className="rounded-2xl border border-amber-400/20 bg-black/20 px-4 py-3 text-sm text-slate-100">Priority access</div>
+                  </div>
                 </div>
+
+                <button
+                  type="button"
+                  disabled={isRedeeming !== null}
+                  onClick={() => handleRedeemTier("premium")}
+                  className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-3.5 text-sm font-black text-slate-950 shadow-lg transition duration-300 hover:scale-[1.02] hover:opacity-95 disabled:opacity-50"
+                >
+                  <Sparkles size={16} />
+                  {isRedeeming === "premium" ? "Redeeming..." : `Redeem Premium (${MEMBERSHIP_PRICES.premium.toLocaleString()} Coins)`}
+                </button>
               </article>
 
-              <article className="relative rounded-[28px] border border-fuchsia-400/30 bg-[linear-gradient(180deg,rgba(168,85,247,0.16),rgba(15,23,42,0.78))] p-6 shadow-[0_20px_60px_rgba(168,85,247,0.14)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_28px_70px_rgba(168,85,247,0.22)]">
+              {/* PLATINUM TIER */}
+              <article className="relative flex flex-col justify-between rounded-[28px] border border-fuchsia-400/30 bg-[linear-gradient(180deg,rgba(168,85,247,0.16),rgba(15,23,42,0.78))] p-6 shadow-[0_20px_60px_rgba(168,85,247,0.14)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_28px_70px_rgba(168,85,247,0.22)]">
                 <div className="absolute right-4 top-4 rounded-full border border-fuchsia-300/20 bg-fuchsia-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-fuchsia-200">
                   Elite
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-fuchsia-400/20 bg-fuchsia-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-fuchsia-200">
-                  <Crown size={12} /> Platinum
-                </div>
-                <h3 className="mt-4 text-2xl font-black text-white">Platinum Plan</h3>
-                <p className="mt-2 text-sm text-slate-300">For users who want everything unlocked and the best experience.</p>
 
-                <div className="mt-5 space-y-3">
-                  <div className="rounded-2xl border border-fuchsia-400/20 bg-black/20 px-4 py-3 text-sm text-slate-100">Everything unlocked</div>
-                  <div className="rounded-2xl border border-fuchsia-400/20 bg-black/20 px-4 py-3 text-sm text-slate-100">Best experience</div>
-                  <div className="rounded-2xl border border-fuchsia-400/20 bg-black/20 px-4 py-3 text-sm text-slate-100">VIP priority</div>
-                  <div className="rounded-2xl border border-fuchsia-400/20 bg-black/20 px-4 py-3 text-sm text-slate-100">Full exclusive access</div>
+                <div>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-fuchsia-400/20 bg-fuchsia-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-fuchsia-200">
+                    <Crown size={12} /> Platinum
+                  </div>
+                  <h3 className="mt-4 text-2xl font-black text-white">Platinum Plan</h3>
+                  <p className="mt-2 text-sm text-slate-300">For users who want everything unlocked and the best experience.</p>
+
+                  <div className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-fuchsia-400/30 bg-fuchsia-500/20 px-4 py-2 text-base font-black text-fuchsia-300">
+                    <Coins size={18} /> {formatCoins(MEMBERSHIP_PRICES.platinum)} / 30 Days
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    <div className="rounded-2xl border border-fuchsia-400/20 bg-black/20 px-4 py-3 text-sm text-slate-100">Everything unlocked</div>
+                    <div className="rounded-2xl border border-fuchsia-400/20 bg-black/20 px-4 py-3 text-sm text-slate-100">Best experience & VIP Priority</div>
+                    <div className="rounded-2xl border border-fuchsia-400/20 bg-black/20 px-4 py-3 text-sm text-slate-100">Full exclusive access</div>
+                  </div>
                 </div>
+
+                <button
+                  type="button"
+                  disabled={isRedeeming !== null}
+                  onClick={() => handleRedeemTier("platinum")}
+                  className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-fuchsia-500 to-indigo-600 px-5 py-3.5 text-sm font-black text-white shadow-lg transition duration-300 hover:scale-[1.02] hover:opacity-95 disabled:opacity-50"
+                >
+                  <Crown size={16} />
+                  {isRedeeming === "platinum" ? "Redeeming..." : `Redeem Platinum (${MEMBERSHIP_PRICES.platinum.toLocaleString()} Coins)`}
+                </button>
               </article>
             </div>
 
@@ -357,8 +474,6 @@ function StorePageContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 px-3 py-3 backdrop-blur-sm sm:px-4">
           <div className="relative max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[28px] border border-white/10 bg-slate-900 shadow-[0_35px_120px_rgba(0,0,0,0.5)]">
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-sky-500 via-fuchsia-500 to-amber-400" />
-            <div className="absolute -top-8 right-8 h-24 w-24 rounded-full bg-fuchsia-500/15 blur-3xl" />
-            <div className="absolute bottom-0 left-8 h-20 w-20 rounded-full bg-sky-500/10 blur-3xl" />
 
             <div className="relative p-5 sm:p-6">
               <div className="flex items-start justify-between gap-4">
@@ -381,9 +496,7 @@ function StorePageContent() {
 
               <div className="mt-5 grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
                 <div
-                  className={`rounded-[24px] border bg-gradient-to-br p-4 ${
-                    selectedPackage.border
-                  } ${
+                  className={`rounded-[24px] border bg-gradient-to-br p-4 ${selectedPackage.border} ${
                     selectedPackage.featured
                       ? "from-fuchsia-500/18 via-purple-500/10 to-slate-950 shadow-[0_18px_50px_rgba(168,85,247,0.12)]"
                       : "from-white/5 to-slate-950"
@@ -393,11 +506,6 @@ function StorePageContent() {
                     {selectedPackage.badge ? (
                       <div className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] ${selectedPackage.badgeStyle}`}>
                         {selectedPackage.badge}
-                      </div>
-                    ) : null}
-                    {selectedPackage.featured ? (
-                      <div className="inline-flex items-center rounded-full border border-fuchsia-300/20 bg-fuchsia-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-fuchsia-200">
-                        Best deal
                       </div>
                     ) : null}
                   </div>

@@ -52,26 +52,6 @@ type DailyRewardStatus = {
   error?: string
 }
 
-type LeaderboardEntry = {
-  rank: number
-  id: string
-  display_name: string
-  username?: string | null
-  avatar_url?: string | null
-  initials?: string
-  coins: number
-  membership?: string
-  membership_label?: string
-  is_current_user?: boolean
-}
-
-type LeaderboardResponse = {
-  ok?: boolean
-  top?: LeaderboardEntry[]
-  me?: LeaderboardEntry | null
-  error?: string
-}
-
 type UsernameStatus =
   | { state: "idle"; message: "" }
   | { state: "checking"; message: "Checking username..." }
@@ -96,12 +76,6 @@ type CoinToast = {
   amount: number
   label: string
   kind: "earn" | "spend"
-}
-
-type SocialReaction = {
-  emoji: string
-  label: string
-  count: number
 }
 
 type DownloadHistoryItem = {
@@ -289,7 +263,6 @@ export default function ProfilePageClient() {
   const [redeemingPlan, setRedeemingPlan] = useState<RedeemPlan | null>(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [streakLoading, setStreakLoading] = useState(false)
-  const [, setViewStatsLoading] = useState(false)
   const [downloadsLoading, setDownloadsLoading] = useState(false)
   const [showAllDownloads, setShowAllDownloads] = useState(false)
   const [showAllCoinActivity, setShowAllCoinActivity] = useState(false)
@@ -309,16 +282,12 @@ export default function ProfilePageClient() {
 
   const [coinHistory, setCoinHistory] = useState<CoinHistoryItem[]>([])
   const [dailyRewardStatus, setDailyRewardStatus] = useState<DailyRewardStatus | null>(null)
-  const [, setLeaderboard] = useState<LeaderboardEntry[]>([])
-  const [, setMyLeaderboardRank] = useState<LeaderboardEntry | null>(null)
   const [profileViewStats, setProfileViewStats] = useState<ProfileViewStats>({
     views: 0,
     visitors: 0,
   })
 
   const [coinToasts, setCoinToasts] = useState<CoinToast[]>([])
-  const [, setWalletPulse] = useState(false)
-  const [, setWalletShake] = useState(false)
 
   const [fullNameInput, setFullNameInput] = useState("")
   const [usernameInput, setUsernameInput] = useState("")
@@ -328,15 +297,8 @@ export default function ProfilePageClient() {
   const [confirmPasswordInput, setConfirmPasswordInput] = useState("")
   const [passwordLoading, setPasswordLoading] = useState(false)
 
-  // Danger Zone Actions State
   const [accountActionLoading, setAccountActionLoading] = useState(false)
   const [accountActionError, setAccountActionError] = useState("")
-
-  const [, setSocialReactions] = useState<SocialReaction[]>([
-    { emoji: "👁", label: "Profile Views", count: 0 },
-    { emoji: "🌐", label: "Unique Visitors", count: 0 },
-    { emoji: "⬇️", label: "Downloads Recorded", count: 0 },
-  ])
   const [downloadsHistory, setDownloadsHistory] = useState<DownloadHistoryItem[]>([])
 
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -360,17 +322,13 @@ export default function ProfilePageClient() {
     const kind = amount > 0 ? "earn" : "spend"
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     setCoinToasts((prev) => [...prev, { id, amount, label, kind }])
-    if (amount > 0) setWalletPulse(true)
     window.setTimeout(() => {
       setCoinToasts((prev) => prev.filter((item) => item.id !== id))
     }, 2400)
-    window.setTimeout(() => setWalletPulse(false), 900)
   }, [])
 
   const triggerInsufficientCoins = useCallback((message: string) => {
     setSaveError(message)
-    setWalletShake(true)
-    window.setTimeout(() => setWalletShake(false), 550)
   }, [])
 
   const loadProfile = useCallback(
@@ -499,31 +457,8 @@ export default function ProfilePageClient() {
     }
   }, [])
 
-  const loadLeaderboard = useCallback(async () => {
-    try {
-      const response = await fetch("/api/leaderboard", {
-        method: "GET",
-        cache: "no-store",
-      })
-
-      const data = (await response.json()) as LeaderboardResponse
-
-      if (!response.ok) {
-        console.error("Leaderboard fetch error:", data?.error)
-        return
-      }
-
-      setLeaderboard(Array.isArray(data.top) ? data.top : [])
-      setMyLeaderboardRank(data.me || null)
-    } catch (err) {
-      console.error("Leaderboard fetch error:", err)
-    }
-  }, [])
-
   const loadProfileViewStats = useCallback(async () => {
     try {
-      setViewStatsLoading(true)
-
       const username = normalizeUsername(profile?.username || "")
       if (!username) {
         setProfileViewStats({ views: 0, visitors: 0 })
@@ -549,8 +484,6 @@ export default function ProfilePageClient() {
     } catch (err) {
       console.error("Profile views fetch error:", err)
       setProfileViewStats({ views: 0, visitors: 0 })
-    } finally {
-      setViewStatsLoading(false)
     }
   }, [profile?.username])
 
@@ -653,8 +586,7 @@ export default function ProfilePageClient() {
 
   useEffect(() => {
     void loadDailyRewardStatus()
-    void loadLeaderboard()
-  }, [loadDailyRewardStatus, loadLeaderboard])
+  }, [loadDailyRewardStatus])
 
   useEffect(() => {
     if (!profile?.id) return
@@ -713,7 +645,6 @@ export default function ProfilePageClient() {
           await loadProfile(false)
           await loadCoinHistory()
           await loadDailyRewardStatus()
-          await loadLeaderboard()
           await loadProfileViewStats()
           await loadDownloadsHistory()
 
@@ -731,7 +662,6 @@ export default function ProfilePageClient() {
     addCoinToast,
     loadCoinHistory,
     loadDailyRewardStatus,
-    loadLeaderboard,
     loadProfile,
     loadProfileViewStats,
     loadDownloadsHistory,
@@ -1023,7 +953,6 @@ export default function ProfilePageClient() {
 
       await loadProfile(false)
       await loadCoinHistory()
-      await loadLeaderboard()
       await loadProfileViewStats()
       await loadDownloadsHistory()
     } catch (err) {
@@ -1107,7 +1036,6 @@ export default function ProfilePageClient() {
       await loadProfile(false)
       await loadCoinHistory()
       await loadDailyRewardStatus()
-      await loadLeaderboard()
       await loadProfileViewStats()
       await loadDownloadsHistory()
     } catch (err) {
@@ -1116,7 +1044,6 @@ export default function ProfilePageClient() {
     }
   }
 
-  // Self-Deactivate Account Handler
   async function handleDeactivateAccount() {
     const confirmed = window.confirm(
       "Are you sure you want to deactivate your account? You will be logged out and can reactivate it later by contacting support or logging back in."
@@ -1148,7 +1075,6 @@ export default function ProfilePageClient() {
     }
   }
 
-  // Self-Delete Account Handler
   async function handleDeleteAccount() {
     const confirmed = window.confirm(
       "Are you sure you want to permanently delete your account? This action CANNOT be undone and all your data will be permanently removed."
@@ -1239,34 +1165,6 @@ export default function ProfilePageClient() {
   const premiumCoinsNeeded = Math.max(0, 3000 - jbPoints)
   const platinumCoinsNeeded = Math.max(0, 4000 - jbPoints)
 
-  const derivedReactions = useMemo<SocialReaction[]>(
-    () => [
-      { emoji: "👁", label: "Profile Views", count: Number(profileViewStats.views || 0) },
-      { emoji: "🌐", label: "Unique Visitors", count: Number(profileViewStats.visitors || 0) },
-      {
-        emoji: "⬇️",
-        label: "Downloads Recorded",
-        count: Number(downloadsHistory.length || 0),
-      },
-    ],
-    [downloadsHistory.length, profileViewStats.views, profileViewStats.visitors]
-  )
-
-  useEffect(() => {
-    setSocialReactions((prev) =>
-      prev.map((item) => {
-        const match = derivedReactions.find((entry) => entry.emoji === item.emoji)
-        return match
-          ? {
-              ...item,
-              label: match.label,
-              count: match.count,
-            }
-          : item
-      })
-    )
-  }, [derivedReactions])
-
   const visibleDownloadsHistory = useMemo(
     () => (showAllDownloads ? downloadsHistory : downloadsHistory.slice(0, 5)),
     [downloadsHistory, showAllDownloads]
@@ -1353,56 +1251,6 @@ export default function ProfilePageClient() {
           }
         }
 
-        @keyframes coinFloat {
-          0%,
-          100% {
-            transform: translateY(0px) rotate(0deg);
-          }
-          50% {
-            transform: translateY(-8px) rotate(4deg);
-          }
-        }
-
-        @keyframes cardPulse {
-          0%,
-          100% {
-            box-shadow: 0 0 0 rgba(56, 189, 248, 0);
-          }
-          50% {
-            box-shadow: 0 0 38px rgba(56, 189, 248, 0.12);
-          }
-        }
-
-        @keyframes walletPulse {
-          0% {
-            transform: scale(1);
-          }
-          40% {
-            transform: scale(1.05);
-          }
-          100% {
-            transform: scale(1);
-          }
-        }
-
-        @keyframes walletShake {
-          0%,100% {
-            transform: translateX(0);
-          }
-          20% {
-            transform: translateX(-6px);
-          }
-          40% {
-            transform: translateX(6px);
-          }
-          60% {
-            transform: translateX(-5px);
-          }
-          80% {
-            transform: translateX(5px);
-          }
-        }
-
         @keyframes coinToastIn {
           0% {
             opacity: 0;
@@ -1433,22 +1281,6 @@ export default function ProfilePageClient() {
 
         .profile-glow {
           animation: profileGlow 8s ease-in-out infinite;
-        }
-
-        .coin-float {
-          animation: coinFloat 4s ease-in-out infinite;
-        }
-
-        .card-pulse {
-          animation: cardPulse 5s ease-in-out infinite;
-        }
-
-        .wallet-pulse {
-          animation: walletPulse 0.9s ease-out;
-        }
-
-        .wallet-shake {
-          animation: walletShake 0.55s ease-in-out;
         }
 
         .coin-toast {
@@ -1875,7 +1707,6 @@ export default function ProfilePageClient() {
                 )}
               </SectionCard>
 
-              {/* Two Column Grid for Recent Coin Activity and Activity Feed */}
               <div className="grid gap-6 lg:grid-cols-2">
                 <SectionCard
                   title="Recent Coin Activity"
@@ -2039,7 +1870,6 @@ export default function ProfilePageClient() {
                 </div>
               </SectionCard>
 
-              {/* Danger Zone: Deactivate & Delete Account Options */}
               <SectionCard
                 title="Danger Zone"
                 subtitle="Deactivate or permanently remove your account."
