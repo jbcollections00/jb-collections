@@ -24,10 +24,13 @@ function aggregateData(data: any[]): LeaderboardUser[] {
     if (!totals[userId]) {
       totals[userId] = { user_id: userId, username, total: 0 }
     }
-    totals[userId].total += Number(row.amount || 0) // Sum of coins
+    totals[userId].total += Number(row.amount || 0)
   })
 
-  return Object.values(totals).sort((a, b) => b.total - a.total)
+  // THE MAGIC FILTER: Only include users with strictly more than 500 coins
+  return Object.values(totals)
+    .filter((user) => user.total > 500) 
+    .sort((a, b) => b.total - a.total)
 }
 
 export default async function CoinsLeaderboardPage() {
@@ -126,14 +129,14 @@ export default async function CoinsLeaderboardPage() {
             ))}
           </div>
         ) : (
-          <p className="text-center py-8 text-slate-400 text-sm">Wala pang records ngayong linggo.</p>
+          <p className="text-center py-8 text-slate-400 text-sm">Wala pang nakaka-abot sa 500+ coins ngayong linggo. Be the first!</p>
         )}
       </div>
     </div>
   )
 }
 
-// --- REUSABLE COMPONENTS PARA PUMALIIT ANG CODE ---
+// --- REUSABLE COMPONENTS ---
 function PodiumCard({ rank, user, suffix }: { rank: number; user: LeaderboardUser; suffix: string }) {
   const isGold = rank === 1
   return (

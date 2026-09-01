@@ -6,9 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import PresenceTracker from "@/app/components/PresenceTracker"
 import SiteHeader from "@/app/components/SiteHeader"
 import DailyRewardCard from "@/app/components/DailyRewardCard"
-import EarnTasksSection from "@/app/components/EarnTasksSection"
 
-// Removed torox, lootably, and monlix
 type OfferwallProvider = "cpagrip" | "cpx"
 
 interface ProviderConfig {
@@ -17,7 +15,6 @@ interface ProviderConfig {
   badge?: string
 }
 
-// Only showing configured providers
 const PROVIDERS: ProviderConfig[] = [
   { id: "cpagrip", label: "CPAGrip", badge: "Recommended" },
   { id: "cpx", label: "CPX Surveys", badge: "Top Surveys" },
@@ -30,6 +27,20 @@ function EarnCoinsPageContent() {
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<OfferwallProvider>("cpagrip")
+
+  // --- AD REWARD STATES ---
+  const [adWatchCount, setAdWatchCount] = useState(0)
+  const [isWatching, setIsWatching] = useState(false)
+  const [cooldown, setCooldown] = useState(0)
+  const [claiming, setClaiming] = useState(false)
+
+  // Array of 4 Direct Ad Links for rotation
+  const AD_LINKS = [
+    "https://www.profitableratecpmnetwork.com/pyuze51wkf?key=089f5accce969646a828061bc3a846f2",
+    "https://www.profitableratecpmnetwork.com/tw8ajp18mf?key=786d474da794ee7cd3596da3aab40fcc",
+    "https://www.profitableratecpmnetwork.com/kvx8tkwni0?key=af8f3ec4f9904d2b3f92245d38b66963",
+    "https://www.profitableratecpmnetwork.com/ek44eeb04?key=99f05c43be188cef9d877a7519d8166a"
+  ]
 
   useEffect(() => {
     async function checkUser() {
@@ -45,6 +56,16 @@ function EarnCoinsPageContent() {
         }
 
         setUserId(user.id)
+
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("ad_watch_count")
+          .eq("id", user.id)
+          .maybeSingle()
+
+        if (profile) {
+          setAdWatchCount(profile.ad_watch_count || 0)
+        }
       } finally {
         setCheckingAuth(false)
       }
@@ -53,7 +74,84 @@ function EarnCoinsPageContent() {
     void checkUser()
   }, [router, supabase])
 
-  // Offerwall URLs strictly for active accounts
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    if (isWatching && cooldown > 0) {
+      interval = setInterval(() => setCooldown((prev) => prev - 1), 1000)
+    }
+    return () => clearInterval(interval)
+  }, [isWatching, cooldown])
+
+  // --- NEW AD WATCH LOGIC (10 per ad, +25 on 5th) ---
+  const handleWatchAd = () => {
+    // Selects a random link from the array
+    const randomLink = AD_LINKS[Math.floor(Math.random() * AD_LINKS.length)]
+    
+    window.open(randomLink, "_blank")
+    setIsWatching(true)
+    setCooldown(10)
+  }
+
+  const handleClaimProgress = async () => {
+    if (!userId || claiming) return
+    setClaiming(true)
+
+    try {
+      const newCount = adWatchCount + 1
+      const isRewardTime = newCount % 5 === 0
+
+      // Compute total reward: 10 base + 25 if it's the 5th ad
+      const baseReward = 10
+      const bonusReward = isRewardTime ? 25 : 0
+      const totalReward = baseReward + bonusReward
+
+      // 1. Fetch current wallet
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("coins, ad_watch_count")
+        .eq("id", userId)
+        .single()
+
+      const updatedCoins = (profile?.coins || 0) + totalReward
+
+      // 2. Update database with new coins and count
+      await supabase
+        .from("profiles")
+        .update({ 
+          ad_watch_count: newCount,
+          coins: updatedCoins 
+        })
+        .eq("id", userId)
+
+      // 3. Log to history
+      await supabase.from("coin_history").insert({
+        user_id: userId,
+        amount: totalReward,
+        type: "ad_reward",
+        description: isRewardTime ? "Watched Ad + 5th Ad Bonus" : "Watched an Ad",
+      })
+
+      // Trigger site header wallet update
+      window.dispatchEvent(new CustomEvent("jb-coins-updated", { detail: { reward: totalReward } }))
+      
+      // Notify user
+      if (isRewardTime) {
+        alert(`🎉 Awesome! You received 35 JB Coins (10 for the ad + 25 Bonus)!`)
+      } else {
+        alert(`💰 You received 10 JB Coins! Keep watching for the bonus.`)
+      }
+
+      setAdWatchCount(newCount)
+      setIsWatching(false)
+      
+    } catch (err) {
+      console.error("Error claiming ad:", err)
+      alert("Something went wrong. Please try again.")
+    } finally {
+      setClaiming(false)
+    }
+  }
+
   const offerwallUrls: Record<OfferwallProvider, string> = {
     cpagrip: `https://www.cpagrip.com/show.php?l=0&u=2546994&id=1907578&tracking_id=${userId || ""}`,
     cpx: `https://offers.cpx-research.com/index.php?app_id=35034&ext_user_id=${userId || ""}`,
@@ -70,6 +168,9 @@ function EarnCoinsPageContent() {
     )
   }
 
+  const currentProgress = adWatchCount % 5
+  const progressPercentage = (currentProgress / 5) * 100
+
   return (
     <>
       <PresenceTracker />
@@ -83,8 +184,66 @@ function EarnCoinsPageContent() {
         <main className="mx-auto w-full max-w-[1800px] px-4 pb-10 sm:px-6 lg:px-8">
           <DailyRewardCard />
 
-          <div className="mt-5">
-            <EarnTasksSection />
+          <div className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/60 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-md">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between mb-5">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-400">
+                  Unlimited Earnings
+                </p>
+                <h2 className="mt-1 text-2xl font-black text-white">
+                  Watch Ads, Earn Coins
+                </h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Earn <strong className="text-amber-400">10 JB Coins</strong> for every ad you watch, plus a <strong className="text-amber-400">25 Coins Bonus</strong> on every 5th ad!
+                </p>
+              </div>
+            </div>
+
+            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950 p-6 flex flex-col items-center justify-center min-h-[220px]">
+              
+              <div className="w-full max-w-md mx-auto text-center">
+                <div className="mb-4">
+                  <span className="text-5xl">📺</span>
+                </div>
+                
+                <div className="mb-6 w-full">
+                  <div className="flex justify-between text-xs font-bold text-slate-400 mb-2 px-1">
+                    <span>Bonus Progress</span>
+                    <span className="text-emerald-400">{currentProgress} / 5 Ads</span>
+                  </div>
+                  <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden shadow-inner">
+                    <div 
+                      className="h-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-all duration-500 ease-out rounded-full"
+                      style={{ width: `${progressPercentage}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-2 font-semibold">
+                    {5 - currentProgress} more ads for the 25 JB Coins Bonus!
+                  </p>
+                </div>
+
+                {!isWatching ? (
+                  <button
+                    onClick={handleWatchAd}
+                    className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-4 text-sm font-black text-white shadow-lg shadow-emerald-500/20 transition hover:scale-[1.02] active:scale-95"
+                  >
+                    Watch Ad (+10 Coins)
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleClaimProgress}
+                    disabled={cooldown > 0 || claiming}
+                    className={`w-full rounded-xl px-6 py-4 text-sm font-black text-white transition ${
+                      cooldown > 0 
+                      ? "bg-slate-700 cursor-not-allowed opacity-70" 
+                      : "bg-blue-600 hover:bg-blue-500 hover:shadow-lg hover:shadow-blue-500/30 active:scale-95"
+                    }`}
+                  >
+                    {cooldown > 0 ? `Wait ${cooldown}s to Claim...` : claiming ? "Claiming..." : "Claim Coins!"}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           <section className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/60 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-md">

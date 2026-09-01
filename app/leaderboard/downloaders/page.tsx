@@ -27,7 +27,10 @@ function aggregateData(data: any[]): LeaderboardUser[] {
     totals[userId].total += 1 // 1 count per download
   })
 
-  return Object.values(totals).sort((a, b) => b.total - a.total)
+  // THE MAGIC FILTER: Only include users with 30 or more downloads
+  return Object.values(totals)
+    .filter((user) => user.total >= 30)
+    .sort((a, b) => b.total - a.total)
 }
 
 export default async function DownloadersLeaderboardPage() {
@@ -122,14 +125,14 @@ export default async function DownloadersLeaderboardPage() {
             ))}
           </div>
         ) : (
-          <p className="text-center py-8 text-slate-400 text-sm">Wala pang records ngayong linggo.</p>
+          <p className="text-center py-8 text-slate-400 text-sm">Wala pang nakaka-abot sa 30 downloads ngayong linggo. Be the first!</p>
         )}
       </div>
     </div>
   )
 }
 
-// --- REUSABLE COMPONENTS PARA PUMALIIT ANG CODE ---
+// --- REUSABLE COMPONENTS ---
 function PodiumCard({ rank, user, suffix }: { rank: number; user: LeaderboardUser; suffix: string }) {
   const isGold = rank === 1
   return (
