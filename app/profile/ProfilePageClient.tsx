@@ -906,7 +906,7 @@ export default function ProfilePageClient() {
   }
 
   async function handleRedeem(plan: RedeemPlan) {
-    const cost = plan === "premium" ? 3000 : 4000
+    const cost = plan === "premium" ? 8000 : 10000
     if (jbPoints < cost) {
       triggerInsufficientCoins(`Not enough JB Coins. You need ${cost.toLocaleString()} coins.`)
       return
@@ -1157,13 +1157,13 @@ export default function ProfilePageClient() {
     membershipLevel !== "admin" &&
     membershipLevel !== "premium" &&
     membershipLevel !== "platinum" &&
-    jbPoints >= 3000
+    jbPoints >= 8000
 
   const canRedeemPlatinum =
-    membershipLevel !== "admin" && membershipLevel !== "platinum" && jbPoints >= 4000
+    membershipLevel !== "admin" && membershipLevel !== "platinum" && jbPoints >= 10000
 
-  const premiumCoinsNeeded = Math.max(0, 3000 - jbPoints)
-  const platinumCoinsNeeded = Math.max(0, 4000 - jbPoints)
+  const premiumCoinsNeeded = Math.max(0, 8000 - jbPoints)
+  const platinumCoinsNeeded = Math.max(0, 10000 - jbPoints)
 
   const visibleDownloadsHistory = useMemo(
     () => (showAllDownloads ? downloadsHistory : downloadsHistory.slice(0, 5)),
@@ -1560,7 +1560,7 @@ export default function ProfilePageClient() {
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="text-sm font-black text-white">Premium</p>
-                            <p className="mt-1 text-xs text-slate-300">3,000 coins</p>
+                            <p className="mt-1 text-xs text-slate-300">8,000 coins</p>
                           </div>
                           <button
                             type="button"
@@ -1580,7 +1580,7 @@ export default function ProfilePageClient() {
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="text-sm font-black text-white">Platinum</p>
-                            <p className="mt-1 text-xs text-slate-300">4,000 coins</p>
+                            <p className="mt-1 text-xs text-slate-300">10,000 coins</p>
                           </div>
                           <button
                             type="button"
@@ -1918,4 +1918,4 @@ export default function ProfilePageClient() {
       </div>
     </>
   )
-}
+} 
