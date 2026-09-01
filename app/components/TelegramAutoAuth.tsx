@@ -2,29 +2,42 @@
 
 import { useEffect } from "react"
 
+// Declare Telegram types for TypeScript window object
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp?: {
+        ready: () => void
+        expand: () => void
+        initDataUnsafe?: {
+          user?: {
+            id: number
+            first_name: string
+            last_name?: string
+            username?: string
+            language_code?: string
+          }
+        }
+      }
+    }
+  }
+}
+
 export default function TelegramAutoAuth() {
   useEffect(() => {
     if (typeof window !== "undefined" && window.Telegram?.WebApp) {
       const tg = window.Telegram.WebApp
-      tg.ready() // Ipapaalam sa Telegram na ready na ang Mini App
+
+      // I-notify ang Telegram na ready na ang Mini App
+      tg.ready()
+
+      // I-expand para maging full screen sa mobile view
+      tg.expand()
 
       const tgUser = tg.initDataUnsafe?.user
 
       if (tgUser) {
         console.log("Telegram User detected:", tgUser)
-        
-        // Pwede mong itawag ang backend API mo dito para i-check/gawan ng account sa Supabase:
-        /*
-        fetch('/api/auth/telegram', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            telegramId: tgUser.id,
-            firstName: tgUser.first_name,
-            username: tgUser.username,
-          }),
-        })
-        */
       }
     }
   }, [])
