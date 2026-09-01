@@ -82,16 +82,18 @@ async function getIsAdmin() {
       }
     )
 
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
     if (!user) return false
 
-    // Check the profiles table using your existing schema
+    // Safely retrieve user profile without throwing single-row errors
     const { data: profile } = await supabase
       .from("profiles")
       .select("is_admin, role")
       .eq("id", user.id)
-      .single()
+      .maybeSingle()
 
     return profile?.is_admin === true || profile?.role === "admin"
   } catch (error) {
@@ -108,24 +110,18 @@ export default async function RootLayout({
   const isAdmin = await getIsAdmin()
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* ✈️ Telegram Web App SDK */}
         <Script
           src="https://telegram.org/js/telegram-web-app.js"
           strategy="beforeInteractive"
         />
-
-        {/* 💰 Monetag Telegram Mini App SDK */}
-        <Script
-          src="//libtl.com/sdk.js"
-          data-zone="11699030"
-          data-sdk="show_11699030"
-          strategy="afterInteractive"
-        />
       </head>
-      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
-        
+      <body
+        className="min-h-screen bg-slate-50 text-slate-900 antialiased"
+        suppressHydrationWarning
+      >
         {/* ✈️ Auto-Authenticate Telegram Mini App Users */}
         <TelegramAutoAuth />
 
@@ -138,6 +134,14 @@ export default async function RootLayout({
         {/* 🛑 CONDITIONALLY RENDER ADS AND DETECTORS (Runs ONLY if NOT admin) */}
         {!isAdmin && (
           <>
+            {/* 💰 Monetag Telegram Mini App SDK */}
+            <Script
+              src="https://libtl.com/sdk.js"
+              data-zone="11699030"
+              data-sdk="show_11699030"
+              strategy="afterInteractive"
+            />
+
             {/* ✅ Google AdSense Script */}
             <Script
               async
@@ -177,7 +181,6 @@ export default async function RootLayout({
                       "frequency_period": 1440,
                       "frequency_count": 1,
                       "trigger_method": 3,
-                      "trigger_class": "",
                       "trigger_delay": 0,
                       "capping_enabled": true,
                       "tcf_enabled": true,

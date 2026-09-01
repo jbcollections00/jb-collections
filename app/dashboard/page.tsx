@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import PresenceTracker from "@/app/components/PresenceTracker"
 import DailyRewardCard from "@/app/components/DailyRewardCard"
 import TopDownloaderAd from "@/app/components/TopDownloaderAd"
+import RewardedAdButton from "@/app/components/RewardedAdButton"
 
 type Category = {
   id: string
@@ -721,6 +722,9 @@ function DashboardPageContent() {
         </div>
 
         <div className="mx-auto w-full max-w-[1700px] px-4 pb-12 pt-6 sm:px-6 lg:px-8 space-y-4">
+          {/* 🎬 MONETAG REWARDED AD BUTTON */}
+          <RewardedAdButton />
+
           <DailyRewardCard />
 
           {/* 🚀 TOP DOWNLOADER PROMO AD BANNER */}
