@@ -158,7 +158,7 @@ export default async function RootLayout({
               strategy="afterInteractive"
             />
 
-            {/* 🚀 Effective CPM Network Script */}
+            {/* 🚀 Effective CPM Network Script / Adsterra */}
             <Script
               id="effective-cpm-ad"
               src="https://pl30860037.effectivecpmnetwork.com/ab/fc/2b/abfc2b67797cad69eeb017f892ecfcd9.js"
@@ -170,44 +170,6 @@ export default async function RootLayout({
 
             {/* 🔥 Background & Popunder Ads */}
             <BackgroundAds />
-
-            {/* ExoClick Popunder Zone: 6002936 */}
-            <Script
-              id="exoclick-popunder"
-              strategy="afterInteractive"
-              dangerouslySetInnerHTML={{
-                __html: `
-                  (function() {
-                    var adConfig = {
-                      "ads_host": "a.pemsrv.com",
-                      "syndication_host": "s.pemsrv.com",
-                      "idzone": 6002936,
-                      "popup_fallback": false,
-                      "popup_force": false,
-                      "chrome_enabled": true,
-                      "new_tab": false,
-                      "frequency_period": 1440,
-                      "frequency_count": 1,
-                      "trigger_method": 3,
-                      "trigger_delay": 0,
-                      "capping_enabled": true,
-                      "tcf_enabled": true,
-                      "agego_cross_site_enabled": true,
-                      "only_inline": false
-                    };
-
-                    var s = document.createElement("script");
-                    s.type = "text/javascript";
-                    s.async = true;
-                    s.src = "https://a.pemsrv.com/popunder1000.js";
-                    for (var key in adConfig) {
-                      s.setAttribute("data-exo-" + key, adConfig[key]);
-                    }
-                    document.body.appendChild(s);
-                  })();
-                `,
-              }}
-            />
           </>
         )}
       </body>

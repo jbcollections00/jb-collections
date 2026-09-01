@@ -33,7 +33,7 @@ type PlanFeature = {
   platinum: string
 }
 
-const COINS_PER_PHP = 13
+const COINS_PER_PHP = 80
 
 function formatCoins(value: number) {
   return `${new Intl.NumberFormat("en-PH").format(value)} JB Coins`
@@ -59,8 +59,8 @@ function StorePageContent() {
 
   // Membership Prices in JB Coins
   const MEMBERSHIP_PRICES = {
-    premium: 7000,   // 7,000 JB Coins for 30 days
-    platinum: 10000, // 10,000 JB Coins for 30 days
+    premium: 8000,   // 8,000 JB Coins = ₱100.00 for 30 days
+    platinum: 10000, // 10,000 JB Coins = ₱125.00 for 30 days
   }
 
   const packages: CoinPackage[] = [
@@ -68,7 +68,7 @@ function StorePageContent() {
       id: "php20",
       php: 20,
       baseCoins: 20 * COINS_PER_PHP,
-      bonusCoins: 10,
+      bonusCoins: 100,
       badge: "STARTER",
       badgeStyle: "bg-emerald-500/15 text-emerald-300 border border-emerald-400/20",
       gradient: "from-emerald-500 via-teal-500 to-cyan-500",
@@ -79,7 +79,7 @@ function StorePageContent() {
       id: "php50",
       php: 50,
       baseCoins: 50 * COINS_PER_PHP,
-      bonusCoins: 40,
+      bonusCoins: 300,
       badge: "POPULAR",
       badgeStyle: "bg-amber-500/15 text-amber-300 border border-amber-400/20",
       gradient: "from-amber-500 via-orange-500 to-red-500",
@@ -90,7 +90,7 @@ function StorePageContent() {
       id: "php100",
       php: 100,
       baseCoins: 100 * COINS_PER_PHP,
-      bonusCoins: 120,
+      bonusCoins: 800,
       badge: "BEST SELLER",
       badgeStyle: "bg-pink-500/15 text-pink-300 border border-pink-400/20",
       gradient: "from-pink-500 via-rose-500 to-red-500",
@@ -101,7 +101,7 @@ function StorePageContent() {
       id: "php200",
       php: 200,
       baseCoins: 200 * COINS_PER_PHP,
-      bonusCoins: 350,
+      bonusCoins: 2000,
       badge: "GREAT VALUE",
       badgeStyle: "bg-violet-500/15 text-violet-300 border border-violet-400/20",
       gradient: "from-violet-500 via-purple-500 to-fuchsia-500",
@@ -112,7 +112,7 @@ function StorePageContent() {
       id: "php500",
       php: 500,
       baseCoins: 500 * COINS_PER_PHP,
-      bonusCoins: 1000,
+      bonusCoins: 6000,
       badge: "HOT DEAL",
       badgeStyle: "bg-yellow-500/15 text-yellow-300 border border-yellow-400/20",
       gradient: "from-yellow-500 via-amber-500 to-orange-500",
@@ -123,7 +123,7 @@ function StorePageContent() {
       id: "php1000",
       php: 1000,
       baseCoins: 1000 * COINS_PER_PHP,
-      bonusCoins: 2500,
+      bonusCoins: 15000,
       badge: "BEST OFFER",
       badgeStyle: "bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-400/20",
       gradient: "from-fuchsia-500 via-purple-500 to-indigo-500",
