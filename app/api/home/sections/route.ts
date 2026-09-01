@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const supabase = await createServerClient()
 
-    // Service Role / Admin Client
+    // Service Role / Admin Client setup
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
     const serviceKey =
       process.env.SUPABASE_SERVICE_ROLE_KEY ||
@@ -68,9 +68,9 @@ export async function GET() {
           const profile = log.user_id ? profilesMap.get(log.user_id) : null
 
           return {
-            // FIX: Ginawang unique ang ID gamit ang Log ID o Timestamp para hindi kainin ng Frontend filter
             id: log.id ? String(log.id) : `log-${file.id}-${new Date(log.created_at).getTime()}-${index}`,
             file_id: file.id,
+            slug: file.slug || file.id, // Idinagdag ang slug para sa tamang link routing
             title: file.title || file.name,
             thumbnail_url: file.thumbnail_url,
             cover_url: file.cover_url,

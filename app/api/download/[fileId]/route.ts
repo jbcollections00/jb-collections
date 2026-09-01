@@ -156,23 +156,23 @@ async function awardDownloadCoins(params: {
   if (rewardAmount <= 0 || dailyLimit <= 0) return { awarded: 0, reason: "limit_disabled" }
 
   const adminDb = createAdminDb()
-  if (!adminDb) {
-    console.warn("Download reward skipped: missing service role env vars.")
-    return { awarded: 0, reason: "missing_env" }
-  }
+  if (!adminDb) return { awarded: 0, reason: "missing_env" }
 
   const rewardDate = getTodayManilaDateString()
 
-  const { data: allowed, error: limitError } = await adminDb.rpc("check_coin_limit", {
-    p_user_id: userId,
-    p_action: "download_reward",
-    p_limit: dailyLimit,
-  })
+  try {
+    const { data: allowed } = await adminDb.rpc("check_coin_limit", {
+      p_user_id: userId,
+      p_action: "download_reward",
+      p_limit: dailyLimit,
+    })
 
-  if (limitError) throw new Error(limitError.message || "Failed checking daily download reward limit.")
-  if (!allowed) return { awarded: 0, reason: "daily_limit_reached" }
+    if (allowed === false) return { awarded: 0, reason: "daily_limit_reached" }
+  } catch {
+    // Ignore RPC missing error
+  }
 
-  const { data: existingReward, error: existingRewardError } = await adminDb
+  const { data: existingReward } = await adminDb
     .from("download_rewards")
     .select("id")
     .eq("user_id", userId)
@@ -180,7 +180,6 @@ async function awardDownloadCoins(params: {
     .eq("reward_date", rewardDate)
     .maybeSingle()
 
-  if (existingRewardError) throw new Error(existingRewardError.message || "Failed checking existing file reward.")
   if (existingReward) return { awarded: 0, reason: "already_rewarded_today" }
 
   const { error: insertRewardError } = await adminDb.from("download_rewards").insert({
@@ -189,12 +188,7 @@ async function awardDownloadCoins(params: {
     reward_date: rewardDate,
   })
 
-  if (insertRewardError) {
-    if ((insertRewardError as { code?: string }).code === "23505") {
-      return { awarded: 0, reason: "already_rewarded_today" }
-    }
-    throw new Error(insertRewardError.message || "Failed creating download reward marker.")
-  }
+  if (insertRewardError) return { awarded: 0, reason: "already_rewarded_today" }
 
   const { error: coinError } = await adminDb.rpc("handle_coin_change", {
     p_user_id: userId,
@@ -205,8 +199,9 @@ async function awardDownloadCoins(params: {
   })
 
   if (coinError) {
-    await adminDb.from("download_rewards").delete().match({ user_id: userId, file_id: fileId, reward_date: rewardDate })
-    throw new Error(coinError.message || "Failed rewarding download coins.")
+    const { data: userProf } = await adminDb.from("profiles").select("coins").eq("id", userId).single()
+    const currentCoins = Number(userProf?.coins || 0)
+    await adminDb.from("profiles").update({ coins: currentCoins + rewardAmount }).eq("id", userId)
   }
 
   return { awarded: rewardAmount, reason: "awarded" }
@@ -223,9 +218,6 @@ export async function GET(
     const url = new URL(req.url)
     const mode = url.searchParams.get("mode")
     const boosted = url.searchParams.get("boost") === "1"
-    const unlocked = url.searchParams.get("unlocked") === "1"
-    const intentHeader = req.headers.get("x-jb-download-intent")
-    const isConfirmedUnlock = unlocked || intentHeader === "button_confirm"
 
     const referer = req.headers.get("referer")
     const currentHost = req.nextUrl.hostname.replace(/^www\./, "")
@@ -313,7 +305,7 @@ export async function GET(
     }
 
     if (!allowed) {
-      void dbClient.from("download_logs").insert({
+      await dbClient.from("download_logs").insert({
         user_id: user.id, file_id: realFileId, file_version_id: currentVersion.id,
         result: "denied", ip_address: getClientIp(req), user_agent: req.headers.get("user-agent"),
       })
@@ -323,7 +315,7 @@ export async function GET(
     }
 
     if (downloadCoinCost > 0 && userCoins < downloadCoinCost) {
-      void dbClient.from("download_logs").insert({
+      await dbClient.from("download_logs").insert({
         user_id: user.id, file_id: realFileId, file_version_id: currentVersion.id,
         result: "insufficient_coins", ip_address: getClientIp(req), user_agent: req.headers.get("user-agent"),
       })
@@ -331,8 +323,11 @@ export async function GET(
       return NextResponse.json({ error: "Not enough JB Coins", requiredCoins: downloadCoinCost, currentCoins: userCoins }, { status: 402 })
     }
 
+    // COINS DEDUCTION WITH FALLBACK
     if (downloadCoinCost > 0) {
       if (!adminDb) return NextResponse.json({ error: "Coin system unavailable. Missing service role config." }, { status: 500 })
+
+      let deducted = false
 
       const { error: spendError } = await adminDb.rpc("handle_coin_change", {
         p_user_id: user.id,
@@ -342,7 +337,23 @@ export async function GET(
         p_reference: `${boosted ? "boosted_" : ""}download_spend:${user.id}:${realFileId}:${Date.now()}`,
       })
 
-      if (spendError) return NextResponse.json({ error: "Failed to deduct JB Coins", details: spendError.message }, { status: 500 })
+      if (!spendError) {
+        deducted = true
+      } else {
+        const newBalance = userCoins - downloadCoinCost
+        if (newBalance >= 0) {
+          const { error: updateError } = await adminDb
+            .from("profiles")
+            .update({ coins: newBalance })
+            .eq("id", user.id)
+
+          if (!updateError) deducted = true
+        }
+      }
+
+      if (!deducted) {
+        return NextResponse.json({ error: "Failed to deduct JB Coins. Please try again." }, { status: 500 })
+      }
     }
 
     const safeFilename = buildSafeFilename(fileOnly, currentVersion)
@@ -353,28 +364,40 @@ export async function GET(
       downloadFilename: safeFilename,
     })
 
-    const isActualDownloadAction = isConfirmedUnlock || mode !== "json"
+    // INA-AWAIT NA ANG LOG INSERT PARA SIGURADONG MASULAT SA DATABASE AT LUMABAS SA LIVE FEED
     let rewardResponse = { rewarded: false, alreadyRewardedToday: false, rewardAmount: 0 }
 
-    if (isActualDownloadAction) {
-      void dbClient.from("download_logs").insert({
-        user_id: user.id, file_id: realFileId, file_version_id: currentVersion.id,
-        result: boosted ? "success_boosted" : "success", ip_address: getClientIp(req), user_agent: req.headers.get("user-agent"),
+    const { error: logError } = await dbClient.from("download_logs").insert({
+      user_id: user.id,
+      file_id: realFileId,
+      file_version_id: currentVersion.id,
+      result: boosted ? "success_boosted" : "success",
+      ip_address: getClientIp(req),
+      user_agent: req.headers.get("user-agent"),
+    })
+
+    if (logError) {
+      console.error("Error writing download_log:", logError.message)
+    }
+
+    try {
+      await dbClient.rpc('increment_downloads_count', { row_id: realFileId })
+    } catch {
+      await dbClient.from("files").update({ downloads_count: (fileOnly.downloads_count || 0) + 1 }).eq("id", realFileId)
+    }
+
+    try {
+      const rewardResult = await awardDownloadCoins({
+        userId: user.id,
+        fileId: realFileId,
+        fileTitle: fileOnly.title || fileOnly.slug || realFileId,
+        membershipLevel,
+        boosted,
       })
-
-      try {
-        await dbClient.rpc('increment_downloads_count', { row_id: realFileId })
-      } catch {
-        await dbClient.from("files").update({ downloads_count: (fileOnly.downloads_count || 0) + 1 }).eq("id", realFileId)
-      }
-
-      try {
-        const rewardResult = await awardDownloadCoins({
-          userId: user.id, fileId: realFileId, fileTitle: fileOnly.title || fileOnly.slug || realFileId, membershipLevel, boosted,
-        })
-        if (rewardResult.awarded > 0) rewardResponse = { rewarded: true, alreadyRewardedToday: false, rewardAmount: rewardResult.awarded }
-        else if (rewardResult.reason === "already_rewarded_today") rewardResponse = { rewarded: false, alreadyRewardedToday: true, rewardAmount: 0 }
-      } catch (err) { console.error("Download coin reward error:", err) }
+      if (rewardResult.awarded > 0) rewardResponse = { rewarded: true, alreadyRewardedToday: false, rewardAmount: rewardResult.awarded }
+      else if (rewardResult.reason === "already_rewarded_today") rewardResponse = { rewarded: false, alreadyRewardedToday: true, rewardAmount: 0 }
+    } catch (err) {
+      console.error("Download coin reward error:", err)
     }
 
     if (mode === "json") {

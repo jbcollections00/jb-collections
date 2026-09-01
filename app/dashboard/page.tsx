@@ -8,6 +8,7 @@ import PresenceTracker from "@/app/components/PresenceTracker"
 import DailyRewardCard from "@/app/components/DailyRewardCard"
 import RewardedAdButton from "@/app/components/RewardedAdButton"
 
+// --- TYPES & HELPER FUNCTIONS STAY UNCHANGED ---
 type Category = {
   id: string
   name: string
@@ -479,7 +480,25 @@ function DashboardPageContent() {
 
     checkUserAndLoad()
 
-    // 🔄 REAL-TIME AUTO-POLLING: Kusa nitong itinatawag ang live stats bawat 15 segundo
+    // ⚡ SUPABASE REALTIME LISTENER FOR DOWNLOAD LOGS
+    const channel = supabase
+      .channel("download_logs_live_feed")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "download_logs",
+        },
+        () => {
+          if (isMounted) {
+            fetchHomeSections()
+          }
+        }
+      )
+      .subscribe()
+
+    // 🔄 REAL-TIME AUTO-POLLING FOR STATS
     const interval = setInterval(() => {
       if (isMounted) {
         fetchLiveStats()
@@ -488,6 +507,7 @@ function DashboardPageContent() {
 
     return () => {
       isMounted = false
+      supabase.removeChannel(channel)
       clearInterval(interval)
     }
   }, [supabase, router])
@@ -538,7 +558,6 @@ function DashboardPageContent() {
       setTopFiles(Array.isArray(data.top) ? data.top : [])
       setLatestFiles(Array.isArray(data.latest) ? data.latest : [])
       
-      // Fixed: Filter recent downloads to ensure unique files
       const rawRecent = Array.isArray(data.recent_downloads) ? data.recent_downloads : []
       const uniqueRecentDownloads = rawRecent.filter(
         (file, index, self) => index === self.findIndex((t) => t.id === file.id)
@@ -610,7 +629,6 @@ function DashboardPageContent() {
       <PresenceTracker />
 
       <div className="relative min-h-screen bg-[#030712] text-slate-100 selection:bg-cyan-500 selection:text-slate-950">
-        {/* Glowing Background Elements */}
         <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
           <div className="absolute -top-40 -left-40 h-[600px] w-[600px] rounded-full bg-indigo-600/15 blur-[120px]" />
           <div className="absolute top-1/3 -right-40 h-[600px] w-[600px] rounded-full bg-cyan-500/10 blur-[140px]" />
@@ -619,13 +637,11 @@ function DashboardPageContent() {
         </div>
 
         <div className="mx-auto w-full max-w-[1700px] px-4 pb-12 pt-6 sm:px-6 lg:px-8 space-y-4">
-          {/* 🎬 MONETAG REWARDED AD BUTTON */}
           <RewardedAdButton />
 
           <DailyRewardCard />
 
           <section className="overflow-hidden rounded-[36px] border border-white/10 bg-slate-900/40 shadow-2xl backdrop-blur-2xl">
-            {/* HERO BANNER */}
             <div className="relative overflow-hidden border-b border-white/10 px-6 py-10 sm:px-10 sm:py-12">
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-purple-500/10 to-transparent" />
 
@@ -653,7 +669,6 @@ function DashboardPageContent() {
             </div>
 
             <div className="p-6 sm:p-8 lg:p-10">
-              {/* 📁 SECTION 1: Categories Grid */}
               <section className="mt-2">
                 <div className="mb-8 flex flex-col items-center justify-center text-center">
                   <h2 className="text-2xl font-black tracking-tight text-white sm:text-4xl">
@@ -747,7 +762,6 @@ function DashboardPageContent() {
                 )}
               </section>
 
-              {/* 🔥 SECTION 2: Top Downloaded */}
               <FileSection
                 title="🔥 Top Downloaded"
                 subtitle="The community's most downloaded files."
@@ -760,7 +774,6 @@ function DashboardPageContent() {
                 maxItems={5}
               />
 
-              {/* 🆕 SECTION 3: New Uploads */}
               <FileSection
                 title="🆕 Fresh Releases"
                 subtitle="Recently published downloads."
@@ -772,7 +785,6 @@ function DashboardPageContent() {
                 maxItems={10}
               />
 
-              {/* ⚡ SECTION 4: Recent Member Activity */}
               <FileSection
                 title="⚡ Live Activity Feed"
                 subtitle="Real-time downloads happening across the network."
@@ -785,7 +797,6 @@ function DashboardPageContent() {
                 isLiveActivity={true}
               />
 
-              {/* 👥 SECTION 5: Live Community */}
               <section className="mt-12">
                 <div className="rounded-3xl border border-white/10 bg-slate-900/50 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
                   <div className="mb-6">
