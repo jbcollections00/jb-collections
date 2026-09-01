@@ -567,7 +567,7 @@ function DashboardPageContent() {
       } catch (error) {
         console.error("Dashboard auth check failed:", error)
         if (isMounted) router.replace("/login")
-      } font-medium finally {
+      } finally {
         if (isMounted) {
           setCheckingAuth(false)
           setLoading(false)
