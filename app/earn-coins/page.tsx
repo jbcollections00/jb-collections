@@ -140,9 +140,9 @@ function EarnCoinsPageContent() {
       const newCount = adWatchCount + 1
       const isRewardTime = newCount % 5 === 0
 
-      // Compute total reward: 10 base + 25 if it's the 5th ad
-      const baseReward = 10
-      const bonusReward = isRewardTime ? 25 : 0
+      // Compute total reward: 5 base + 10 if it's the 5th ad (Total 15)
+      const baseReward = 5
+      const bonusReward = isRewardTime ? 10 : 0
       const totalReward = baseReward + bonusReward
 
       // 1. Fetch current wallet
@@ -176,9 +176,9 @@ function EarnCoinsPageContent() {
       
       // Notify user
       if (isRewardTime) {
-        alert(`🎉 Awesome! You received 35 JB Coins (10 for the ad + 25 Bonus)!`)
+        alert(`🎉 Awesome! You received 15 JB Coins (5 for the ad + 10 Bonus)!`)
       } else {
-        alert(`💰 You received 10 JB Coins! Keep watching for the bonus.`)
+        alert(`💰 You received 5 JB Coins! Keep watching for the bonus.`)
       }
 
       setAdWatchCount(newCount)
@@ -234,7 +234,7 @@ function EarnCoinsPageContent() {
                   Watch Ads, Earn Coins
                 </h2>
                 <p className="mt-1 text-sm text-slate-400">
-                  Earn <strong className="text-amber-400">10 JB Coins</strong> for every ad you watch, plus a <strong className="text-amber-400">25 Coins Bonus</strong> on every 5th ad!
+                  Earn <strong className="text-amber-400">5 JB Coins</strong> for every ad you watch, plus a <strong className="text-amber-400">10 Coins Bonus</strong> on every 5th ad!
                 </p>
               </div>
             </div>
@@ -258,7 +258,7 @@ function EarnCoinsPageContent() {
                     />
                   </div>
                   <p className="text-[10px] text-slate-500 mt-2 font-semibold">
-                    {5 - currentProgress} more ads for the 25 JB Coins Bonus!
+                    {5 - currentProgress} more ads for the 10 JB Coins Bonus!
                   </p>
                 </div>
 
@@ -267,7 +267,7 @@ function EarnCoinsPageContent() {
                     onClick={handleWatchAd}
                     className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-4 text-sm font-black text-white shadow-lg shadow-emerald-500/20 transition hover:scale-[1.02] active:scale-95"
                   >
-                    Watch Ad (+10 Coins)
+                    Watch Ad (+5 Coins)
                   </button>
                 ) : (
                   <button
