@@ -71,6 +71,7 @@ export async function GET(req: NextRequest) {
       const description = `Weekly Leaderboard (${category}) Rank #${rank} Reward (${tierGranted.toUpperCase()} + ${prizeAmount} Coins)`
       const reference = `weekly_${category.toLowerCase().replace(/\s+/g, "_")}:${userId}:${displayStart}`
 
+      // 1. Try RPC handle_coin_change
       const { error: rpcError } = await supabase.rpc("handle_coin_change", {
         p_user_id: userId,
         p_amount: prizeAmount,
@@ -79,8 +80,9 @@ export async function GET(req: NextRequest) {
         p_reference: reference,
       })
 
+      // 2. Fallback direct update to coin_history if RPC fails
       if (rpcError) {
-        await supabase.from("coin_transactions").insert({
+        await supabase.from("coin_history").insert({
           user_id: userId,
           amount: prizeAmount,
           type: "weekly_reward",
@@ -95,14 +97,19 @@ export async function GET(req: NextRequest) {
           .update({
             coins: currentCoins + prizeAmount,
             membership_tier: tierGranted,
+            tier: tierGranted, // Fallback for alternative column name
+            role: tierGranted, // Fallback for alternative column name
             tier_expires_at: tierExpiresAt.toISOString(),
           })
           .eq("id", userId)
       } else {
+        // Direct update for membership tier on profiles table
         await supabase
           .from("profiles")
           .update({
             membership_tier: tierGranted,
+            tier: tierGranted, // Fallback for alternative column name
+            role: tierGranted, // Fallback for alternative column name
             tier_expires_at: tierExpiresAt.toISOString(),
           })
           .eq("id", userId)
@@ -111,9 +118,9 @@ export async function GET(req: NextRequest) {
       return { userId, rank, prizeAmount, tierGranted, expiresAt: tierExpiresAt.toISOString() }
     }
 
-    // --- A. TOP COIN EARNERS ---
+    // --- A. TOP COIN EARNERS (Inayos: Fixed Table Name to 'coin_history') ---
     const { data: coinTx } = await supabase
-      .from("coin_transactions")
+      .from("coin_history")
       .select("user_id, amount")
       .gte("created_at", startIso)
       .lt("created_at", endIso)
@@ -124,7 +131,9 @@ export async function GET(req: NextRequest) {
     if (coinTx && coinTx.length > 0) {
       const coinTotals: Record<string, number> = {}
       coinTx.forEach((tx) => {
-        coinTotals[tx.user_id] = (coinTotals[tx.user_id] || 0) + Number(tx.amount || 0)
+        if (tx.user_id) {
+          coinTotals[tx.user_id] = (coinTotals[tx.user_id] || 0) + Number(tx.amount || 0)
+        }
       })
 
       const top3Earners = Object.entries(coinTotals)
@@ -138,7 +147,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // --- B. TOP DOWNLOADERS (Inayos: Direct 'download_logs' Table Query) ---
+    // --- B. TOP DOWNLOADERS ---
     const { data: downloadLogs } = await supabase
       .from("download_logs")
       .select("user_id")
