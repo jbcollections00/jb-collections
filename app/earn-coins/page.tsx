@@ -137,48 +137,70 @@ function EarnCoinsPageContent() {
     setClaiming(true)
 
     try {
+      const todayStr = new Date().toISOString().split('T')[0] // Formats as YYYY-MM-DD
       const newCount = adWatchCount + 1
       const isRewardTime = newCount % 5 === 0
 
-      // Compute total reward: 5 base + 10 if it's the 5th ad (Total 15)
+      // Compute intended reward
       const baseReward = 5
       const bonusReward = isRewardTime ? 10 : 0
-      const totalReward = baseReward + bonusReward
+      const intendedReward = baseReward + bonusReward
 
-      // 1. Fetch current wallet
+      // 1. Fetch current profile data
       const { data: profile } = await supabase
         .from("profiles")
-        .select("coins, ad_watch_count")
+        .select("coins, ad_watch_count, daily_ad_coins, last_ad_date")
         .eq("id", userId)
         .single()
 
-      const updatedCoins = (profile?.coins || 0) + totalReward
+      const currentCoins = profile?.coins || 0
+      let dailyAdCoins = profile?.daily_ad_coins || 0
+      const lastAdDate = profile?.last_ad_date || ""
 
-      // 2. Update database with new coins and count
+      // 2. Check Daily Reset Condition
+      if (lastAdDate !== todayStr) {
+        dailyAdCoins = 0 // Reset threshold if it's a new day
+      }
+
+      // 3. Determine if user has reached the 2000 coins daily limit
+      const DAILY_LIMIT = 2000
+      const remainingLimit = Math.max(0, DAILY_LIMIT - dailyAdCoins)
+      
+      // Calculate actual coins to give (cap at remaining limit)
+      const actualReward = Math.min(intendedReward, remainingLimit)
+      const newDailyAdCoins = dailyAdCoins + actualReward
+      const updatedCoins = currentCoins + actualReward
+
+      // 4. Update Database (Always update ad_watch_count)
       await supabase
         .from("profiles")
         .update({ 
           ad_watch_count: newCount,
-          coins: updatedCoins 
+          coins: updatedCoins,
+          daily_ad_coins: newDailyAdCoins,
+          last_ad_date: todayStr
         })
         .eq("id", userId)
 
-      // 3. Log to history
-      await supabase.from("coin_history").insert({
-        user_id: userId,
-        amount: totalReward,
-        type: "ad_reward",
-        description: isRewardTime ? "Watched Ad + 5th Ad Bonus" : "Watched an Ad",
-      })
+      // 5. Log transaction only if actual coins were granted
+      if (actualReward > 0) {
+        await supabase.from("coin_history").insert({
+          user_id: userId,
+          amount: actualReward,
+          type: "ad_reward",
+          description: isRewardTime ? "Watched Ad + 5th Ad Bonus" : "Watched an Ad",
+        })
 
-      // Trigger site header wallet update
-      window.dispatchEvent(new CustomEvent("jb-coins-updated", { detail: { reward: totalReward } }))
-      
-      // Notify user
-      if (isRewardTime) {
-        alert(`🎉 Awesome! You received 15 JB Coins (5 for the ad + 10 Bonus)!`)
+        window.dispatchEvent(new CustomEvent("jb-coins-updated", { detail: { reward: actualReward } }))
+        
+        if (isRewardTime) {
+          alert(`🎉 Awesome! You received ${actualReward} JB Coins!`)
+        } else {
+          alert(`💰 You received ${actualReward} JB Coins!`)
+        }
       } else {
-        alert(`💰 You received 5 JB Coins! Keep watching for the bonus.`)
+        // Reached 2000 limit alert
+        alert(`📺 Ad counted! You have reached your daily limit of 2,000 JB Coins. Come back tomorrow for more coins!`)
       }
 
       setAdWatchCount(newCount)
@@ -234,7 +256,7 @@ function EarnCoinsPageContent() {
                   Watch Ads, Earn Coins
                 </h2>
                 <p className="mt-1 text-sm text-slate-400">
-                  Earn <strong className="text-amber-400">5 JB Coins</strong> for every ad you watch, plus a <strong className="text-amber-400">10 Coins Bonus</strong> on every 5th ad!
+                  Earn <strong className="text-amber-400">5 JB Coins</strong> for every ad you watch, plus a <strong className="text-amber-400">10 Coins Bonus</strong> on every 5th ad! (Max 2,000 Coins/day)
                 </p>
               </div>
             </div>
