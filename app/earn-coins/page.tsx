@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import Script from "next/script"
 import { createClient } from "@/lib/supabase/client"
 import PresenceTracker from "@/app/components/PresenceTracker"
 import SiteHeader from "@/app/components/SiteHeader"
@@ -161,8 +160,10 @@ function EarnCoinsPageContent() {
     }
   }
 
-  const cpxUrl = `https://offers.cpx-research.com/index.php?app_id=35034&ext_user_id=${userId || ""}`
-  const cpagripDirectUrl = `https://www.cpagrip.com/show.php?l=0&u=2546994&id=1907578&tracking_id=${userId || ""}`
+  const offerwallUrls: Record<OfferwallProvider, string> = {
+    cpagrip: `https://www.cpagrip.com/show.php?l=1907578&tracking_id=${userId || ""}`,
+    cpx: `https://offers.cpx-research.com/index.php?app_id=35034&ext_user_id=${userId || ""}`,
+  }
 
   if (checkingAuth) {
     return (
@@ -179,21 +180,13 @@ function EarnCoinsPageContent() {
     <>
       <PresenceTracker />
 
-      {/* Dynamic script para sa CPAGrip Offer Wall */}
-      {activeTab === "cpagrip" && (
-        <Script
-          src={`https://www.cpagrip.com/script_include.php?id=1907578&tracking_id=${userId || ""}`}
-          strategy="lazyOnload"
-        />
-      )}
-
       <div className="min-h-screen bg-[#020617] text-white">
         <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(99,102,241,0.18),_transparent_30%),linear-gradient(180deg,_#030712_0%,_#020617_45%,_#061229_100%)]" />
         <div className="fixed inset-0 -z-10 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] opacity-[0.08]" />
 
         <SiteHeader />
 
-        <main className="mx-auto w-full max-w-[1800px] px-4 pb-10 sm:px-6 lg:px-8">
+        <main className="mx-auto w-full max-w-[1800px] px-4 pt-28 pb-10 sm:px-6 lg:px-8">
           <DailyRewardCard />
 
           <div className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/60 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-md">
@@ -228,7 +221,7 @@ function EarnCoinsPageContent() {
           </div>
 
           <section className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/60 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-md">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-6">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-400">
                   Partner Offerwalls
@@ -249,7 +242,7 @@ function EarnCoinsPageContent() {
                       key={provider.id}
                       type="button"
                       onClick={() => setActiveTab(provider.id)}
-                      className={`relative flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+                      className={`relative flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-bold transition-all ${
                         isActive
                           ? "bg-gradient-to-r from-sky-400 to-blue-500 text-white shadow-md shadow-sky-500/20"
                           : "text-slate-400 hover:text-white hover:bg-white/5"
@@ -258,7 +251,7 @@ function EarnCoinsPageContent() {
                       {provider.label}
                       {provider.badge && (
                         <span
-                          className={`rounded-full px-1.5 py-0.5 text-[9px] font-extrabold uppercase ${
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase ${
                             isActive
                               ? "bg-white/20 text-white"
                               : "bg-sky-500/20 text-sky-300 border border-sky-500/30"
@@ -270,40 +263,28 @@ function EarnCoinsPageContent() {
                     </button>
                   )
                 })}
-
-                {activeTab === "cpagrip" && (
-                  <a
-                    href={cpagripDirectUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex shrink-0 items-center gap-1 rounded-xl bg-emerald-500/20 border border-emerald-500/30 px-3 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 transition"
-                  >
-                    Open Offers Page ↗
-                  </a>
-                )}
               </div>
             </div>
 
-            <div className="mt-6 overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 shadow-2xl relative min-h-[700px] p-4">
-              {userId ? (
-                activeTab === "cpagrip" ? (
-                  <div className="w-full flex flex-col items-center">
-                    {/* Container kung saan ire-render ng CPAGrip script ang offers */}
-                    <div id="offerwall_container" className="w-full min-h-[600px] text-slate-300" />
-                  </div>
-                ) : (
-                  <iframe
-                    src={cpxUrl}
-                    className="absolute inset-0 h-full w-full border-0 bg-slate-950"
-                    title="CPX Surveys offerwall"
-                    allow="geolocation; microphone; camera; clipboard-write; autoplay"
-                  />
-                )
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-400">
-                  Loading offerwall...
-                </div>
-              )}
+            <div className="relative flex flex-col items-center justify-center w-full rounded-[24px] border border-white/10 bg-slate-950 shadow-inner p-10 min-h-[400px] text-center">
+              <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-sky-500/20 to-blue-600/20 border border-sky-500/30">
+                <span className="text-4xl">🚀</span>
+              </div>
+              <h3 className="text-2xl font-black text-white mb-2">
+                Ready to earn with {PROVIDERS.find(p => p.id === activeTab)?.label}?
+              </h3>
+              <p className="text-slate-400 text-sm max-w-md mb-8">
+                For security and better tracking, this partner's offers must be opened in a secure window. Complete tasks there to automatically receive JB Coins.
+              </p>
+              
+              <a
+                href={offerwallUrls[activeTab]}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 px-8 py-4 text-base font-extrabold text-white shadow-lg shadow-sky-500/25 transition-all hover:scale-[1.02] hover:shadow-sky-500/40 active:scale-95"
+              >
+                Launch {PROVIDERS.find(p => p.id === activeTab)?.label} ↗
+              </a>
             </div>
           </section>
         </main>
