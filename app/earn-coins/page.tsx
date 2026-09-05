@@ -7,13 +7,6 @@ import PresenceTracker from "@/app/components/PresenceTracker"
 import SiteHeader from "@/app/components/SiteHeader"
 import DailyRewardCard from "@/app/components/DailyRewardCard"
 
-// Declare Monetag global window object for TypeScript safety
-declare global {
-  interface Window {
-    show_11699131?: ((format?: string | object) => Promise<void>) & ((options: object) => void)
-  }
-}
-
 type OfferwallProvider = "cpagrip" | "cpx"
 
 interface ProviderConfig {
@@ -35,20 +28,12 @@ function EarnCoinsPageContent() {
   const [userId, setUserId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<OfferwallProvider>("cpagrip")
 
-  // --- AD REWARD STATES ---
+  // --- AD REWARD & MODAL STATES ---
   const [adWatchCount, setAdWatchCount] = useState(0)
-  const [isWatching, setIsWatching] = useState(false)
-  const [cooldown, setCooldown] = useState(0)
+  const [showAdModal, setShowAdModal] = useState(false)
+  const [cooldown, setCooldown] = useState(10)
   const [claiming, setClaiming] = useState(false)
-
-  // Array of Direct CPM Links for rotation or fallback
-  const AD_LINKS = [
-    "https://www.profitableratecpmnetwork.com/pyuze51wkf?key=089f5accce969646a828061bc3a846f2",
-    "https://www.profitableratecpmnetwork.com/tw8ajp18mf?key=786d474da794ee7cd3596da3aab40fcc",
-    "https://www.profitableratecpmnetwork.com/kvx8tkwni0?key=af8f3ec4f9904d2b3f92245d38b66963",
-    "https://www.profitableratecpmnetwork.com/ek44eeb04?key=99f05c43be188cef9d877a7519d8166a",
-    "https://omg10.com/4/11698464"
-  ]
+  const [isTabFocused, setIsTabFocused] = useState(false)
 
   useEffect(() => {
     async function checkUser() {
@@ -82,53 +67,34 @@ function EarnCoinsPageContent() {
     void checkUser()
   }, [router, supabase])
 
-  // --- MONETAG IN-APP INTERSTITIAL INITIALIZATION ---
-  useEffect(() => {
-    if (typeof window !== "undefined" && typeof window.show_11699131 === "function") {
-      try {
-        window.show_11699131({
-          type: 'inApp',
-          inAppSettings: {
-            frequency: 2,
-            capping: 0.1,
-            interval: 30,
-            timeout: 5,
-            everyPage: false
-          }
-        })
-      } catch (err) {
-        console.error("Failed to initialize Monetag In-App ad:", err)
-      }
-    }
-  }, [])
-
+  // --- FOCUS-BASED TIMER (OPTION A) ---
   useEffect(() => {
     let interval: NodeJS.Timeout
-    if (isWatching && cooldown > 0) {
-      interval = setInterval(() => setCooldown((prev) => prev - 1), 1000)
+
+    if (showAdModal && cooldown > 0) {
+      interval = setInterval(() => {
+        // Mababawasan lang ang countdown kapag HINDI nakatutok ang mata sa main app tab
+        if (document.hidden) {
+          setCooldown((prev) => prev - 1)
+          setIsTabFocused(true)
+        } else {
+          setIsTabFocused(false)
+        }
+      }, 1000)
     }
+
     return () => clearInterval(interval)
-  }, [isWatching, cooldown])
+  }, [showAdModal, cooldown])
 
-  // --- MONETAG REWARDED POPUP / FALLBACK WATCH LOGIC ---
+  // --- LAUNCH AD MODAL & TRIGGER DIRECT LINK ---
   const handleWatchAd = () => {
-    setIsWatching(true)
-    setCooldown(5) // Set to 5 seconds cooldown
+    setCooldown(10)
+    setIsTabFocused(false)
+    setShowAdModal(true)
 
-    if (typeof window !== "undefined" && typeof window.show_11699131 === "function") {
-      window.show_11699131('pop')
-        .then(() => {
-          console.log("Monetag Rewarded Ad completed successfully")
-        })
-        .catch((e) => {
-          console.warn("Monetag Ad error/closed, launching direct link fallback:", e)
-          const randomLink = AD_LINKS[Math.floor(Math.random() * AD_LINKS.length)]
-          window.open(randomLink, "_blank")
-        })
-    } else {
-      // Fallback kung hindi nakakonekta ang script
-      const randomLink = AD_LINKS[Math.floor(Math.random() * AD_LINKS.length)]
-      window.open(randomLink, "_blank")
+    // Opens Monetag/Adsterra Direct Link in new tab
+    if (typeof window !== "undefined") {
+      window.open("https://omg10.com/4/11698464", "_blank", "noopener,noreferrer")
     }
   }
 
@@ -137,13 +103,10 @@ function EarnCoinsPageContent() {
     setClaiming(true)
 
     try {
-      const todayStr = new Date().toISOString().split('T')[0] // Formats as YYYY-MM-DD
+      const todayStr = new Date().toISOString().split("T")[0]
       const newCount = adWatchCount + 1
+      const intendedReward = 25 // Updated to 25 coins
 
-      // Fixed reward of 15 coins per ad watched
-      const intendedReward = 15
-
-      // 1. Fetch current profile data
       const { data: profile } = await supabase
         .from("profiles")
         .select("coins, ad_watch_count, daily_ad_coins, last_ad_date")
@@ -154,21 +117,17 @@ function EarnCoinsPageContent() {
       let dailyAdCoins = profile?.daily_ad_coins || 0
       const lastAdDate = profile?.last_ad_date || ""
 
-      // 2. Check Daily Reset Condition
       if (lastAdDate !== todayStr) {
-        dailyAdCoins = 0 // Reset threshold if it's a new day
+        dailyAdCoins = 0
       }
 
-      // 3. Determine if user has reached the 2000 coins daily limit
       const DAILY_LIMIT = 2000
       const remainingLimit = Math.max(0, DAILY_LIMIT - dailyAdCoins)
       
-      // Calculate actual coins to give (cap at remaining limit)
       const actualReward = Math.min(intendedReward, remainingLimit)
       const newDailyAdCoins = dailyAdCoins + actualReward
       const updatedCoins = currentCoins + actualReward
 
-      // 4. Update Database (Always update ad_watch_count)
       await supabase
         .from("profiles")
         .update({ 
@@ -179,7 +138,6 @@ function EarnCoinsPageContent() {
         })
         .eq("id", userId)
 
-      // 5. Log transaction only if actual coins were granted
       if (actualReward > 0) {
         await supabase.from("coin_history").insert({
           user_id: userId,
@@ -189,15 +147,13 @@ function EarnCoinsPageContent() {
         })
 
         window.dispatchEvent(new CustomEvent("jb-coins-updated", { detail: { reward: actualReward } }))
-        
         alert(`💰 You received ${actualReward} JB Coins!`)
       } else {
-        // Reached 2000 limit alert
         alert(`📺 Ad counted! You have reached your daily limit of 2,000 JB Coins. Come back tomorrow for more coins!`)
       }
 
       setAdWatchCount(newCount)
-      setIsWatching(false)
+      setShowAdModal(false)
       
     } catch (err) {
       console.error("Error claiming ad:", err)
@@ -207,6 +163,7 @@ function EarnCoinsPageContent() {
     }
   }
 
+  // 🔴 BINAGO: Dito natin papalitan/ilalagay ang iyong CPAGrip Offerwall / Locker Link
   const offerwallUrls: Record<OfferwallProvider, string> = {
     cpagrip: `https://www.cpagrip.com/show.php?l=0&u=2546994&id=1907578&tracking_id=${userId || ""}`,
     cpx: `https://offers.cpx-research.com/index.php?app_id=35034&ext_user_id=${userId || ""}`,
@@ -246,38 +203,23 @@ function EarnCoinsPageContent() {
                   Watch Ads, Earn Coins
                 </h2>
                 <p className="mt-1 text-sm text-slate-400">
-                  Earn <strong className="text-amber-400">15 JB Coins</strong> for every ad you watch! (Max 2,000 Coins/day)
+                  Earn <strong className="text-amber-400">25 JB Coins</strong> for every ad you watch! (Max 2,000 Coins/day)
                 </p>
               </div>
             </div>
 
             <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950 p-6 flex flex-col items-center justify-center min-h-[180px]">
-              
               <div className="w-full max-w-md mx-auto text-center">
                 <div className="mb-4">
                   <span className="text-5xl">📺</span>
                 </div>
 
-                {!isWatching ? (
-                  <button
-                    onClick={handleWatchAd}
-                    className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-4 text-sm font-black text-white shadow-lg shadow-emerald-500/20 transition hover:scale-[1.02] active:scale-95"
-                  >
-                    Watch Ad (+15 Coins)
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleClaimProgress}
-                    disabled={cooldown > 0 || claiming}
-                    className={`w-full rounded-xl px-6 py-4 text-sm font-black text-white transition ${
-                      cooldown > 0 
-                      ? "bg-slate-700 cursor-not-allowed opacity-70" 
-                      : "bg-blue-600 hover:bg-blue-500 hover:shadow-lg hover:shadow-blue-500/30 active:scale-95"
-                    }`}
-                  >
-                    {cooldown > 0 ? `Wait ${cooldown}s to Claim...` : claiming ? "Claiming..." : "Claim Coins!"}
-                  </button>
-                )}
+                <button
+                  onClick={handleWatchAd}
+                  className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-4 text-sm font-black text-white shadow-lg shadow-emerald-500/20 transition hover:scale-[1.02] active:scale-95"
+                >
+                  Watch Ad (+25 Coins)
+                </button>
               </div>
             </div>
           </div>
@@ -347,6 +289,54 @@ function EarnCoinsPageContent() {
           </section>
         </main>
       </div>
+
+      {/* --- AD VALIDATION MODAL --- */}
+      {showAdModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md rounded-3xl border border-white/20 bg-slate-900 p-6 text-center text-white shadow-2xl">
+            <button 
+              onClick={() => setShowAdModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white text-sm font-bold bg-white/5 hover:bg-white/10 px-3 py-1 rounded-full transition"
+            >
+              ✕ Close
+            </button>
+
+            <h3 className="text-xl font-black text-white mt-2">Watching Sponsored Ad</h3>
+            <p className="mt-1 text-xs text-slate-300">
+              Please stay on the newly opened tab to validate your reward.
+            </p>
+
+            {/* AD STATUS BOX */}
+            <div className="my-6 flex min-h-[200px] flex-col items-center justify-center rounded-2xl border border-emerald-500/20 bg-slate-950/80 p-6 text-center">
+              <div className="relative mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-2xl text-emerald-400">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-20"></span>
+                📺
+              </div>
+              <p className="text-sm font-bold text-emerald-400">Sponsor Page Active</p>
+              
+              {!isTabFocused && cooldown > 0 && (
+                <p className="mt-2 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
+                  ⚠️ Timer paused! Please switch back to the sponsor tab to continue countdown.
+                </p>
+              )}
+            </div>
+
+            {cooldown > 0 ? (
+              <div className="w-full rounded-xl bg-slate-800 py-3 text-center text-sm font-bold text-amber-400 border border-amber-500/20">
+                Stay on ad tab for {cooldown}s to Claim...
+              </div>
+            ) : (
+              <button
+                onClick={handleClaimProgress}
+                disabled={claiming}
+                className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-emerald-500/30 transition hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+              >
+                {claiming ? "Claiming Coins..." : "💰 Claim +25 Coins Now!"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </>
   )
 }
