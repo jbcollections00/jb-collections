@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import Script from "next/script"
 import { createClient } from "@/lib/supabase/client"
 import PresenceTracker from "@/app/components/PresenceTracker"
 import SiteHeader from "@/app/components/SiteHeader"
@@ -67,13 +68,12 @@ function EarnCoinsPageContent() {
     void checkUser()
   }, [router, supabase])
 
-  // --- FOCUS-BASED TIMER (OPTION A) ---
+  // --- FOCUS-BASED TIMER ---
   useEffect(() => {
     let interval: NodeJS.Timeout
 
     if (showAdModal && cooldown > 0) {
       interval = setInterval(() => {
-        // Mababawasan lang ang countdown kapag HINDI nakatutok ang mata sa main app tab
         if (document.hidden) {
           setCooldown((prev) => prev - 1)
           setIsTabFocused(true)
@@ -86,13 +86,11 @@ function EarnCoinsPageContent() {
     return () => clearInterval(interval)
   }, [showAdModal, cooldown])
 
-  // --- LAUNCH AD MODAL & TRIGGER DIRECT LINK ---
   const handleWatchAd = () => {
     setCooldown(10)
     setIsTabFocused(false)
     setShowAdModal(true)
 
-    // Opens Monetag/Adsterra Direct Link in new tab
     if (typeof window !== "undefined") {
       window.open("https://omg10.com/4/11698464", "_blank", "noopener,noreferrer")
     }
@@ -105,7 +103,7 @@ function EarnCoinsPageContent() {
     try {
       const todayStr = new Date().toISOString().split("T")[0]
       const newCount = adWatchCount + 1
-      const intendedReward = 25 // Updated to 25 coins
+      const intendedReward = 25
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -163,11 +161,8 @@ function EarnCoinsPageContent() {
     }
   }
 
-  // 🔴 BINAGO: Dito natin papalitan/ilalagay ang iyong CPAGrip Offerwall / Locker Link
-  const offerwallUrls: Record<OfferwallProvider, string> = {
-    cpagrip: `https://www.cpagrip.com/show.php?l=0&u=2546994&id=1907578&tracking_id=${userId || ""}`,
-    cpx: `https://offers.cpx-research.com/index.php?app_id=35034&ext_user_id=${userId || ""}`,
-  }
+  const cpxUrl = `https://offers.cpx-research.com/index.php?app_id=35034&ext_user_id=${userId || ""}`
+  const cpagripDirectUrl = `https://www.cpagrip.com/show.php?l=0&u=2546994&id=1907578&tracking_id=${userId || ""}`
 
   if (checkingAuth) {
     return (
@@ -183,6 +178,14 @@ function EarnCoinsPageContent() {
   return (
     <>
       <PresenceTracker />
+
+      {/* Dynamic script para sa CPAGrip Offer Wall */}
+      {activeTab === "cpagrip" && (
+        <Script
+          src={`https://www.cpagrip.com/script_include.php?id=1907578&tracking_id=${userId || ""}`}
+          strategy="lazyOnload"
+        />
+      )}
 
       <div className="min-h-screen bg-[#020617] text-white">
         <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(99,102,241,0.18),_transparent_30%),linear-gradient(180deg,_#030712_0%,_#020617_45%,_#061229_100%)]" />
@@ -238,7 +241,7 @@ function EarnCoinsPageContent() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-1.5 overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/80 p-1.5 scrollbar-none">
+              <div className="flex items-center gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/80 p-1.5 scrollbar-none">
                 {PROVIDERS.map((provider) => {
                   const isActive = activeTab === provider.id
                   return (
@@ -267,19 +270,35 @@ function EarnCoinsPageContent() {
                     </button>
                   )
                 })}
+
+                {activeTab === "cpagrip" && (
+                  <a
+                    href={cpagripDirectUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex shrink-0 items-center gap-1 rounded-xl bg-emerald-500/20 border border-emerald-500/30 px-3 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 transition"
+                  >
+                    Open Offers Page ↗
+                  </a>
+                )}
               </div>
             </div>
 
-            <div className="mt-6 overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 shadow-2xl relative min-h-[800px]">
+            <div className="mt-6 overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 shadow-2xl relative min-h-[700px] p-4">
               {userId ? (
-                <iframe
-                  key={activeTab}
-                  src={offerwallUrls[activeTab]}
-                  className="absolute inset-0 h-full w-full border-0 bg-slate-950"
-                  title={`${activeTab} offerwall`}
-                  allow="geolocation; microphone; camera; clipboard-write"
-                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"
-                />
+                activeTab === "cpagrip" ? (
+                  <div className="w-full flex flex-col items-center">
+                    {/* Container kung saan ire-render ng CPAGrip script ang offers */}
+                    <div id="offerwall_container" className="w-full min-h-[600px] text-slate-300" />
+                  </div>
+                ) : (
+                  <iframe
+                    src={cpxUrl}
+                    className="absolute inset-0 h-full w-full border-0 bg-slate-950"
+                    title="CPX Surveys offerwall"
+                    allow="geolocation; microphone; camera; clipboard-write; autoplay"
+                  />
+                )
               ) : (
                 <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-400">
                   Loading offerwall...
@@ -306,7 +325,6 @@ function EarnCoinsPageContent() {
               Please stay on the newly opened tab to validate your reward.
             </p>
 
-            {/* AD STATUS BOX */}
             <div className="my-6 flex min-h-[200px] flex-col items-center justify-center rounded-2xl border border-emerald-500/20 bg-slate-950/80 p-6 text-center">
               <div className="relative mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-2xl text-emerald-400">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-20"></span>
