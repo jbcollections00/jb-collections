@@ -113,7 +113,7 @@ function EarnCoinsPageContent() {
   // --- MONETAG REWARDED POPUP / FALLBACK WATCH LOGIC ---
   const handleWatchAd = () => {
     setIsWatching(true)
-    setCooldown(10)
+    setCooldown(5) // Set to 5 seconds cooldown
 
     if (typeof window !== "undefined" && typeof window.show_11699131 === "function") {
       window.show_11699131('pop')
@@ -139,12 +139,9 @@ function EarnCoinsPageContent() {
     try {
       const todayStr = new Date().toISOString().split('T')[0] // Formats as YYYY-MM-DD
       const newCount = adWatchCount + 1
-      const isRewardTime = newCount % 5 === 0
 
-      // Compute intended reward
-      const baseReward = 5
-      const bonusReward = isRewardTime ? 10 : 0
-      const intendedReward = baseReward + bonusReward
+      // Fixed reward of 15 coins per ad watched
+      const intendedReward = 15
 
       // 1. Fetch current profile data
       const { data: profile } = await supabase
@@ -188,16 +185,12 @@ function EarnCoinsPageContent() {
           user_id: userId,
           amount: actualReward,
           type: "ad_reward",
-          description: isRewardTime ? "Watched Ad + 5th Ad Bonus" : "Watched an Ad",
+          description: "Watched an Ad",
         })
 
         window.dispatchEvent(new CustomEvent("jb-coins-updated", { detail: { reward: actualReward } }))
         
-        if (isRewardTime) {
-          alert(`🎉 Awesome! You received ${actualReward} JB Coins!`)
-        } else {
-          alert(`💰 You received ${actualReward} JB Coins!`)
-        }
+        alert(`💰 You received ${actualReward} JB Coins!`)
       } else {
         // Reached 2000 limit alert
         alert(`📺 Ad counted! You have reached your daily limit of 2,000 JB Coins. Come back tomorrow for more coins!`)
@@ -230,9 +223,6 @@ function EarnCoinsPageContent() {
     )
   }
 
-  const currentProgress = adWatchCount % 5
-  const progressPercentage = (currentProgress / 5) * 100
-
   return (
     <>
       <PresenceTracker />
@@ -256,32 +246,16 @@ function EarnCoinsPageContent() {
                   Watch Ads, Earn Coins
                 </h2>
                 <p className="mt-1 text-sm text-slate-400">
-                  Earn <strong className="text-amber-400">5 JB Coins</strong> for every ad you watch, plus a <strong className="text-amber-400">10 Coins Bonus</strong> on every 5th ad! (Max 2,000 Coins/day)
+                  Earn <strong className="text-amber-400">15 JB Coins</strong> for every ad you watch! (Max 2,000 Coins/day)
                 </p>
               </div>
             </div>
 
-            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950 p-6 flex flex-col items-center justify-center min-h-[220px]">
+            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950 p-6 flex flex-col items-center justify-center min-h-[180px]">
               
               <div className="w-full max-w-md mx-auto text-center">
                 <div className="mb-4">
                   <span className="text-5xl">📺</span>
-                </div>
-                
-                <div className="mb-6 w-full">
-                  <div className="flex justify-between text-xs font-bold text-slate-400 mb-2 px-1">
-                    <span>Bonus Progress</span>
-                    <span className="text-emerald-400">{currentProgress} / 5 Ads</span>
-                  </div>
-                  <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden shadow-inner">
-                    <div 
-                      className="h-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-all duration-500 ease-out rounded-full"
-                      style={{ width: `${progressPercentage}%` }}
-                    />
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-2 font-semibold">
-                    {5 - currentProgress} more ads for the 10 JB Coins Bonus!
-                  </p>
                 </div>
 
                 {!isWatching ? (
@@ -289,7 +263,7 @@ function EarnCoinsPageContent() {
                     onClick={handleWatchAd}
                     className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-4 text-sm font-black text-white shadow-lg shadow-emerald-500/20 transition hover:scale-[1.02] active:scale-95"
                   >
-                    Watch Ad (+5 Coins)
+                    Watch Ad (+15 Coins)
                   </button>
                 ) : (
                   <button

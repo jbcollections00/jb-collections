@@ -5,8 +5,6 @@ import { createClient as createSupabaseAdmin } from "@supabase/supabase-js"
 
 export const runtime = "nodejs"
 
-const DOWNLOAD_BOOST_EXTRA_COST = 8
-const DOWNLOAD_BOOST_EXTRA_REWARD = 3
 const POPULAR_FILE_PRICE_PLUS_1_THRESHOLD = 1000
 const POPULAR_FILE_PRICE_PLUS_2_THRESHOLD = 5000
 
@@ -41,19 +39,6 @@ interface FileVersionRow {
   is_current?: boolean | null
 }
 
-type RewardResultReason =
-  | "awarded"
-  | "admin_skipped"
-  | "limit_disabled"
-  | "missing_env"
-  | "daily_limit_reached"
-  | "already_rewarded_today"
-
-interface RewardResult {
-  awarded: number
-  reason: RewardResultReason
-}
-
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
@@ -71,12 +56,12 @@ function normalizeMembership(profile?: ProfileRow | null): MembershipLevel {
 
 function getBaseDownloadCoinCost(level: MembershipLevel): number {
   if (level === "admin") return 0
-  if (level === "platinum") return 30
-  if (level === "premium") return 40
-  return 50
+  if (level === "platinum") return 60
+  if (level === "premium") return 80
+  return 100
 }
 
-function getDownloadCoinCost(level: MembershipLevel, file?: FileRow | null, boosted = false): number {
+function getDownloadCoinCost(level: MembershipLevel, file?: FileRow | null): number {
   let cost = getBaseDownloadCoinCost(level)
 
   if (level !== "admin" && file) {
@@ -85,23 +70,7 @@ function getDownloadCoinCost(level: MembershipLevel, file?: FileRow | null, boos
     else if (downloadsCount >= POPULAR_FILE_PRICE_PLUS_1_THRESHOLD) cost += 2
   }
 
-  if (level !== "admin" && boosted) cost += DOWNLOAD_BOOST_EXTRA_COST
-
   return Math.max(0, cost)
-}
-
-function getDownloadRewardAmount(level: MembershipLevel, boosted = false): number {
-  if (level === "admin") return 0
-  let reward = level === "platinum" ? 3 : level === "premium" ? 4 : 5
-  if (boosted) reward += DOWNLOAD_BOOST_EXTRA_REWARD
-  return reward
-}
-
-function getDailyDownloadRewardLimit(level: MembershipLevel): number {
-  if (level === "admin") return 0
-  if (level === "platinum") return 50
-  if (level === "premium") return 35
-  return 20
 }
 
 function buildSafeFilename(file: FileRow, version: FileVersionRow): string {
@@ -120,15 +89,6 @@ function getClientIp(req: NextRequest): string | null {
   return forwardedFor ? forwardedFor.split(",")[0]?.trim() : null
 }
 
-function getTodayManilaDateString(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Manila",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date())
-}
-
 function createAdminDb() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -137,74 +97,6 @@ function createAdminDb() {
   return createSupabaseAdmin(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   })
-}
-
-async function awardDownloadCoins(params: {
-  userId: string
-  fileId: string
-  fileTitle: string
-  membershipLevel: MembershipLevel
-  boosted?: boolean
-}): Promise<RewardResult> {
-  const { userId, fileId, fileTitle, membershipLevel, boosted = false } = params
-
-  if (membershipLevel === "admin") return { awarded: 0, reason: "admin_skipped" }
-
-  const rewardAmount = getDownloadRewardAmount(membershipLevel, boosted)
-  const dailyLimit = getDailyDownloadRewardLimit(membershipLevel)
-
-  if (rewardAmount <= 0 || dailyLimit <= 0) return { awarded: 0, reason: "limit_disabled" }
-
-  const adminDb = createAdminDb()
-  if (!adminDb) return { awarded: 0, reason: "missing_env" }
-
-  const rewardDate = getTodayManilaDateString()
-
-  try {
-    const { data: allowed } = await adminDb.rpc("check_coin_limit", {
-      p_user_id: userId,
-      p_action: "download_reward",
-      p_limit: dailyLimit,
-    })
-
-    if (allowed === false) return { awarded: 0, reason: "daily_limit_reached" }
-  } catch {
-    // Ignore RPC missing error
-  }
-
-  const { data: existingReward } = await adminDb
-    .from("download_rewards")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("file_id", fileId)
-    .eq("reward_date", rewardDate)
-    .maybeSingle()
-
-  if (existingReward) return { awarded: 0, reason: "already_rewarded_today" }
-
-  const { error: insertRewardError } = await adminDb.from("download_rewards").insert({
-    user_id: userId,
-    file_id: fileId,
-    reward_date: rewardDate,
-  })
-
-  if (insertRewardError) return { awarded: 0, reason: "already_rewarded_today" }
-
-  const { error: coinError } = await adminDb.rpc("handle_coin_change", {
-    p_user_id: userId,
-    p_amount: rewardAmount,
-    p_type: boosted ? "download_boost_reward" : "download_reward",
-    p_description: `Download reward for ${fileTitle || fileId}${boosted ? " (Boosted)" : ""}`,
-    p_reference: `download_${boosted ? "boost_" : ""}reward:${userId}:${fileId}:${rewardDate}`,
-  })
-
-  if (coinError) {
-    const { data: userProf } = await adminDb.from("profiles").select("coins").eq("id", userId).single()
-    const currentCoins = Number(userProf?.coins || 0)
-    await adminDb.from("profiles").update({ coins: currentCoins + rewardAmount }).eq("id", userId)
-  }
-
-  return { awarded: rewardAmount, reason: "awarded" }
 }
 
 export async function GET(
@@ -217,7 +109,6 @@ export async function GET(
 
     const url = new URL(req.url)
     const mode = url.searchParams.get("mode")
-    const boosted = url.searchParams.get("boost") === "1"
 
     const referer = req.headers.get("referer")
     const currentHost = req.nextUrl.hostname.replace(/^www\./, "")
@@ -271,9 +162,8 @@ export async function GET(
 
     const fileOnly = fileData as FileRow
     const realFileId = fileOnly.id
-    const downloadCoinCost = getDownloadCoinCost(membershipLevel, fileOnly, boosted)
-    const baseDownloadCoinCost = getDownloadCoinCost(membershipLevel, fileOnly, false)
-    
+    const downloadCoinCost = getDownloadCoinCost(membershipLevel, fileOnly)
+
     if (fileOnly.status !== "published") {
       return NextResponse.json({ error: `File is not published. Current status: ${fileOnly.status}` }, { status: 404 })
     }
@@ -323,7 +213,6 @@ export async function GET(
       return NextResponse.json({ error: "Not enough JB Coins", requiredCoins: downloadCoinCost, currentCoins: userCoins }, { status: 402 })
     }
 
-    // COINS DEDUCTION WITH FALLBACK
     if (downloadCoinCost > 0) {
       if (!adminDb) return NextResponse.json({ error: "Coin system unavailable. Missing service role config." }, { status: 500 })
 
@@ -332,9 +221,9 @@ export async function GET(
       const { error: spendError } = await adminDb.rpc("handle_coin_change", {
         p_user_id: user.id,
         p_amount: -downloadCoinCost,
-        p_type: boosted ? "boosted_download_spend" : "download_spend",
+        p_type: "download_spend",
         p_description: `Download spend for ${fileOnly.title || fileOnly.slug || realFileId}`,
-        p_reference: `${boosted ? "boosted_" : ""}download_spend:${user.id}:${realFileId}:${Date.now()}`,
+        p_reference: `download_spend:${user.id}:${realFileId}:${Date.now()}`,
       })
 
       if (!spendError) {
@@ -364,14 +253,11 @@ export async function GET(
       downloadFilename: safeFilename,
     })
 
-    // INA-AWAIT NA ANG LOG INSERT PARA SIGURADONG MASULAT SA DATABASE AT LUMABAS SA LIVE FEED
-    let rewardResponse = { rewarded: false, alreadyRewardedToday: false, rewardAmount: 0 }
-
     const { error: logError } = await dbClient.from("download_logs").insert({
       user_id: user.id,
       file_id: realFileId,
       file_version_id: currentVersion.id,
-      result: boosted ? "success_boosted" : "success",
+      result: "success",
       ip_address: getClientIp(req),
       user_agent: req.headers.get("user-agent"),
     })
@@ -386,29 +272,10 @@ export async function GET(
       await dbClient.from("files").update({ downloads_count: (fileOnly.downloads_count || 0) + 1 }).eq("id", realFileId)
     }
 
-    try {
-      const rewardResult = await awardDownloadCoins({
-        userId: user.id,
-        fileId: realFileId,
-        fileTitle: fileOnly.title || fileOnly.slug || realFileId,
-        membershipLevel,
-        boosted,
-      })
-      if (rewardResult.awarded > 0) rewardResponse = { rewarded: true, alreadyRewardedToday: false, rewardAmount: rewardResult.awarded }
-      else if (rewardResult.reason === "already_rewarded_today") rewardResponse = { rewarded: false, alreadyRewardedToday: true, rewardAmount: 0 }
-    } catch (err) {
-      console.error("Download coin reward error:", err)
-    }
-
     if (mode === "json") {
       return NextResponse.json({
         downloadUrl: signedUrl,
         coinsUsed: downloadCoinCost,
-        baseCoinsUsed: baseDownloadCoinCost,
-        boostExtraCost: boosted ? DOWNLOAD_BOOST_EXTRA_COST : 0,
-        boosted,
-        expectedRewardAmount: getDownloadRewardAmount(membershipLevel, boosted),
-        ...rewardResponse,
       })
     }
 

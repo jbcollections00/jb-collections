@@ -152,16 +152,13 @@ function getShortDescription(file: FileRow | null) {
 
 function getDownloadCoinCost(level: MembershipLevel) {
   if (level === "admin") return 0
-  if (level === "platinum") return 30
-  if (level === "premium") return 40
-  return 50
+  if (level === "platinum") return 60
+  if (level === "premium") return 80
+  return 100
 }
 
 function getRewardAmount(level: MembershipLevel) {
-  if (level === "admin") return 0
-  if (level === "platinum") return 3
-  if (level === "premium") return 4
-  return 5
+  return 0
 }
 
 export default function DownloadPageClient() {
@@ -195,6 +192,10 @@ export default function DownloadPageClient() {
   const [startingDownload, setStartingDownload] = useState(false)
   const [downloadError, setDownloadError] = useState("")
 
+  const [showAdModal, setShowAdModal] = useState(false)
+  const [adTimer, setAdTimer] = useState(10)
+  const [canProceedFromAd, setCanProceedFromAd] = useState(false)
+
   const [showCoinConfirm, setShowCoinConfirm] = useState(false)
   const [showInsufficientCoins, setShowInsufficientCoins] = useState(false)
   const [requiredCoins, setRequiredCoins] = useState<number | null>(null)
@@ -210,7 +211,6 @@ export default function DownloadPageClient() {
   const previewKind = useMemo(() => inferPreviewKind(file), [file])
   const fileTypeLabel = useMemo(() => inferExtension(file), [file])
   const estimatedCoinCost = useMemo(() => getDownloadCoinCost(membershipLevel), [membershipLevel])
-  const estimatedReward = useMemo(() => getRewardAmount(membershipLevel), [membershipLevel])
 
   const clearRewardNoticeTimer = useCallback(() => {
     if (rewardNoticeTimerRef.current) {
@@ -258,34 +258,6 @@ export default function DownloadPageClient() {
   }, [])
 
   useEffect(() => {
-    const rewarded =
-      searchParams?.get("rewarded") === "1" || searchParams?.get("reward") === "earned"
-
-    const alreadyRewardedToday =
-      searchParams?.get("alreadyRewardedToday") === "1" ||
-      searchParams?.get("already_rewarded_today") === "1" ||
-      searchParams?.get("reward") === "today"
-
-    const rewardAmountRaw =
-      searchParams?.get("rewardAmount") || searchParams?.get("reward_amount") || `${estimatedReward}`
-
-    const parsedRewardAmount = Number(rewardAmountRaw)
-    const rewardAmount =
-      Number.isFinite(parsedRewardAmount) && parsedRewardAmount > 0 ? parsedRewardAmount : estimatedReward
-
-    if (rewarded) {
-      showRewardNotice(`+${rewardAmount} JB Coins earned`, "success")
-      dispatchCoinPopup(rewardAmount, "Download reward")
-      return
-    }
-
-    if (alreadyRewardedToday) {
-      showRewardNotice("Already rewarded today", "info")
-      dispatchCoinPopup(0, "Already rewarded today")
-    }
-  }, [searchParams, showRewardNotice, estimatedReward])
-
-  useEffect(() => {
     if (!idOrSlug) return
     void loadPage()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -303,6 +275,20 @@ export default function DownloadPageClient() {
 
     return () => window.clearTimeout(timer)
   }, [checking, file, step, countdown])
+
+  useEffect(() => {
+    if (!showAdModal) return
+    if (adTimer <= 0) {
+      setCanProceedFromAd(true)
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setAdTimer((prev) => prev - 1)
+    }, 1000)
+
+    return () => window.clearTimeout(timer)
+  }, [showAdModal, adTimer])
 
   useEffect(() => {
     if (!showPreviewModal) return
@@ -380,6 +366,7 @@ export default function DownloadPageClient() {
       setShowExtractorModal(false)
       setShowCoinConfirm(false)
       setShowInsufficientCoins(false)
+      setShowAdModal(false)
       setRequiredCoins(null)
       setCurrentCoins(null)
       setStep("waiting")
@@ -508,11 +495,14 @@ export default function DownloadPageClient() {
   function handleDownloadButtonClick() {
     if (startingDownload || !file?.id) return
 
-    // Open Adsterra Smartlink directly on click event to bypass browser popup blockers
-    const ADSTERRA_LINK = "https://www.effectivecpmnetwork.com/tw8ajp18mf?key=786d474da794ee7cd3596da3aab40fcc"
-    window.open(ADSTERRA_LINK, "_blank")
-
     setDownloadError("")
+    setAdTimer(10)
+    setCanProceedFromAd(false)
+    setShowAdModal(true)
+  }
+
+  function handleAdModalComplete() {
+    setShowAdModal(false)
     setShowCoinConfirm(true)
   }
 
@@ -563,16 +553,14 @@ export default function DownloadPageClient() {
       const data = await res.json().catch(() => null)
 
       if (!res.ok) {
-        // STRICT CHECK: Only show the modal if the server explicitly returns 402 Insufficient Funds
         if (res.status === 402) {
           setRequiredCoins(Number(data?.requiredCoins ?? data?.required ?? estimatedCoinCost))
           setCurrentCoins(Number(data?.currentCoins ?? data?.coins ?? data?.jb_coins ?? data?.balance ?? 0))
           setShowInsufficientCoins(true)
           setStartingDownload(false)
-          return // Stop execution here so it doesn't trigger the generic error below
+          return
         }
 
-        // Catch-all for 500 Internal Server Errors and other failures
         const message = data?.error || "Failed to start download"
         showRewardNotice(message, "error")
         setDownloadError(message)
@@ -584,19 +572,6 @@ export default function DownloadPageClient() {
         if (typeof data?.coinsUsed === "number" && data.coinsUsed > 0) {
           dispatchCoinPopup(-data.coinsUsed, "Download spend")
           showRewardNotice(`-${data.coinsUsed} JB Coins used`, "info")
-        }
-
-        if (data?.rewarded) {
-          const rewardAmount = Number(data.rewardAmount ?? estimatedReward)
-          window.setTimeout(() => {
-            showRewardNotice(`+${rewardAmount} JB Coins earned`, "success")
-            dispatchCoinPopup(rewardAmount, "Download reward")
-          }, 900)
-        } else if (data?.alreadyRewardedToday) {
-          window.setTimeout(() => {
-            showRewardNotice("Already rewarded today", "info")
-            dispatchCoinPopup(0, "Already rewarded today")
-          }, 900)
         }
 
         window.setTimeout(() => {
@@ -932,6 +907,48 @@ export default function DownloadPageClient() {
             }`}
           >
             {rewardNotice}
+          </div>
+        </div>
+      )}
+
+      {showAdModal && (
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
+          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl text-center">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-600">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500"></span>
+              </span>
+              Verification & Server Sync
+            </div>
+
+            <h3 className="text-xl font-black text-slate-900">Preparing Secure Download</h3>
+            
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">
+              Due to high concurrent download requests from our users, we require a brief countdown to prevent server congestion and ensure high-speed delivery.
+            </p>
+
+            <div className="my-5 flex flex-col items-center justify-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-900 text-2xl font-black text-white shadow-inner">
+                {adTimer > 0 ? adTimer : "✓"}
+              </div>
+              <p className="mt-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                {adTimer > 0 ? "Please wait..." : "Ready to proceed"}
+              </p>
+            </div>
+
+            <div className="my-4 flex items-center justify-center">
+              <AdsterraBanner />
+            </div>
+
+            <button
+              type="button"
+              disabled={!canProceedFromAd}
+              onClick={handleAdModalComplete}
+              className="mt-2 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3.5 text-xs font-bold text-white shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {canProceedFromAd ? "Continue to Confirmation →" : `Please wait ${adTimer}s...`}
+            </button>
           </div>
         </div>
       )}
