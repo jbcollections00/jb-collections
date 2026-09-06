@@ -8,27 +8,39 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing userId parameter' }, { status: 400 });
   }
 
-  const cpagripUrl = `https://www.cpagrip.com/common/offer_feed_json.php?user_id=2546994&pubkey=24b327f74d8b0c75f0b6b99c5e5560bd&offer_type=Email/Zip%20Submit&tracking_id=${userId}`;
+  const cpagripUrl = `https://www.cpagrip.com/common/offer_feed_json.php?user_id=2546994&key=2d439789f1d8d23756b853675768e34c&offer_type=Email/Zip%20Submit&country=PH&tracking_id=${userId}`;
 
   try {
     const res = await fetch(cpagripUrl, { cache: 'no-store' });
-    const data = await res.json();
+    
+    // Kukunin muna natin bilang text para hindi mag-crash kapag HTML ang ibinigay
+    const rawText = await res.text();
 
-    // MGA ID NG MALILINIS NA MOBILE OFFERS
-    // Tinanggal na ang Desktop ID (74257) para iwas sa junk redirect ads sa PC
-    const SELECTED_IDS = [
-      '74096', '74097',  // PS5 (Android & iOS)
-      '72104', '72105',  // Smart Watch (Android & iOS)
-      '74258', '74259'   // Spin Wheel (Android & iOS lang)
-    ];
+    try {
+      // Susubukang i-convert ang text sa JSON
+      const data = JSON.parse(rawText);
+      
+      const rawOffers = Array.isArray(data?.offers) ? data.offers : [];
+      const SELECTED_IDS = ['74096', '74097', '72104', '72105', '74258', '74259'];
 
-    const filteredOffers = (data.offers || []).filter((offer: any) =>
-      SELECTED_IDS.includes(String(offer.offer_id))
-    );
+      let finalOffers = rawOffers.filter((offer: any) =>
+        SELECTED_IDS.includes(String(offer.offer_id))
+      );
 
-    return NextResponse.json({ ...data, offers: filteredOffers });
+      if (finalOffers.length === 0 && rawOffers.length > 0) {
+        finalOffers = rawOffers.slice(0, 3);
+      }
+
+      return NextResponse.json({ offers: finalOffers });
+
+    } catch (parseError) {
+      // Kung hindi JSON, ipi-print sa terminal ang unang 200 letters ng error page
+      console.error("HINDI JSON ANG IBINALIK NG CPAGRIP. Nakasulat ay:", rawText.substring(0, 200));
+      return NextResponse.json({ offers: [] });
+    }
+
   } catch (error) {
-    console.error("Error fetching CPAGrip offers:", error);
-    return NextResponse.json({ error: 'Failed to fetch offers from CPAGrip' }, { status: 500 });
+    console.error("Fetch Error:", error);
+    return NextResponse.json({ offers: [] });
   }
 }
