@@ -8,6 +8,7 @@ const supabase = createClient(
 
 async function handlePostback(password: string | null, trackingId: string | null, payoutRaw: string | null) {
   const secretKey = process.env.CPAGRIP_WEBHOOK_SECRET || 'jb_cpagrip_secret_123';
+  
   if (password !== secretKey) {
     return NextResponse.json(
       { success: false, error: 'Unauthorized: Invalid password' },
@@ -23,7 +24,10 @@ async function handlePostback(password: string | null, trackingId: string | null
   }
 
   const payout = parseFloat(payoutRaw || '0');
-  const coinsToCredit = 500;
+  
+  // Dynamic Calculation: Halimbawa, $0.17 Payout = 170 Coins (1000 coins per $1.00 USD)
+  // May fallback na 100 coins kung Sakaling walang nabasang payout value.
+  const coinsToCredit = payout > 0 ? Math.round(payout * 1000) : 100;
 
   const { error } = await supabase.rpc('credit_user_coins', {
     user_id_input: trackingId,

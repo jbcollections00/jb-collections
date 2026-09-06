@@ -28,6 +28,10 @@ function EarnCoinsPageContent() {
   const [userId, setUserId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<OfferwallProvider>("cpagrip")
 
+  // --- CPAGRIP OFFERS STATE ---
+  const [offers, setOffers] = useState<any[]>([])
+  const [loadingOffers, setLoadingOffers] = useState(false)
+
   // --- AD REWARD & MODAL STATES ---
   const [adWatchCount, setAdWatchCount] = useState(0)
   const [showAdModal, setShowAdModal] = useState(false)
@@ -66,6 +70,26 @@ function EarnCoinsPageContent() {
 
     void checkUser()
   }, [router, supabase])
+
+  // --- FETCH CPAGRIP OFFERS ---
+  useEffect(() => {
+    if (!userId || activeTab !== "cpagrip") return
+
+    async function fetchOffers() {
+      setLoadingOffers(true)
+      try {
+        const res = await fetch(`/api/offers?userId=${userId}`)
+        const data = await res.json()
+        setOffers(data.offers || [])
+      } catch (err) {
+        console.error("Error fetching CPAGrip offers:", err)
+      } finally {
+        setLoadingOffers(false)
+      }
+    }
+
+    void fetchOffers()
+  }, [userId, activeTab])
 
   // --- FOCUS-BASED TIMER ---
   useEffect(() => {
@@ -266,26 +290,76 @@ function EarnCoinsPageContent() {
               </div>
             </div>
 
-            <div className="relative flex flex-col items-center justify-center w-full rounded-[24px] border border-white/10 bg-slate-950 shadow-inner p-10 min-h-[400px] text-center">
-              <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-sky-500/20 to-blue-600/20 border border-sky-500/30">
-                <span className="text-4xl">🚀</span>
+            {activeTab === "cpagrip" ? (
+              <div className="w-full rounded-[24px] border border-white/10 bg-slate-950 p-6 min-h-[300px]">
+                {loadingOffers ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-sky-500 border-t-transparent mb-3"></div>
+                    <p className="text-sm font-bold">Kinuha ang mga pinakamalapit na Email/Zip Submit tasks...</p>
+                  </div>
+                ) : offers.length > 0 ? (
+                  <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                    {offers.map((offer: any) => (
+                      <div
+                        key={offer.offer_id || offer.title}
+                        className="flex flex-col justify-between rounded-2xl border border-white/10 bg-slate-900/80 p-5 text-left transition hover:border-sky-500/40 hover:bg-slate-900"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-extrabold uppercase text-emerald-400">
+                              Easy Task
+                            </span>
+                            <span className="text-xs font-bold text-amber-400">
+                              +{Math.round((parseFloat(offer.payout) || 0.15) * 1000)} Coins
+                            </span>
+                          </div>
+                          <h4 className="text-base font-bold text-white line-clamp-1">{offer.title}</h4>
+                          <p className="mt-1 text-xs text-slate-400 line-clamp-2">
+                            {offer.description || "Kumpletuhin ang simpleng offer na ito para makuha agad ang coins."}
+                          </p>
+                        </div>
+
+                        <a
+                          href={offer.offerlink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-md shadow-sky-500/20 transition hover:scale-[1.01] active:scale-95"
+                        >
+                          Complete Task ↗
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 text-slate-400 text-center">
+                    <span className="text-3xl mb-2">📭</span>
+                    <p className="text-sm font-bold">Walang available na task sa ngayon.</p>
+                    <p className="text-xs text-slate-500 mt-1">Subukang mag-refresh o bumalik mamaya.</p>
+                  </div>
+                )}
               </div>
-              <h3 className="text-2xl font-black text-white mb-2">
-                Ready to earn with {PROVIDERS.find(p => p.id === activeTab)?.label}?
-              </h3>
-              <p className="text-slate-400 text-sm max-w-md mb-8">
-                For security and better tracking, this partner's offers must be opened in a secure window. Complete tasks there to automatically receive JB Coins.
-              </p>
-              
-              <a
-                href={offerwallUrls[activeTab]}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 px-8 py-4 text-base font-extrabold text-white shadow-lg shadow-sky-500/25 transition-all hover:scale-[1.02] hover:shadow-sky-500/40 active:scale-95"
-              >
-                Launch {PROVIDERS.find(p => p.id === activeTab)?.label} ↗
-              </a>
-            </div>
+            ) : (
+              <div className="relative flex flex-col items-center justify-center w-full rounded-[24px] border border-white/10 bg-slate-950 shadow-inner p-10 min-h-[400px] text-center">
+                <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-sky-500/20 to-blue-600/20 border border-sky-500/30">
+                  <span className="text-4xl">🚀</span>
+                </div>
+                <h3 className="text-2xl font-black text-white mb-2">
+                  Ready to earn with {PROVIDERS.find(p => p.id === activeTab)?.label}?
+                </h3>
+                <p className="text-slate-400 text-sm max-w-md mb-8">
+                  For security and better tracking, this partner's offers must be opened in a secure window. Complete tasks there to automatically receive JB Coins.
+                </p>
+                
+                <a
+                  href={offerwallUrls[activeTab]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 px-8 py-4 text-base font-extrabold text-white shadow-lg shadow-sky-500/25 transition-all hover:scale-[1.02] hover:shadow-sky-500/40 active:scale-95"
+                >
+                  Launch {PROVIDERS.find(p => p.id === activeTab)?.label} ↗
+                </a>
+              </div>
+            )}
           </section>
         </main>
       </div>
