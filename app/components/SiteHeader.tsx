@@ -84,14 +84,17 @@ export default function SiteHeader() {
       let allMessages = primaryData || []
 
       if (!allMessages.length) {
-        // FIX: Tinanggal ang 'subject' sa select query dahil wala ito sa user_messages schema
+        // FIX: Idinagdag ang 'subject: null' sa fallbackData mapping upang maging katugma ng TypeScript type ng allMessages
         const { data: fallbackData } = await supabase
           .from("user_messages")
           .select("id, is_read, user_id, title, body")
           .eq("user_id", userId)
           .order("created_at", { ascending: false })
         
-        allMessages = fallbackData || []
+        allMessages = (fallbackData || []).map((msg) => ({
+          ...msg,
+          subject: null,
+        }))
       }
 
       // 2. Filter out dismissed items
