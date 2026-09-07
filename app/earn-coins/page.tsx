@@ -7,17 +7,32 @@ import PresenceTracker from "@/app/components/PresenceTracker"
 import SiteHeader from "@/app/components/SiteHeader"
 import DailyRewardCard from "@/app/components/DailyRewardCard"
 
-type OfferwallProvider = "cpagrip" | "cpx"
-
-interface ProviderConfig {
-  id: OfferwallProvider
-  label: string
-  badge?: string
-}
-
-const PROVIDERS: ProviderConfig[] = [
-  { id: "cpagrip", label: "CPAGrip", badge: "Recommended" },
-  { id: "cpx", label: "CPX Surveys", badge: "Top Surveys" },
+// --- COMBINED MONETAG & ADSTERRA SMARTLINK TASKS ---
+const SMARTLINK_TASKS = [
+  {
+    id: "task-1",
+    title: "Quick Visit",
+    description: "Bisitahin ang sponsor page nang 15 seconds.",
+    reward: 25,
+    cooldown: 15,
+    url: "https://profitableratecpmnetwork.com/vja5sy3m?key=fc8ea4a621cb34f209a9fa31d4b85bea", // Adsterra Link 1
+  },
+  {
+    id: "task-2",
+    title: "Standard Visit",
+    description: "Mag-stay sa sponsor page nang 30 seconds para sa mas malaking reward.",
+    reward: 60,
+    cooldown: 30,
+    url: "https://omg10.com/4/11698464", // Monetag Link 1 (Fair Link)
+  },
+  {
+    id: "task-3",
+    title: "Premium Visit",
+    description: "Kailangan ng extra coins? Maghintay ng 60 seconds sa page na ito.",
+    reward: 150,
+    cooldown: 60,
+    url: "https://profitableratecpmnetwork.com/kvx8tkwni0?key=af8f3ec4f9904d2b3f92245d38b66963", // Adsterra Link 2
+  },
 ]
 
 function EarnCoinsPageContent() {
@@ -26,18 +41,14 @@ function EarnCoinsPageContent() {
   
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<OfferwallProvider>("cpagrip")
-
-  // --- CPAGRIP OFFERS STATE ---
-  const [offers, setOffers] = useState<any[]>([])
-  const [loadingOffers, setLoadingOffers] = useState(false)
 
   // --- AD REWARD & MODAL STATES ---
   const [adWatchCount, setAdWatchCount] = useState(0)
   const [showAdModal, setShowAdModal] = useState(false)
-  const [cooldown, setCooldown] = useState(10)
+  const [cooldown, setCooldown] = useState(15)
   const [claiming, setClaiming] = useState(false)
   const [isTabFocused, setIsTabFocused] = useState(false)
+  const [activeTaskReward, setActiveTaskReward] = useState(25)
 
   useEffect(() => {
     async function checkUser() {
@@ -71,51 +82,30 @@ function EarnCoinsPageContent() {
     void checkUser()
   }, [router, supabase])
 
-  // --- FETCH CPAGRIP OFFERS ---
-  useEffect(() => {
-    if (!userId || activeTab !== "cpagrip") return
-
-    async function fetchOffers() {
-      setLoadingOffers(true)
-      try {
-        const res = await fetch(`/api/offers?userId=${userId}`)
-        const data = await res.json()
-        setOffers(data.offers || [])
-      } catch (err) {
-        console.error("Error fetching CPAGrip offers:", err)
-      } finally {
-        setLoadingOffers(false)
-      }
-    }
-
-    void fetchOffers()
-  }, [userId, activeTab])
-
   // --- FOCUS-BASED TIMER ---
   useEffect(() => {
-    let interval: NodeJS.Timeout
+    if (!showAdModal || cooldown <= 0) return
 
-    if (showAdModal && cooldown > 0) {
-      interval = setInterval(() => {
-        if (document.hidden) {
-          setCooldown((prev) => prev - 1)
-          setIsTabFocused(true)
-        } else {
-          setIsTabFocused(false)
-        }
-      }, 1000)
-    }
+    const interval = setInterval(() => {
+      if (document.hidden) {
+        setIsTabFocused(true)
+        setCooldown((prev) => Math.max(0, prev - 1))
+      } else {
+        setIsTabFocused(false)
+      }
+    }, 1000)
 
     return () => clearInterval(interval)
   }, [showAdModal, cooldown])
 
-  const handleWatchAd = () => {
-    setCooldown(10)
+  const handleWatchAd = (url: string, reward: number, time: number) => {
+    setActiveTaskReward(reward)
+    setCooldown(time)
     setIsTabFocused(false)
     setShowAdModal(true)
 
     if (typeof window !== "undefined") {
-      window.open("https://omg10.com/4/11698464", "_blank", "noopener,noreferrer")
+      window.open(url, "_blank", "noopener,noreferrer")
     }
   }
 
@@ -126,13 +116,12 @@ function EarnCoinsPageContent() {
     try {
       const todayStr = new Date().toISOString().split("T")[0]
       const newCount = adWatchCount + 1
-      const intendedReward = 25
 
       const { data: profile } = await supabase
         .from("profiles")
         .select("coins, ad_watch_count, daily_ad_coins, last_ad_date")
         .eq("id", userId)
-        .single()
+        .maybeSingle()
 
       const currentCoins = profile?.coins || 0
       let dailyAdCoins = profile?.daily_ad_coins || 0
@@ -145,7 +134,7 @@ function EarnCoinsPageContent() {
       const DAILY_LIMIT = 2000
       const remainingLimit = Math.max(0, DAILY_LIMIT - dailyAdCoins)
       
-      const actualReward = Math.min(intendedReward, remainingLimit)
+      const actualReward = Math.min(activeTaskReward, remainingLimit)
       const newDailyAdCoins = dailyAdCoins + actualReward
       const updatedCoins = currentCoins + actualReward
 
@@ -164,13 +153,13 @@ function EarnCoinsPageContent() {
           user_id: userId,
           amount: actualReward,
           type: "ad_reward",
-          description: "Watched an Ad",
+          description: "Completed SmartLink Task",
         })
 
         window.dispatchEvent(new CustomEvent("jb-coins-updated", { detail: { reward: actualReward } }))
         alert(`💰 You received ${actualReward} JB Coins!`)
       } else {
-        alert(`📺 Ad counted! You have reached your daily limit of 2,000 JB Coins. Come back tomorrow for more coins!`)
+        alert(`📺 Task counted! You have reached your daily limit of 2,000 JB Coins. Come back tomorrow!`)
       }
 
       setAdWatchCount(newCount)
@@ -182,11 +171,6 @@ function EarnCoinsPageContent() {
     } finally {
       setClaiming(false)
     }
-  }
-
-  const offerwallUrls: Record<OfferwallProvider, string> = {
-    cpagrip: `https://www.cpagrip.com/show.php?l=1907578&tracking_id=${userId || ""}`,
-    cpx: `https://offers.cpx-research.com/index.php?app_id=35034&ext_user_id=${userId || ""}`,
   }
 
   if (checkingAuth) {
@@ -213,6 +197,7 @@ function EarnCoinsPageContent() {
         <main className="mx-auto w-full max-w-[1800px] px-4 pt-28 pb-10 sm:px-6 lg:px-8">
           <DailyRewardCard />
 
+          {/* MAIN UNLIMITED ADS BUTTON (MONETAG CRAZY LINK) */}
           <div className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/60 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-md">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between mb-5">
               <div>
@@ -223,7 +208,7 @@ function EarnCoinsPageContent() {
                   Watch Ads, Earn Coins
                 </h2>
                 <p className="mt-1 text-sm text-slate-400">
-                  Earn <strong className="text-amber-400">25 JB Coins</strong> for every ad you watch! (Max 2,000 Coins/day)
+                  Earn <strong className="text-amber-400">15 JB Coins</strong> for every ad you watch! (Max 2,000 Coins/day)
                 </p>
               </div>
             </div>
@@ -235,136 +220,74 @@ function EarnCoinsPageContent() {
                 </div>
 
                 <button
-                  onClick={handleWatchAd}
+                  onClick={() =>
+                    handleWatchAd(
+                      "https://omg10.com/4/11743847", // Monetag Link 2 (Crazy Link)
+                      15,
+                      10
+                    )
+                  }
                   className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-4 text-sm font-black text-white shadow-lg shadow-emerald-500/20 transition hover:scale-[1.02] active:scale-95"
                 >
-                  Watch Ad (+25 Coins)
+                  Watch Ad (+15 Coins)
                 </button>
               </div>
             </div>
           </div>
 
+          {/* TIERED SMARTLINK TASKS */}
           <section className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/60 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-md">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-6">
+            <div className="flex flex-col gap-4 mb-6">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-400">
-                  Partner Offerwalls
+                  Smart Tasks
                 </p>
                 <h2 className="mt-1 text-2xl font-black text-white">
-                  Earn JB Coins via Offers & Surveys
+                  High Paying Visit Tasks
                 </h2>
                 <p className="mt-1 text-sm text-slate-400">
-                  Complete tasks, play games, or answer surveys from our official partners.
+                  Pumili ng task. Mas matagal na pagbisita, mas malaking reward ang makukuha mo.
                 </p>
-              </div>
-
-              <div className="flex items-center gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/80 p-1.5 scrollbar-none">
-                {PROVIDERS.map((provider) => {
-                  const isActive = activeTab === provider.id
-                  return (
-                    <button
-                      key={provider.id}
-                      type="button"
-                      onClick={() => setActiveTab(provider.id)}
-                      className={`relative flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-bold transition-all ${
-                        isActive
-                          ? "bg-gradient-to-r from-sky-400 to-blue-500 text-white shadow-md shadow-sky-500/20"
-                          : "text-slate-400 hover:text-white hover:bg-white/5"
-                      }`}
-                    >
-                      {provider.label}
-                      {provider.badge && (
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase ${
-                            isActive
-                              ? "bg-white/20 text-white"
-                              : "bg-sky-500/20 text-sky-300 border border-sky-500/30"
-                          }`}
-                        >
-                          {provider.badge}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
               </div>
             </div>
 
-            {activeTab === "cpagrip" ? (
-              <div className="w-full rounded-[24px] border border-white/10 bg-slate-950 p-6 min-h-[300px]">
-                {loadingOffers ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-sky-500 border-t-transparent mb-3"></div>
-                    <p className="text-sm font-bold">Kinuha ang mga pinakamalapit na Email/Zip Submit tasks...</p>
-                  </div>
-                ) : offers.length > 0 ? (
-                  <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                    {offers.map((offer: any) => (
-                      <div
-                        key={offer.offer_id || offer.title}
-                        className="flex flex-col justify-between rounded-2xl border border-white/10 bg-slate-900/80 p-5 text-left transition hover:border-sky-500/40 hover:bg-slate-900"
-                      >
-                        <div>
-                          <div className="flex items-center justify-between gap-2 mb-2">
-                            <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-extrabold uppercase text-emerald-400">
-                              Easy Task
-                            </span>
-                            <span className="text-xs font-bold text-amber-400">
-                              +{Math.round((parseFloat(offer.payout) || 0.15) * 1000)} Coins
-                            </span>
-                          </div>
-                          <h4 className="text-base font-bold text-white line-clamp-1">{offer.title}</h4>
-                          <p className="mt-1 text-xs text-slate-400 line-clamp-2">
-                            {offer.description || "Kumpletuhin ang simpleng offer na ito para makuha agad ang coins."}
-                          </p>
-                        </div>
-
-                        <a
-                          href={offer.offerlink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-md shadow-sky-500/20 transition hover:scale-[1.01] active:scale-95"
-                        >
-                          Complete Task ↗
-                        </a>
+            <div className="w-full rounded-[24px] border border-white/10 bg-slate-950 p-6">
+              <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                {SMARTLINK_TASKS.map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex flex-col justify-between rounded-2xl border border-white/10 bg-slate-900/80 p-5 text-left transition hover:border-sky-500/40 hover:bg-slate-900"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="rounded-full bg-sky-500/10 border border-sky-500/20 px-2.5 py-0.5 text-[11px] font-extrabold uppercase text-sky-400">
+                          {task.cooldown}s Timer
+                        </span>
+                        <span className="text-xs font-bold text-amber-400">
+                          +{task.reward} Coins
+                        </span>
                       </div>
-                    ))}
+                      <h4 className="text-base font-bold text-white">{task.title}</h4>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {task.description}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => handleWatchAd(task.url, task.reward, task.cooldown)}
+                      className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-md shadow-sky-500/20 transition hover:scale-[1.01] active:scale-95"
+                    >
+                      Start Task ↗
+                    </button>
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-12 text-slate-400 text-center">
-                    <span className="text-3xl mb-2">📭</span>
-                    <p className="text-sm font-bold">Walang available na task sa ngayon.</p>
-                    <p className="text-xs text-slate-500 mt-1">Subukang mag-refresh o bumalik mamaya.</p>
-                  </div>
-                )}
+                ))}
               </div>
-            ) : (
-              <div className="relative flex flex-col items-center justify-center w-full rounded-[24px] border border-white/10 bg-slate-950 shadow-inner p-10 min-h-[400px] text-center">
-                <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-sky-500/20 to-blue-600/20 border border-sky-500/30">
-                  <span className="text-4xl">🚀</span>
-                </div>
-                <h3 className="text-2xl font-black text-white mb-2">
-                  Ready to earn with {PROVIDERS.find(p => p.id === activeTab)?.label}?
-                </h3>
-                <p className="text-slate-400 text-sm max-w-md mb-8">
-                  For security and better tracking, this partner's offers must be opened in a secure window. Complete tasks there to automatically receive JB Coins.
-                </p>
-                
-                <a
-                  href={offerwallUrls[activeTab]}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 px-8 py-4 text-base font-extrabold text-white shadow-lg shadow-sky-500/25 transition-all hover:scale-[1.02] hover:shadow-sky-500/40 active:scale-95"
-                >
-                  Launch {PROVIDERS.find(p => p.id === activeTab)?.label} ↗
-                </a>
-              </div>
-            )}
+            </div>
           </section>
         </main>
       </div>
 
-      {/* --- AD VALIDATION MODAL --- */}
+      {/* --- DYNAMIC AD VALIDATION MODAL --- */}
       {showAdModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
           <div className="relative w-full max-w-md rounded-3xl border border-white/20 bg-slate-900 p-6 text-center text-white shadow-2xl">
@@ -375,15 +298,15 @@ function EarnCoinsPageContent() {
               ✕ Close
             </button>
 
-            <h3 className="text-xl font-black text-white mt-2">Watching Sponsored Ad</h3>
+            <h3 className="text-xl font-black text-white mt-2">Validating Visit</h3>
             <p className="mt-1 text-xs text-slate-300">
-              Please stay on the newly opened tab to validate your reward.
+              Please stay on the newly opened tab to claim your reward.
             </p>
 
             <div className="my-6 flex min-h-[200px] flex-col items-center justify-center rounded-2xl border border-emerald-500/20 bg-slate-950/80 p-6 text-center">
               <div className="relative mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-2xl text-emerald-400">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-20"></span>
-                📺
+                🌐
               </div>
               <p className="text-sm font-bold text-emerald-400">Sponsor Page Active</p>
               
@@ -404,7 +327,7 @@ function EarnCoinsPageContent() {
                 disabled={claiming}
                 className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-emerald-500/30 transition hover:scale-[1.02] active:scale-95 disabled:opacity-50"
               >
-                {claiming ? "Claiming Coins..." : "💰 Claim +25 Coins Now!"}
+                {claiming ? "Claiming Coins..." : `💰 Claim +${activeTaskReward} Coins Now!`}
               </button>
             )}
           </div>

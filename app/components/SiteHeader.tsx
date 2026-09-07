@@ -71,10 +71,10 @@ export default function SiteHeader() {
 
   async function checkUnreadMessages() {
     const userId = currentUserIdRef.current
-    if (!userId) return
+    if (!userId || userId === "undefined" || userId === "null" || userId.trim() === "") return
 
     try {
-      // 1. Fetch from database (Added title, subject, body para sa deduplication)
+      // 1. Fetch primary messages
       const { data: primaryData } = await supabase
         .from("messages")
         .select("id, is_read, user_id, title, subject, body")
@@ -84,10 +84,11 @@ export default function SiteHeader() {
       let allMessages = primaryData || []
 
       if (!allMessages.length) {
+        // FIX: Tinanggal ang 'subject' sa select query dahil wala ito sa user_messages schema
         const { data: fallbackData } = await supabase
           .from("user_messages")
-          .select("id, is_read, user_id, title, subject, body")
-          .or(`user_id.eq.${userId},user_id.is.null`)
+          .select("id, is_read, user_id, title, body")
+          .eq("user_id", userId)
           .order("created_at", { ascending: false })
         
         allMessages = fallbackData || []
@@ -112,7 +113,7 @@ export default function SiteHeader() {
         return msg
       })
 
-      // 4. Exact Deduplication Logic (Kapareho ng sa Messages Page)
+      // 4. Exact Deduplication Logic
       const uniqueList: any[] = []
       const seen = new Set<string>()
 
