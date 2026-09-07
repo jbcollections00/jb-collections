@@ -197,6 +197,33 @@ function EarnCoinsPageContent() {
         <main className="mx-auto w-full max-w-[1800px] px-4 pt-28 pb-10 sm:px-6 lg:px-8">
           <DailyRewardCard />
 
+          {/* USER INSTRUCTION BANNER */}
+          <div className="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 backdrop-blur-md">
+            <div className="flex items-center gap-2 mb-3 text-amber-400">
+              <span className="text-lg">💡</span>
+              <h3 className="text-sm font-black uppercase tracking-wider">
+                Paalala at Instruksyon sa Pag-Watch ng Ads
+              </h3>
+            </div>
+
+            <ul className="grid gap-3 text-xs font-medium text-amber-100/90 sm:grid-cols-3">
+              <li className="rounded-xl border border-amber-500/20 bg-black/40 p-3.5">
+                <strong className="block mb-1 text-white text-xs font-bold">1. Maghintay sa Ad Page</strong>
+                Kapag nagbukas ang sponsor link (tulad ng <code className="text-amber-300 font-mono">profitableratecpmnetwork.com</code> o <code className="text-amber-300 font-mono font-semibold">omg10.com</code>), manatili roon nang ayon sa segundo ng napili mong task (10s, 15s, 30s, o 60s).
+              </li>
+
+              <li className="rounded-xl border border-amber-500/20 bg-black/40 p-3.5">
+                <strong className="block mb-1 text-white text-xs font-bold">2. Pwede i-Close / i-Back</strong>
+                Kung may ibang ads o extra pop-up page na lumabas, maaari mo na itong i-close o i-back pagkatapos ng itinakdang oras ng countdown.
+              </li>
+
+              <li className="rounded-xl border border-amber-500/20 bg-black/40 p-3.5">
+                <strong className="block mb-1 text-white text-xs font-bold">3. I-claim ang Coins</strong>
+                Bumalik sa tab na ito at i-click ang <strong className="text-emerald-400 font-extrabold">Claim Coins</strong> button kapag natapos na ang timer para pumasok ang reward sa iyong JB Wallet.
+              </li>
+            </ul>
+          </div>
+
           {/* MAIN UNLIMITED ADS BUTTON (MONETAG CRAZY LINK) */}
           <div className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/60 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-md">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between mb-5">
