@@ -7,6 +7,7 @@ type ProfileRow = {
   id: string
   role?: string | null
   coins?: number | null
+  jb_coins?: number | null
   jb_points?: number | null
 }
 
@@ -27,7 +28,7 @@ type PurchaseOrderRow = {
 
 type AuthResult = {
   supabase: Awaited<ReturnType<typeof createClient>>
-  user: Awaited<ReturnType<typeof createClient>> extends infer _T ? any : never
+  user: any
   error: "Unauthorized" | null
 }
 
@@ -118,7 +119,6 @@ async function readTargetProfile(
   return { ok: true, profile: data as ProfileRow & Record<string, unknown> }
 }
 
-// ✅ FIXED: remove strict typing issue (THIS CAUSED YOUR BUILD FAILURE)
 async function bestEffortInsertHistory(
   supabase: Awaited<ReturnType<typeof createClient>>,
   payload: {
@@ -387,11 +387,12 @@ export async function POST(
 
     const targetProfile = targetProfileResult.profile
     const hasCoinsColumn = Object.prototype.hasOwnProperty.call(targetProfile, "coins")
+    const hasJbCoinsColumn = Object.prototype.hasOwnProperty.call(targetProfile, "jb_coins")
     const hasJbPointsColumn = Object.prototype.hasOwnProperty.call(targetProfile, "jb_points")
 
-    if (!hasCoinsColumn && !hasJbPointsColumn) {
+    if (!hasCoinsColumn && !hasJbCoinsColumn && !hasJbPointsColumn) {
       return NextResponse.json(
-        { error: "Profile wallet column not found." },
+        { error: "Profile wallet column not found in database." },
         { status: 500 }
       )
     }
@@ -404,8 +405,13 @@ export async function POST(
     const finalStatus = reservedStatusResult.status
     const profileUpdate: Record<string, number> = {}
 
+    // ✅ Synchronize all possible coin columns in Supabase
     if (hasCoinsColumn) {
       profileUpdate.coins = Number(targetProfile.coins || 0) + coinsToCredit
+    }
+
+    if (hasJbCoinsColumn) {
+      profileUpdate.jb_coins = Number(targetProfile.jb_coins || 0) + coinsToCredit
     }
 
     if (hasJbPointsColumn) {

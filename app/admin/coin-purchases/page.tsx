@@ -15,6 +15,7 @@ import {
   User2,
   Wallet,
   XCircle,
+  AtSign,
 } from "lucide-react"
 import AdminToast from "@/app/components/AdminToast"
 import { createClient } from "@/lib/supabase/client"
@@ -32,6 +33,7 @@ type Order = {
   user_id: string
   payer_name: string | null
   payer_email: string | null
+  user_username?: string | null
   amount: number | null
   coins: number | null
   label: string | null
@@ -183,8 +185,60 @@ export default function AdminCoinPurchasesPage() {
         message: error.message,
         variant: "error",
       })
-    } else if (data) {
-      setOrders(data)
+      setLoading(false)
+      setRefreshing(false)
+      return
+    }
+
+    if (data && data.length > 0) {
+      const userIds = Array.from(
+        new Set(data.map((item) => item.user_id).filter(Boolean))
+      )
+
+      let profilesMap: Record<
+        string,
+        { full_name?: string | null; name?: string | null; username?: string | null; email?: string | null }
+      > = {}
+
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, name, username, email")
+          .in("id", userIds)
+
+        if (profiles) {
+          profilesMap = profiles.reduce((acc, p) => {
+            acc[p.id] = p
+            return acc
+          }, {} as typeof profilesMap)
+        }
+      }
+
+      const enrichedOrders: Order[] = data.map((order) => {
+        const profile = profilesMap[order.user_id]
+        const resolvedName =
+          order.payer_name?.trim() ||
+          profile?.full_name?.trim() ||
+          profile?.name?.trim() ||
+          profile?.username?.trim() ||
+          "Unknown Account"
+
+        const resolvedEmail =
+          order.payer_email?.trim() ||
+          profile?.email?.trim() ||
+          "No email connected"
+
+        return {
+          ...order,
+          payer_name: resolvedName,
+          payer_email: resolvedEmail,
+          user_username: profile?.username || null,
+        }
+      })
+
+      setOrders(enrichedOrders)
+    } else {
+      setOrders([])
     }
 
     setLoading(false)
@@ -348,6 +402,8 @@ export default function AdminCoinPurchasesPage() {
     const haystack = [
       order.payer_name,
       order.payer_email,
+      order.user_username,
+      order.user_id,
       order.reference_number,
       order.label,
       order.payment_method,
@@ -379,7 +435,7 @@ export default function AdminCoinPurchasesPage() {
       <div className="flex min-h-screen items-center justify-center bg-[#020617] text-white">
         <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-6 py-4">
           <RefreshCw size={18} className="animate-spin" />
-          Loading coin purchases...
+          Loading coin purchases & account profiles...
         </div>
       </div>
     )
@@ -423,16 +479,15 @@ export default function AdminCoinPurchasesPage() {
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-3xl">
                 <div className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-500/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.24em] text-sky-200">
-                  10/10 Admin Coin Control Center
+                  Admin Coin Control Center
                 </div>
 
                 <h1 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl xl:text-5xl">
-                  Review, approve, credit, and track every JB Coin payment in one place
+                  Review, approve, credit, and track every JB Coin payment
                 </h1>
 
                 <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
-                  Approving an order automatically credits the user wallet and writes a transaction log.
-                  You can now preview the uploaded receipt directly inside each order card before approving.
+                  Every order now automatically syncs with the user profile database to display their real account name, email, and user ID.
                 </p>
               </div>
 
@@ -507,7 +562,7 @@ export default function AdminCoinPurchasesPage() {
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search name, email, reference, package..."
+                placeholder="Search by name, email, username, user ID, or reference..."
                 className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-500"
               />
             </label>
@@ -556,7 +611,6 @@ export default function AdminCoinPurchasesPage() {
             <h2 className="text-xl font-black text-white">Payment Queue</h2>
             <p className="mt-1 text-sm text-slate-400">
               Approve to auto-credit the wallet and write transaction history.
-              Reject to stop it. Delete permanently to remove the record.
             </p>
           </div>
 
@@ -589,10 +643,17 @@ export default function AdminCoinPurchasesPage() {
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-3">
-                          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-slate-200">
-                            <User2 size={14} />
-                            {order.payer_name || "Unknown payer"}
+                          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3.5 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-cyan-200">
+                            <User2 size={15} />
+                            {order.payer_name}
                           </div>
+
+                          {order.user_username ? (
+                            <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1.5 text-xs font-bold text-violet-200">
+                              <AtSign size={13} />
+                              {order.user_username}
+                            </div>
+                          ) : null}
 
                           <div
                             className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] ${statusClass}`}
@@ -606,18 +667,18 @@ export default function AdminCoinPurchasesPage() {
                         </div>
 
                         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Email</p>
-                            <div className="mt-2 flex items-center gap-2 text-sm font-semibold text-white">
-                              <Mail size={15} className="text-slate-400" />
-                              <span className="truncate">{order.payer_email || "No email"}</span>
+                          <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4">
+                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-sky-400">Account Email</p>
+                            <div className="mt-2 flex items-center gap-2 text-sm font-bold text-white">
+                              <Mail size={15} className="text-sky-300 shrink-0" />
+                              <span className="truncate">{order.payer_email}</span>
                             </div>
                           </div>
 
                           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                             <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Package</p>
                             <p className="mt-2 text-sm font-semibold text-white">{order.label || "JB Coin Package"}</p>
-                            <p className="mt-1 text-xs text-slate-400">{order.payment_method || "Unknown method"}</p>
+                            <p className="mt-1 text-xs text-slate-400">{order.payment_method || "GCash / Maya"}</p>
                           </div>
 
                           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -627,11 +688,13 @@ export default function AdminCoinPurchasesPage() {
                           </div>
 
                           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Coins</p>
+                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Coins & User ID</p>
                             <p className="mt-2 text-lg font-black text-yellow-300">
                               {new Intl.NumberFormat("en-PH").format(order.coins ?? 0)} coins
                             </p>
-                            <p className="mt-1 text-xs text-slate-400">User ID: {order.user_id}</p>
+                            <p className="mt-1 text-[11px] font-mono text-slate-400 truncate">
+                              ID: {order.user_id}
+                            </p>
                           </div>
                         </div>
 
@@ -641,7 +704,7 @@ export default function AdminCoinPurchasesPage() {
                               <div>
                                 <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Receipt Preview</p>
                                 <p className="mt-1 text-sm text-slate-300">
-                                  Check the payment proof before approving or rejecting this order.
+                                  Check payment proof before approving.
                                 </p>
                               </div>
 
@@ -684,11 +747,6 @@ export default function AdminCoinPurchasesPage() {
                                   <ImageIcon size={24} />
                                 </div>
                                 <p className="mt-4 text-base font-bold text-white">No receipt preview available</p>
-                                <p className="mt-2 max-w-md text-sm leading-6 text-slate-400">
-                                  This order does not have a usable receipt URL yet. Save the uploaded receipt into a field like
-                                  <span className="mx-1 font-semibold text-slate-200">receipt_url</span>
-                                  so the admin can preview it here.
-                                </p>
                               </div>
                             )}
                           </div>
@@ -735,11 +793,6 @@ export default function AdminCoinPurchasesPage() {
                                 )}
                                 Delete Permanently
                               </button>
-                            </div>
-
-                            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-xs leading-6 text-slate-300">
-                              Approve credits the wallet. Reject blocks the payment. Delete permanently removes the order record.
-                              The receipt preview stays visible here so the admin can verify the screenshot before taking action.
                             </div>
                           </div>
                         </div>

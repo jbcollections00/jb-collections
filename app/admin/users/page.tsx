@@ -109,7 +109,7 @@ function formatDateTime(value?: string | null) {
 }
 
 function getActivityLabel(type?: string | null) {
-  const value = String(type || "").replace(/_/g, " " ).trim()
+  const value = String(type || "").replace(/_/g, " ").trim()
   if (!value) return "Activity"
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
@@ -182,14 +182,14 @@ function SectionCard({
   children,
 }: {
   title: string
-  subtitle: string
+  subtitle?: string
   children: React.ReactNode
 }) {
   return (
     <div className="rounded-[28px] border border-slate-800/90 bg-slate-900/90 p-5 shadow-[0_18px_40px_rgba(2,6,23,0.34)] backdrop-blur sm:p-6">
       <div className="mb-5">
         <h3 className="text-lg font-black tracking-tight text-white">{title}</h3>
-        <p className="mt-1 text-sm text-slate-400">{subtitle}</p>
+        {subtitle ? <p className="mt-1 text-sm text-slate-400">{subtitle}</p> : null}
       </div>
       {children}
     </div>
@@ -1246,35 +1246,7 @@ export default function AdminUsersPage() {
                     </div>
                   </SectionCard>
 
-                  <SectionCard
-                    title="Activity History"
-                    subtitle="Latest coin changes, signup bonus, rewards, and download deductions for this user."
-                  >
-                    <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-[20px] border border-slate-800 bg-slate-950/70 p-4">
-                        <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">
-                          Signup Bonus
-                        </div>
-                        <div className="mt-2 text-2xl font-black text-yellow-300">
-                          {selectedUser.signup_bonus_amount ? `+${selectedUser.signup_bonus_amount} JB` : "No bonus recorded"}
-                        </div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          {selectedUser.signup_bonus_created_at
-                            ? formatDateTime(selectedUser.signup_bonus_created_at)
-                            : "Walang signup_bonus record sa coin_history."}
-                        </div>
-                      </div>
-                      <div className="rounded-[20px] border border-slate-800 bg-slate-950/70 p-4">
-                        <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">
-                          Total Records Shown
-                        </div>
-                        <div className="mt-2 text-2xl font-black text-white">
-                          {selectedUser.recent_activities?.length || 0}
-                        </div>
-                        <div className="mt-1 text-xs text-slate-500">Latest 20 activities from coin_history.</div>
-                      </div>
-                    </div>
-
+                  <SectionCard title="Activity History">
                     <div className="max-h-96 overflow-y-auto rounded-[22px] border border-slate-800 bg-slate-950/60">
                       {selectedUser.recent_activities && selectedUser.recent_activities.length > 0 ? (
                         <div className="divide-y divide-slate-800">

@@ -20,8 +20,19 @@ type User = {
   created_at?: string | null
 }
 
+type CoinHistoryItem = {
+  id: number | string
+  user_id?: string
+  amount: number
+  type: string
+  description?: string | null
+  created_at: string
+  reference?: string | null
+}
+
 type ApiUser = User & {
   jb_points?: number | null
+  coin_history?: CoinHistoryItem[] | null
 }
 
 type AdjustOperation = "add" | "subtract" | "set"
@@ -32,6 +43,7 @@ export default function AdminUserViewPage() {
   const userId = params?.id as string
 
   const [user, setUser] = useState<User | null>(null)
+  const [coinHistory, setCoinHistory] = useState<CoinHistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
@@ -66,6 +78,8 @@ export default function AdminUserViewPage() {
       }
 
       const rawUser = (result?.user as ApiUser) || null
+      const historyData =
+        (result?.coinHistory || result?.history || rawUser?.coin_history || []) as CoinHistoryItem[]
 
       setUser(
         rawUser
@@ -75,6 +89,7 @@ export default function AdminUserViewPage() {
             }
           : null
       )
+      setCoinHistory(Array.isArray(historyData) ? historyData : [])
     } catch (err) {
       console.error(err)
       setError("Failed to load user.")
@@ -152,6 +167,7 @@ export default function AdminUserViewPage() {
       setCoinMessage(result?.message || "JB Coins updated successfully.")
       setCoinAmount("")
       setCoinReason("")
+      void loadUser()
     } catch (err) {
       console.error(err)
       setCoinError("Failed to adjust coins.")
@@ -375,6 +391,51 @@ export default function AdminUserViewPage() {
                 Reset
               </button>
             </div>
+          </div>
+
+          <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+            <div className="mb-4">
+              <h2 className="text-lg font-extrabold text-slate-900">Activity History</h2>
+            </div>
+
+            {coinHistory.length === 0 ? (
+              <p className="text-sm font-semibold text-slate-500">
+                No activity records found for this user.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {coinHistory.map((item) => {
+                  const isPositive = item.amount > 0
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex flex-col justify-between gap-2 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-black uppercase text-slate-700">
+                            {item.type ? item.type.replace(/_/g, " ") : "ACTIVITY"}
+                          </span>
+                          <span className="text-xs font-semibold text-slate-400">
+                            {formatDate(item.created_at)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm font-bold text-slate-800">
+                          {item.description || item.reference || "Coin transaction"}
+                        </p>
+                      </div>
+                      <div
+                        className={`text-base font-extrabold ${
+                          isPositive ? "text-emerald-600" : "text-red-600"
+                        }`}
+                      >
+                        {isPositive ? `+${item.amount.toLocaleString()}` : item.amount.toLocaleString()} JB
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           <div className="mt-6 flex flex-wrap gap-3">
