@@ -184,7 +184,7 @@ export default function AdminMessagesPage() {
     setIsSending(true)
 
     try {
-      const uploadedAttachments = []
+      const uploadedAttachments: string[] = []
       if (attachments.length > 0) {
         setUploadingFiles(true)
         for (const file of attachments) {
