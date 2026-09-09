@@ -136,6 +136,7 @@ export default async function RootLayout({
           <>
             {/* 💰 Monetag Telegram Mini App SDK */}
             <Script
+              id="monetag-mini-app"
               src="https://libtl.com/sdk.js"
               data-zone="11699030"
               data-sdk="show_11699030"
@@ -144,6 +145,7 @@ export default async function RootLayout({
 
             {/* 🎬 Monetag Interstitial / Rewarded SDK Zone 11699131 */}
             <Script
+              id="monetag-interstitial"
               src="https://libtl.com/sdk.js"
               data-zone="11699131"
               data-sdk="show_11699131"
@@ -152,6 +154,7 @@ export default async function RootLayout({
 
             {/* ✅ Google AdSense Script */}
             <Script
+              id="google-adsense"
               async
               src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6646475793737493"
               crossOrigin="anonymous"
