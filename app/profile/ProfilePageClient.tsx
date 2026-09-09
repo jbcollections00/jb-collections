@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import SiteHeader from "@/app/components/SiteHeader"
@@ -252,7 +252,7 @@ function DetailCard({ label, children }: { label: string; children: ReactNode })
   )
 }
 
-export default function ProfilePageClient() {
+function ProfileContent() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -316,6 +316,52 @@ export default function ProfilePageClient() {
     bio: "",
     avatar_url: "",
   })
+
+  // Derived variables declared early to avoid scope/TDZ issues
+  const displayName =
+    profile?.full_name || profile?.name || profile?.username || authEmail.split("@")[0] || "User"
+
+  const displayEmail = profile?.email || authEmail || "No email"
+  const membershipLevel = normalizeMembership(profile)
+  const displayMembership = getMembershipLabel(membershipLevel)
+  const displayStatus = profile?.account_status || profile?.status || "Active"
+  const initials = getInitials(displayName)
+
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+    (typeof window !== "undefined" ? window.location.origin : "https://jb-collections.com")
+
+  const publicProfileText = profile?.username ? `${siteUrl}/u/${profile.username}` : "Set username first"
+  const referralCode = profile?.referral_code?.trim() || ""
+  const referralLink = referralCode ? `${siteUrl}/signup?ref=${referralCode}` : "Referral code unavailable"
+
+  const coins = Number(profile?.coins || 0)
+  const streak = Number(dailyRewardStatus?.streak || 0)
+  const streakBonus = Number(dailyRewardStatus?.streakBonus || 0)
+  const baseCoins = Number(dailyRewardStatus?.baseCoins || 15)
+  const nextMilestone = dailyRewardStatus?.nextMilestone || null
+  const todayRewardCoins = Number(dailyRewardStatus?.coins || baseCoins + streakBonus || 15)
+
+  const canRedeemPremium =
+    membershipLevel !== "admin" &&
+    membershipLevel !== "premium" &&
+    membershipLevel !== "platinum" &&
+    coins >= 8000
+
+  const canRedeemPlatinum =
+    membershipLevel !== "admin" && membershipLevel !== "platinum" && coins >= 10000
+
+  const premiumCoinsNeeded = Math.max(0, 8000 - coins)
+  const platinumCoinsNeeded = Math.max(0, 10000 - coins)
+
+  const gamerTitle =
+    membershipLevel === "admin"
+      ? "System Commander"
+      : membershipLevel === "platinum"
+        ? "Elite Collector"
+        : membershipLevel === "premium"
+          ? "Premium Hunter"
+          : "Rising Collector"
 
   const addCoinToast = useCallback((amount: number, label: string) => {
     if (amount === 0) return
@@ -651,6 +697,19 @@ export default function ProfilePageClient() {
           window.dispatchEvent(new Event("jb-coins-updated"))
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${profile.id}`,
+        },
+        async () => {
+          await loadProfile(false)
+          window.dispatchEvent(new Event("jb-coins-updated"))
+        }
+      )
       .subscribe()
 
     return () => {
@@ -907,7 +966,7 @@ export default function ProfilePageClient() {
 
   async function handleRedeem(plan: RedeemPlan) {
     const cost = plan === "premium" ? 8000 : 10000
-    if (jbPoints < cost) {
+    if (coins < cost) {
       triggerInsufficientCoins(`Not enough JB Coins. You need ${cost.toLocaleString()} coins.`)
       return
     }
@@ -1129,42 +1188,6 @@ export default function ProfilePageClient() {
                 ? "Something went wrong."
                 : ""
 
-  const displayName =
-    profile?.full_name || profile?.name || profile?.username || authEmail.split("@")[0] || "User"
-
-  const displayEmail = profile?.email || authEmail || "No email"
-  const membershipLevel = normalizeMembership(profile)
-  const displayMembership = getMembershipLabel(membershipLevel)
-  const displayStatus = profile?.account_status || profile?.status || "Active"
-  const initials = getInitials(displayName)
-
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
-    (typeof window !== "undefined" ? window.location.origin : "https://jb-collections.com")
-
-  const publicProfileText = profile?.username ? `${siteUrl}/u/${profile.username}` : "Set username first"
-  const referralCode = profile?.referral_code?.trim() || ""
-  const referralLink = referralCode ? `${siteUrl}/signup?ref=${referralCode}` : "Referral code unavailable"
-
-  const jbPoints = Number(profile?.coins || 0)
-  const streak = Number(dailyRewardStatus?.streak || 0)
-  const streakBonus = Number(dailyRewardStatus?.streakBonus || 0)
-  const baseCoins = Number(dailyRewardStatus?.baseCoins || 15)
-  const nextMilestone = dailyRewardStatus?.nextMilestone || null
-  const todayRewardCoins = Number(dailyRewardStatus?.coins || baseCoins + streakBonus || 15)
-
-  const canRedeemPremium =
-    membershipLevel !== "admin" &&
-    membershipLevel !== "premium" &&
-    membershipLevel !== "platinum" &&
-    jbPoints >= 8000
-
-  const canRedeemPlatinum =
-    membershipLevel !== "admin" && membershipLevel !== "platinum" && jbPoints >= 10000
-
-  const premiumCoinsNeeded = Math.max(0, 8000 - jbPoints)
-  const platinumCoinsNeeded = Math.max(0, 10000 - jbPoints)
-
   const visibleDownloadsHistory = useMemo(
     () => (showAllDownloads ? downloadsHistory : downloadsHistory.slice(0, 5)),
     [downloadsHistory, showAllDownloads]
@@ -1207,15 +1230,6 @@ export default function ProfilePageClient() {
     () => (showAllActivityFeed ? activityFeed : activityFeed.slice(0, 5)),
     [activityFeed, showAllActivityFeed]
   )
-
-  const gamerTitle =
-    membershipLevel === "admin"
-      ? "System Commander"
-      : membershipLevel === "platinum"
-        ? "Elite Collector"
-        : membershipLevel === "premium"
-          ? "Premium Hunter"
-          : "Rising Collector"
 
   const hasMoreDownloads = downloadsHistory.length > 5
 
@@ -1500,9 +1514,11 @@ export default function ProfilePageClient() {
                     <p className="mt-3 text-lg font-bold leading-relaxed text-white">
                       {profile.bio}
                     </p>
-                  ) : null}
+                  ) : (
+                    <p className="mt-3 text-sm font-normal text-slate-400">No bio provided yet.</p>
+                  )}
 
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                       <p className="text-xs uppercase tracking-wide text-slate-400">Profile Type</p>
                       <p className="mt-2 text-base font-black text-white">{gamerTitle}</p>
@@ -1510,6 +1526,13 @@ export default function ProfilePageClient() {
                     <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                       <p className="text-xs uppercase tracking-wide text-slate-400">Membership</p>
                       <p className="mt-2 text-base font-black text-white">{displayMembership}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <p className="text-xs uppercase tracking-wide text-slate-400">Profile Views</p>
+                      <p className="mt-2 text-base font-black text-white">
+                        {profileViewStats.views.toLocaleString()}{" "}
+                        <span className="text-xs font-normal text-slate-400">({profileViewStats.visitors.toLocaleString()} unique)</span>
+                      </p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                       <p className="text-xs uppercase tracking-wide text-slate-400">Downloads</p>
@@ -1552,7 +1575,7 @@ export default function ProfilePageClient() {
                         <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">Account Redemption</p>
                         <h3 className="mt-2 text-2xl font-black text-white">Upgrade with JB Coins</h3>
                       </div>
-                      <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-black text-white">{jbPoints.toLocaleString()} 🪙</span>
+                      <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-black text-white">{coins.toLocaleString()} 🪙</span>
                     </div>
 
                     <div className="mt-4 grid gap-3">
@@ -1918,4 +1941,18 @@ export default function ProfilePageClient() {
       </div>
     </>
   )
-} 
+}
+
+export default function ProfilePageClient() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-slate-950 text-sm font-bold text-slate-400">
+          Loading profile...
+        </div>
+      }
+    >
+      <ProfileContent />
+    </Suspense>
+  )
+}

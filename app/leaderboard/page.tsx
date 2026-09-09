@@ -9,9 +9,10 @@ interface LeaderboardUser {
   username?: string | null
   total_downloads?: number | null
   total_coins?: number | null
+  is_me?: boolean
 }
 
-function aggregateData(data: any[], type: "coins" | "downloads"): LeaderboardUser[] {
+function aggregateData(data: any[], type: "coins" | "downloads", currentUserId?: string): LeaderboardUser[] {
   if (!data || data.length === 0) return []
 
   const totals: Record<string, { user_id: string; username: string; total: number }> = {}
@@ -38,6 +39,7 @@ function aggregateData(data: any[], type: "coins" | "downloads"): LeaderboardUse
       username: item.username,
       total_coins: type === "coins" ? item.total : null,
       total_downloads: type === "downloads" ? item.total : null,
+      is_me: item.user_id === currentUserId
     }))
 }
 
@@ -48,6 +50,10 @@ export default async function LeaderboardPage(props: {
   const activeTab = searchParams?.tab === "coins" ? "coins" : "downloaders"
 
   const supabase = await createClient()
+  
+  // 1. Fetch the currently authenticated user
+  const { data: { user: authUser } } = await supabase.auth.getUser()
+  const currentUserId = authUser?.id
 
   const now = new Date()
   const manilaNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Manila" }))
@@ -74,7 +80,7 @@ export default async function LeaderboardPage(props: {
 
   let currentList: LeaderboardUser[] = []
   let lastWeekList: LeaderboardUser[] = []
-  let debugError: string | null = null // Dito natin isasave ang error
+  let debugError: string | null = null
 
   if (activeTab === "coins") {
     const [currentRes, lastRes] = await Promise.all([
@@ -93,12 +99,11 @@ export default async function LeaderboardPage(props: {
         .neq("type", "weekly_reward")
     ])
     
-    // Kunin ang error kung mayroon man
     if (currentRes.error) debugError = `Current Week Error: ${currentRes.error.message}`
     if (lastRes.error) debugError = `Last Week Error: ${lastRes.error.message}`
 
-    currentList = aggregateData(currentRes.data || [], "coins").slice(0, 10)
-    lastWeekList = aggregateData(lastRes.data || [], "coins").slice(0, 3)
+    currentList = aggregateData(currentRes.data || [], "coins", currentUserId).slice(0, 10)
+    lastWeekList = aggregateData(lastRes.data || [], "coins", currentUserId).slice(0, 3)
     
   } else {
     const [currentRes, lastRes] = await Promise.all([
@@ -116,8 +121,8 @@ export default async function LeaderboardPage(props: {
     if (currentRes.error) debugError = `Current Week Error: ${currentRes.error.message}`
     if (lastRes.error) debugError = `Last Week Error: ${lastRes.error.message}`
 
-    currentList = aggregateData(currentRes.data || [], "downloads").slice(0, 10)
-    lastWeekList = aggregateData(lastRes.data || [], "downloads").slice(0, 3)
+    currentList = aggregateData(currentRes.data || [], "downloads", currentUserId).slice(0, 10)
+    lastWeekList = aggregateData(lastRes.data || [], "downloads", currentUserId).slice(0, 3)
   }
 
   const top1 = lastWeekList[0]
@@ -159,7 +164,7 @@ export default async function LeaderboardPage(props: {
           </Link>
         </div>
 
-        {/* 🚨 ERROR DEBUG BOX 🚨 */}
+        {/* ERROR DEBUG BOX */}
         {debugError && (
           <div className="mb-6 p-4 bg-red-900/40 border border-red-500/50 rounded-xl text-red-200 text-sm font-mono break-words">
             <span className="font-bold text-red-400 block mb-1">Database Error:</span>
@@ -167,7 +172,7 @@ export default async function LeaderboardPage(props: {
           </div>
         )}
 
-        {/* 🎉 CONGRATULATIONS TOP 3 WINNERS PODIUM (LAST WEEK) */}
+        {/* CONGRATULATIONS TOP 3 WINNERS PODIUM (LAST WEEK) */}
         {lastWeekList && lastWeekList.length > 0 && (
           <div className="mb-6 p-4 bg-gradient-to-b from-amber-500/20 via-amber-500/5 to-transparent border border-amber-500/30 rounded-2xl text-center shadow-inner">
             <h3 className="text-xs font-extrabold text-amber-300 uppercase tracking-widest mb-4 flex items-center justify-center gap-1.5">
@@ -175,7 +180,7 @@ export default async function LeaderboardPage(props: {
             </h3>
 
             <div className="grid grid-cols-3 gap-2 items-end">
-              {/* 🥈 Rank 2 (Silver) */}
+              {/* Rank 2 (Silver) */}
               {top2 ? (
                 <div className="flex flex-col items-center p-2.5 bg-slate-800/90 border border-slate-400/40 rounded-xl relative shadow-md">
                   <span className="text-xl mb-1">🥈</span>
@@ -195,7 +200,7 @@ export default async function LeaderboardPage(props: {
                 <div />
               )}
 
-              {/* 🥇 Rank 1 (Gold - Middle & Elevated) */}
+              {/* Rank 1 (Gold) */}
               {top1 ? (
                 <div className="flex flex-col items-center p-3 bg-slate-800 border-2 border-amber-400 rounded-xl relative -mt-3 shadow-xl shadow-amber-500/20">
                   <span className="absolute -top-3 text-base">👑</span>
@@ -216,7 +221,7 @@ export default async function LeaderboardPage(props: {
                 <div />
               )}
 
-              {/* 🥉 Rank 3 (Bronze) */}
+              {/* Rank 3 (Bronze) */}
               {top3 ? (
                 <div className="flex flex-col items-center p-2.5 bg-slate-800/90 border border-amber-700/40 rounded-xl relative shadow-md">
                   <span className="text-xl mb-1">🥉</span>
@@ -239,7 +244,7 @@ export default async function LeaderboardPage(props: {
           </div>
         )}
 
-        {/* 🏆 CURRENT LEADERBOARD LIST (THIS WEEK) */}
+        {/* CURRENT LEADERBOARD LIST (THIS WEEK) */}
         <h3 className="text-sm font-semibold text-slate-300 mb-3 px-1">🔥 Current Live Standings</h3>
 
         {/* Leaderboard List */}
@@ -259,7 +264,9 @@ export default async function LeaderboardPage(props: {
                 <div
                   key={user.user_id || index}
                   className={`flex items-center justify-between p-3.5 border rounded-xl transition-all ${
-                    rank <= 3
+                    user.is_me 
+                      ? "bg-indigo-900/40 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.2)]" 
+                      : rank <= 3
                       ? "bg-slate-800/80 border-slate-700/80"
                       : "bg-slate-800/40 border-slate-700/40 hover:bg-slate-800/70"
                   }`}
@@ -268,12 +275,16 @@ export default async function LeaderboardPage(props: {
                     <span className="w-7 text-center font-bold text-lg text-slate-400 shrink-0">
                       {rankBadge}
                     </span>
-                    <span className="font-semibold text-slate-200 text-sm truncate">
-                      {user.username || "Anonymous User"}
+                    <span className={`text-sm truncate ${user.is_me ? "font-bold text-indigo-300" : "font-semibold text-slate-200"}`}>
+                      {user.username || "Anonymous User"} {user.is_me && "(You)"}
                     </span>
                   </div>
 
-                  <span className="text-xs font-bold px-3 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full shrink-0">
+                  <span className={`text-xs font-bold px-3 py-1 border rounded-full shrink-0 ${
+                    user.is_me 
+                      ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/40" 
+                      : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                  }`}>
                     {count}
                   </span>
                 </div>

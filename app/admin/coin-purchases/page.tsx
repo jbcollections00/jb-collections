@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "r
 import { useRouter } from "next/navigation"
 import {
   CheckCircle2,
-  Coins,
   Clock3,
   ExternalLink,
   ImageIcon,
@@ -13,9 +12,10 @@ import {
   Search,
   Trash2,
   User2,
-  Wallet,
   XCircle,
-  AtSign,
+  ChevronDown,
+  ChevronUp,
+  Inbox,
 } from "lucide-react"
 import AdminToast from "@/app/components/AdminToast"
 import { createClient } from "@/lib/supabase/client"
@@ -70,6 +70,35 @@ const STATUS_STYLES: Record<string, string> = {
   credited: "border-sky-400/25 bg-sky-500/10 text-sky-200",
   rejected: "border-rose-400/25 bg-rose-500/10 text-rose-200",
   removed: "border-slate-400/25 bg-slate-500/10 text-slate-200",
+}
+
+function playNotificationSound() {
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+
+    const now = ctx.currentTime
+    const osc1 = ctx.createOscillator()
+    const gain1 = ctx.createGain()
+
+    osc1.type = "sine"
+    osc1.frequency.setValueAtTime(587.33, now) // D5
+    osc1.frequency.exponentialRampToValueAtTime(880, now + 0.15) // A5
+
+    gain1.gain.setValueAtTime(0.2, now)
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4)
+
+    osc1.connect(gain1)
+    gain1.connect(ctx.destination)
+
+    osc1.start(now)
+    osc1.stop(now + 0.4)
+  } catch (e) {
+    console.error("Audio notification play error:", e)
+  }
 }
 
 function formatPeso(value: number | null | undefined) {
@@ -130,9 +159,8 @@ export default function AdminCoinPurchasesPage() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [query, setQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "pending" | "approved" | "credited" | "rejected" | "removed"
-  >("all")
+  const [activeTab, setActiveTab] = useState<"pending" | "credited" | "rejected" | "all">("pending")
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [burst, setBurst] = useState<CoinBurst[]>([])
   const [toast, setToast] = useState<ToastState>({
@@ -146,7 +174,7 @@ export default function AdminCoinPurchasesPage() {
     setToast((prev) => ({ ...prev, open: false }))
   }, [])
 
-  async function checkAdmin() {
+  const checkAdmin = useCallback(async () => {
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -168,7 +196,7 @@ export default function AdminCoinPurchasesPage() {
     }
 
     return true
-  }
+  }, [supabase, router])
 
   const loadOrders = useCallback(async () => {
     setRefreshing(true)
@@ -246,12 +274,42 @@ export default function AdminCoinPurchasesPage() {
   }, [supabase])
 
   useEffect(() => {
+    let isMounted = true
+
     ;(async () => {
       const ok = await checkAdmin()
-      if (!ok) return
+      if (!ok || !isMounted) return
       await loadOrders()
     })()
-  }, [loadOrders])
+
+    // 🔔 REALTIME NOTIFICATION & AUTOMATIC SYNC
+    const channel = supabase
+      .channel("admin-coin-orders-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "coin_purchase_orders",
+        },
+        () => {
+          playNotificationSound()
+          setToast({
+            open: true,
+            title: "🔔 New Coin Order Received!",
+            message: "A new order was placed and automatically loaded into Payment Queue.",
+            variant: "info",
+          })
+          loadOrders()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      isMounted = false
+      supabase.removeChannel(channel)
+    }
+  }, [checkAdmin, loadOrders, supabase])
 
   function spawnCoinBurst() {
     const next = Array.from({ length: 12 }).map((_, index) => ({
@@ -262,6 +320,10 @@ export default function AdminCoinPurchasesPage() {
 
     setBurst(next)
     window.setTimeout(() => setBurst([]), 1200)
+  }
+
+  function toggleExpandOrder(id: string) {
+    setExpandedOrderId((prev) => (prev === id ? null : id))
   }
 
   async function handleApprove(order: Order) {
@@ -396,39 +458,50 @@ export default function AdminCoinPurchasesPage() {
     }
   }
 
-  const filteredOrders = orders.filter((order) => {
-    const statusMatch = statusFilter === "all" ? true : order.status === statusFilter
+  const tabCounts = useMemo(() => {
+    return {
+      pending: orders.filter((o) => o.status === "pending").length,
+      credited: orders.filter((o) => o.status === "credited" || o.status === "approved").length,
+      rejected: orders.filter((o) => o.status === "rejected" || o.status === "removed").length,
+      all: orders.length,
+    }
+  }, [orders])
 
-    const haystack = [
-      order.payer_name,
-      order.payer_email,
-      order.user_username,
-      order.user_id,
-      order.reference_number,
-      order.label,
-      order.payment_method,
-      order.status,
-      order.receipt_name,
-      order.receipt_file_name,
-      order.receipt_path,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      let tabMatch = true
+      if (activeTab === "pending") {
+        tabMatch = order.status === "pending"
+      } else if (activeTab === "credited") {
+        tabMatch = order.status === "credited" || order.status === "approved"
+      } else if (activeTab === "rejected") {
+        tabMatch = order.status === "rejected" || order.status === "removed"
+      }
 
-    const queryMatch = query.trim()
-      ? haystack.includes(query.trim().toLowerCase())
-      : true
+      const haystack = [
+        order.payer_name,
+        order.payer_email,
+        order.user_username,
+        order.user_id,
+        order.reference_number,
+        order.label,
+        order.payment_method,
+        order.status,
+        order.receipt_name,
+        order.receipt_file_name,
+        order.receipt_path,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
 
-    return statusMatch && queryMatch
-  })
+      const queryMatch = query.trim()
+        ? haystack.includes(query.trim().toLowerCase())
+        : true
 
-  const totals = {
-    totalAmount: orders.reduce((sum, item) => sum + (item.amount ?? 0), 0),
-    totalCoins: orders.reduce((sum, item) => sum + (item.coins ?? 0), 0),
-    pending: orders.filter((item) => item.status === "pending").length,
-    credited: orders.filter((item) => item.status === "credited").length,
-  }
+      return tabMatch && queryMatch
+    })
+  }, [orders, activeTab, query])
 
   if (loading) {
     return (
@@ -472,123 +545,44 @@ export default function AdminCoinPurchasesPage() {
       `}</style>
 
       <div className="mx-auto w-full max-w-[1850px]">
-        <section className="relative mt-4 overflow-hidden rounded-[32px] border border-white/10 bg-slate-900/75 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.18),transparent_32%),radial-gradient(circle_at_top_right,rgba(99,102,241,0.18),transparent_28%),linear-gradient(135deg,#0f172a_0%,#0b1220_42%,#111827_100%)]" />
+        {/* Simple Page Header */}
+        <div className="mt-4 mb-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
+            Coins Purchases
+          </h1>
 
-          <div className="relative px-5 py-6 sm:px-6 lg:px-8">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-3xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-500/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.24em] text-sky-200">
-                  Admin Coin Control Center
-                </div>
+          <button
+            onClick={loadOrders}
+            disabled={refreshing}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+            Refresh Orders
+          </button>
+        </div>
 
-                <h1 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl xl:text-5xl">
-                  Review, approve, credit, and track every JB Coin payment
-                </h1>
-
-                <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
-                  Every order now automatically syncs with the user profile database to display their real account name, email, and user ID.
-                </p>
-              </div>
-
-              <button
-                onClick={loadOrders}
-                disabled={refreshing}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
-                Refresh Orders
-              </button>
-            </div>
-
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-5 [animation:soft-pop_300ms_ease]">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Total Sales</p>
-                    <h2 className="mt-2 text-3xl font-black text-white">{formatPeso(totals.totalAmount)}</h2>
-                  </div>
-                  <div className="rounded-2xl bg-emerald-500/15 p-3 text-emerald-300">
-                    <Wallet size={22} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-5 [animation:soft-pop_350ms_ease]">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Coins Ordered</p>
-                    <h2 className="mt-2 text-3xl font-black text-white">
-                      {new Intl.NumberFormat("en-PH").format(totals.totalCoins)}
-                    </h2>
-                  </div>
-                  <div className="rounded-2xl bg-yellow-500/15 p-3 text-yellow-300">
-                    <Coins size={22} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-5 [animation:soft-pop_400ms_ease]">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Pending Orders</p>
-                    <h2 className="mt-2 text-3xl font-black text-white">{totals.pending}</h2>
-                  </div>
-                  <div className="rounded-2xl bg-amber-500/15 p-3 text-amber-300">
-                    <Clock3 size={22} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-5 [animation:soft-pop_450ms_ease]">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Credited Orders</p>
-                    <h2 className="mt-2 text-3xl font-black text-white">{totals.credited}</h2>
-                  </div>
-                  <div className="rounded-2xl bg-sky-500/15 p-3 text-sky-300">
-                    <CheckCircle2 size={22} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
+        {/* Search Bar */}
         <section className="mt-5 rounded-[30px] border border-white/10 bg-slate-900/70 p-4 shadow-[0_16px_50px_rgba(0,0,0,0.35)] backdrop-blur sm:p-5">
-          <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
-            <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-              <Search size={18} className="text-slate-400" />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <label className="flex flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <Search size={18} className="text-slate-400 shrink-0" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search by name, email, username, user ID, or reference..."
+                placeholder="Search by name, email, username, user ID, or reference number..."
                 className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-500"
               />
             </label>
 
-            <select
-              value={statusFilter}
-              onChange={(event) =>
-                setStatusFilter(event.target.value as typeof statusFilter)
-              }
-              className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white outline-none"
-            >
-              <option value="all" className="bg-slate-900">All statuses</option>
-              <option value="pending" className="bg-slate-900">Pending</option>
-              <option value="approved" className="bg-slate-900">Approved</option>
-              <option value="credited" className="bg-slate-900">Credited</option>
-              <option value="rejected" className="bg-slate-900">Rejected</option>
-              <option value="removed" className="bg-slate-900">Removed</option>
-            </select>
-
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-300">
-              Showing {filteredOrders.length} of {orders.length} orders
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-300 text-center sm:text-left shrink-0">
+              Showing {filteredOrders.length} orders
             </div>
           </div>
         </section>
 
+        {/* Main Inbox Queue Container */}
         <section className="relative mt-5 overflow-hidden rounded-[30px] border border-white/10 bg-slate-900/70 shadow-[0_18px_60px_rgba(0,0,0,0.36)] backdrop-blur">
+          {/* Animated Burst Effect */}
           <div className="absolute inset-0 pointer-events-none">
             {burst.map((coin) => (
               <span
@@ -607,18 +601,75 @@ export default function AdminCoinPurchasesPage() {
             ))}
           </div>
 
-          <div className="relative border-b border-white/10 px-5 py-4 sm:px-6">
-            <h2 className="text-xl font-black text-white">Payment Queue</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Approve to auto-credit the wallet and write transaction history.
-            </p>
+          {/* Category Tabs System */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 pt-4 pb-3 sm:px-6">
+            <button
+              onClick={() => setActiveTab("pending")}
+              className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-black uppercase tracking-wider transition ${
+                activeTab === "pending"
+                  ? "bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20"
+                  : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+              }`}
+            >
+              <Clock3 size={15} />
+              Payment Queue
+              <span className="ml-1.5 rounded-full bg-black/20 px-2 py-0.5 text-[11px] font-bold">
+                {tabCounts.pending}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("credited")}
+              className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-black uppercase tracking-wider transition ${
+                activeTab === "credited"
+                  ? "bg-sky-500 text-slate-950 shadow-lg shadow-sky-500/20"
+                  : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+              }`}
+            >
+              <CheckCircle2 size={15} />
+              Credited
+              <span className="ml-1.5 rounded-full bg-black/20 px-2 py-0.5 text-[11px] font-bold">
+                {tabCounts.credited}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("rejected")}
+              className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-black uppercase tracking-wider transition ${
+                activeTab === "rejected"
+                  ? "bg-rose-500 text-white shadow-lg shadow-rose-500/20"
+                  : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+              }`}
+            >
+              <XCircle size={15} />
+              Rejected
+              <span className="ml-1.5 rounded-full bg-black/20 px-2 py-0.5 text-[11px] font-bold">
+                {tabCounts.rejected}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("all")}
+              className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-black uppercase tracking-wider transition ${
+                activeTab === "all"
+                  ? "bg-slate-700 text-white shadow-lg"
+                  : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+              }`}
+            >
+              <Inbox size={15} />
+              All Orders
+              <span className="ml-1.5 rounded-full bg-black/20 px-2 py-0.5 text-[11px] font-bold">
+                {tabCounts.all}
+              </span>
+            </button>
           </div>
 
-          <div className="grid gap-4 p-4 sm:p-5">
+          {/* Orders Inbox List */}
+          <div className="grid gap-3 p-4 sm:p-5">
             {filteredOrders.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-white/10 bg-white/[0.03] px-6 py-16 text-center">
-                <p className="text-lg font-bold text-white">No orders found</p>
-                <p className="mt-2 text-sm text-slate-400">Try another search or status filter.</p>
+                <p className="text-lg font-bold text-white">No orders found in this view</p>
+                <p className="mt-2 text-sm text-slate-400">Try selecting another tab or clearing search.</p>
               </div>
             ) : (
               filteredOrders.map((order) => {
@@ -627,6 +678,7 @@ export default function AdminCoinPurchasesPage() {
                   "border-white/15 bg-white/5 text-slate-200"
 
                 const isBusy = busyId === order.id
+                const isExpanded = expandedOrderId === order.id
                 const isDone =
                   order.status === "credited" ||
                   order.status === "approved" ||
@@ -638,35 +690,66 @@ export default function AdminCoinPurchasesPage() {
                 return (
                   <article
                     key={order.id}
-                    className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.25)] sm:p-5"
+                    className="overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] shadow-[0_12px_30px_rgba(0,0,0,0.25)] transition-all"
                   >
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3.5 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-cyan-200">
-                            <User2 size={15} />
-                            {order.payer_name}
-                          </div>
-
-                          {order.user_username ? (
-                            <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1.5 text-xs font-bold text-violet-200">
-                              <AtSign size={13} />
-                              {order.user_username}
-                            </div>
-                          ) : null}
-
-                          <div
-                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] ${statusClass}`}
-                          >
-                            {order.status}
-                          </div>
-
-                          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300">
-                            {formatDate(order.created_at)}
-                          </div>
+                    {/* Compact Message-Style Row (Always Visible) */}
+                    <div
+                      onClick={() => toggleExpandOrder(order.id)}
+                      className="flex cursor-pointer flex-col gap-3 p-4 hover:bg-white/5 sm:flex-row sm:items-center sm:justify-between sm:p-5"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-500/10 text-cyan-300">
+                          <User2 size={18} />
                         </div>
 
-                        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-black text-white">
+                              {order.payer_name}
+                            </p>
+                            {order.user_username && (
+                              <span className="hidden text-xs font-medium text-violet-300 sm:inline">
+                                (@{order.user_username})
+                              </span>
+                            )}
+                          </div>
+                          <p className="truncate text-xs text-slate-400">
+                            {order.payer_email}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+                        <div className="text-left sm:text-right">
+                          <p className="text-xs font-bold text-yellow-300">
+                            {new Intl.NumberFormat("en-PH").format(order.coins ?? 0)} coins ({formatPeso(order.amount)})
+                          </p>
+                          <p className="text-[11px] text-slate-400">
+                            {formatDate(order.created_at)}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider ${statusClass}`}
+                          >
+                            {order.status}
+                          </span>
+
+                          <button
+                            type="button"
+                            className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/5 text-slate-300 transition hover:bg-white/10"
+                          >
+                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Expanded Message Content View */}
+                    {isExpanded && (
+                      <div className="border-t border-white/10 bg-slate-950/50 p-4 sm:p-6">
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                           <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4">
                             <p className="text-[11px] font-black uppercase tracking-[0.16em] text-sky-400">Account Email</p>
                             <div className="mt-2 flex items-center gap-2 text-sm font-bold text-white">
@@ -677,7 +760,7 @@ export default function AdminCoinPurchasesPage() {
 
                           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                             <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Package</p>
-                            <p className="mt-2 text-sm font-semibold text-white">{order.label || "JB Coin Package"}</p>
+                            <p className="mt-2 text-sm font-semibold text-white">{order.label || "Coin Package"}</p>
                             <p className="mt-1 text-xs text-slate-400">{order.payment_method || "GCash / Maya"}</p>
                           </div>
 
@@ -699,11 +782,12 @@ export default function AdminCoinPurchasesPage() {
                         </div>
 
                         <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(300px,0.95fr)]">
+                          {/* Receipt Section */}
                           <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <div>
                                 <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Receipt Preview</p>
-                                <p className="mt-1 text-sm text-slate-300">
+                                <p className="mt-1 text-xs text-slate-300">
                                   Check payment proof before approving.
                                 </p>
                               </div>
@@ -742,15 +826,16 @@ export default function AdminCoinPurchasesPage() {
                                 </a>
                               </div>
                             ) : (
-                              <div className="mt-4 flex min-h-[260px] flex-col items-center justify-center rounded-[22px] border border-dashed border-white/10 bg-slate-950/40 px-5 py-8 text-center sm:min-h-[320px]">
-                                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5 text-slate-400">
-                                  <ImageIcon size={24} />
+                              <div className="mt-4 flex min-h-[200px] flex-col items-center justify-center rounded-[22px] border border-dashed border-white/10 bg-slate-950/40 px-5 py-8 text-center sm:min-h-[260px]">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-slate-400">
+                                  <ImageIcon size={22} />
                                 </div>
-                                <p className="mt-4 text-base font-bold text-white">No receipt preview available</p>
+                                <p className="mt-3 text-sm font-bold text-white">No receipt preview available</p>
                               </div>
                             )}
                           </div>
 
+                          {/* Admin Actions */}
                           <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
                             <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Admin Actions</p>
 
@@ -797,7 +882,7 @@ export default function AdminCoinPurchasesPage() {
                           </div>
                         </div>
                       </div>
-                    </div>
+                    )}
                   </article>
                 )
               })

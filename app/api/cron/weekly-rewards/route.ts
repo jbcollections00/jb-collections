@@ -87,6 +87,7 @@ export async function GET(req: NextRequest) {
           amount: prizeAmount,
           type: "weekly_reward",
           description: description,
+          reference: reference // Naayos: Naidagdag na ang missing reference
         })
 
         const { data: profile } = await supabase.from("profiles").select("coins").eq("id", userId).single()
@@ -94,31 +95,25 @@ export async function GET(req: NextRequest) {
 
         await supabase
           .from("profiles")
-          .update({
-            coins: currentCoins + prizeAmount,
-            membership_tier: tierGranted,
-            tier: tierGranted, // Fallback for alternative column name
-            role: tierGranted, // Fallback for alternative column name
-            tier_expires_at: tierExpiresAt.toISOString(),
-          })
-          .eq("id", userId)
-      } else {
-        // Direct update for membership tier on profiles table
-        await supabase
-          .from("profiles")
-          .update({
-            membership_tier: tierGranted,
-            tier: tierGranted, // Fallback for alternative column name
-            role: tierGranted, // Fallback for alternative column name
-            tier_expires_at: tierExpiresAt.toISOString(),
-          })
+          .update({ coins: currentCoins + prizeAmount })
           .eq("id", userId)
       }
+
+      // 3. Direct update for membership tier on profiles table (Inilabas para hindi paulit-ulit)
+      await supabase
+        .from("profiles")
+        .update({
+          membership_tier: tierGranted,
+          tier: tierGranted, // Fallback for alternative column name
+          role: tierGranted, // Fallback for alternative column name
+          tier_expires_at: tierExpiresAt.toISOString(),
+        })
+        .eq("id", userId)
 
       return { userId, rank, prizeAmount, tierGranted, expiresAt: tierExpiresAt.toISOString() }
     }
 
-    // --- A. TOP COIN EARNERS (Inayos: Fixed Table Name to 'coin_history') ---
+    // --- A. TOP COIN EARNERS ---
     const { data: coinTx } = await supabase
       .from("coin_history")
       .select("user_id, amount")
@@ -126,6 +121,7 @@ export async function GET(req: NextRequest) {
       .lt("created_at", endIso)
       .gt("amount", 0)
       .neq("type", "weekly_reward")
+      .limit(50000) // Naayos: Prevent 1,000 row cap limit
 
     const coinEarnersWinners = []
     if (coinTx && coinTx.length > 0) {
@@ -153,6 +149,7 @@ export async function GET(req: NextRequest) {
       .select("user_id")
       .gte("created_at", startIso)
       .lt("created_at", endIso)
+      .limit(50000) // Naayos: Prevent 1,000 row cap limit
 
     const downloadersWinners = []
     if (downloadLogs && downloadLogs.length > 0) {

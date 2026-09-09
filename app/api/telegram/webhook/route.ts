@@ -175,14 +175,15 @@ export async function POST(req: Request) {
     }
 
     if (action === "approve") {
-      const order = await approveOrder(orderId)
+      try {
+        const order = await approveOrder(orderId)
 
-      await answerCallbackQuery(callbackId, "Approved. Coins credited.")
+        await answerCallbackQuery(callbackId, "Approved. Coins credited.")
 
-      await editTelegramCaption({
-        chatId,
-        messageId,
-        caption: `
+        await editTelegramCaption({
+          chatId,
+          messageId,
+          caption: `
 ✅ <b>PAYMENT APPROVED</b>
 
 🧾 <b>Order:</b> ${order.id}
@@ -193,21 +194,27 @@ export async function POST(req: Request) {
 🔢 <b>Reference:</b> ${order.payment_reference || order.reference_number || ""}
 
 Approved from Telegram.
-        `.trim(),
-      })
-
+          `.trim(),
+        })
+      } catch (error) {
+        await answerCallbackQuery(
+          callbackId,
+          error instanceof Error ? error.message : "Failed to approve order."
+        )
+      }
       return NextResponse.json({ ok: true })
     }
 
     if (action === "reject") {
-      const order = await rejectOrder(orderId)
+      try {
+        const order = await rejectOrder(orderId)
 
-      await answerCallbackQuery(callbackId, "Rejected.")
+        await answerCallbackQuery(callbackId, "Rejected.")
 
-      await editTelegramCaption({
-        chatId,
-        messageId,
-        caption: `
+        await editTelegramCaption({
+          chatId,
+          messageId,
+          caption: `
 ❌ <b>PAYMENT REJECTED</b>
 
 🧾 <b>Order:</b> ${order.id}
@@ -218,21 +225,21 @@ Approved from Telegram.
 🔢 <b>Reference:</b> ${order.payment_reference || order.reference_number || ""}
 
 Rejected from Telegram.
-        `.trim(),
-      })
-
+          `.trim(),
+        })
+      } catch (error) {
+        await answerCallbackQuery(
+          callbackId,
+          error instanceof Error ? error.message : "Failed to reject order."
+        )
+      }
       return NextResponse.json({ ok: true })
     }
 
     return NextResponse.json({ ok: true })
   } catch (error) {
     console.error("Telegram webhook error:", error)
-
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Something went wrong.",
-      },
-      { status: 500 }
-    )
+    // Always return a 200 OK to Telegram to prevent infinite webhook retries
+    return NextResponse.json({ ok: true })
   }
 }

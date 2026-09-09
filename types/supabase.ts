@@ -105,18 +105,106 @@ export interface Database {
           full_name: string | null
           email: string | null
           role: string | null
+          coins: number
         }
         Insert: {
           id: string
           full_name?: string | null
           email?: string | null
           role?: string | null
+          coins?: number
         }
         Update: {
           id?: string
           full_name?: string | null
           email?: string | null
           role?: string | null
+          coins?: number
+        }
+      }
+      coin_purchase_orders: {
+        Row: {
+          id: string
+          user_id: string
+          payer_name: string | null
+          payer_email: string | null
+          amount: number | null
+          coins: number | null
+          label: string | null
+          payment_method: string | null
+          reference_number: string | null
+          status: string
+          receipt_url: string | null
+          created_at: string
+          approved_at: string | null
+          approved_by: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          payer_name?: string | null
+          payer_email?: string | null
+          amount?: number | null
+          coins?: number | null
+          label?: string | null
+          payment_method?: string | null
+          reference_number?: string | null
+          status?: string
+          receipt_url?: string | null
+          created_at?: string
+          approved_at?: string | null
+          approved_by?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          payer_name?: string | null
+          payer_email?: string | null
+          amount?: number | null
+          coins?: number | null
+          label?: string | null
+          payment_method?: string | null
+          reference_number?: string | null
+          status?: string
+          receipt_url?: string | null
+          created_at?: string
+          approved_at?: string | null
+          approved_by?: string | null
+        }
+      }
+      coin_history: {
+        Row: {
+          id: string
+          user_id: string
+          coins: number
+          type: string
+          label: string | null
+          reference_id: string | null
+          amount_php: number | null
+          created_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          coins: number
+          type: string
+          label?: string | null
+          reference_id?: string | null
+          amount_php?: number | null
+          created_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          coins?: number
+          type?: string
+          label?: string | null
+          reference_id?: string | null
+          amount_php?: number | null
+          created_at?: string
+          created_by?: string | null
         }
       }
       files: {

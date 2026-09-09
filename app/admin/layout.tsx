@@ -1,8 +1,38 @@
 "use client"
 
+import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+
+function playNotificationSound() {
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+
+    const now = ctx.currentTime
+    const osc1 = ctx.createOscillator()
+    const gain1 = ctx.createGain()
+
+    osc1.type = "sine"
+    osc1.frequency.setValueAtTime(587.33, now)
+    osc1.frequency.exponentialRampToValueAtTime(880, now + 0.15)
+
+    gain1.gain.setValueAtTime(0.2, now)
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4)
+
+    osc1.connect(gain1)
+    gain1.connect(ctx.destination)
+
+    osc1.start(now)
+    osc1.stop(now + 0.4)
+  } catch (e) {
+    console.error("Audio notification error:", e)
+  }
+}
 
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: "📊" },
@@ -18,6 +48,45 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
+  const [pendingCount, setPendingCount] = useState(0)
+
+  const fetchPendingCount = useCallback(async () => {
+    const { count, error } = await supabase
+      .from("coin_purchase_orders")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "pending")
+
+    if (!error && count !== null) {
+      setPendingCount(count)
+    }
+  }, [supabase])
+
+  useEffect(() => {
+    fetchPendingCount()
+
+    // 🔔 REALTIME SIDEBAR LISTENER
+    const channel = supabase
+      .channel("global-admin-coin-orders")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "coin_purchase_orders",
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            playNotificationSound()
+          }
+          fetchPendingCount()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [fetchPendingCount, supabase])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -53,12 +122,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 ? pathname === "/admin"
                 : pathname.startsWith(item.href)
 
+            const isCoinPurchases = item.href === "/admin/coin-purchases"
+
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 title={item.label}
-                className={`flex items-center justify-center gap-3 rounded-xl px-2.5 py-2.5 text-xs font-bold transition-all lg:justify-start lg:px-3.5 ${
+                className={`relative flex items-center justify-center gap-3 rounded-xl px-2.5 py-2.5 text-xs font-bold transition-all lg:justify-start lg:px-3.5 ${
                   isActive
                     ? "bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-lg shadow-cyan-500/20"
                     : "text-slate-400 hover:bg-slate-900 hover:text-white"
@@ -66,6 +137,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               >
                 <span className="text-lg shrink-0">{item.icon}</span>
                 <span className="hidden truncate lg:inline">{item.label}</span>
+
+                {/* Red Notification Badge for Pending Orders */}
+                {isCoinPurchases && pendingCount > 0 ? (
+                  <span className="ml-auto hidden h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-black text-white shadow-md lg:flex">
+                    {pendingCount}
+                  </span>
+                ) : null}
+
+                {/* Red Dot on Mobile / Small Screen */}
+                {isCoinPurchases && pendingCount > 0 ? (
+                  <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-rose-500 lg:hidden" />
+                ) : null}
               </Link>
             )
           })}

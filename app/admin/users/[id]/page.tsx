@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import AdminHeader from "@/app/components/AdminHeader"
 
@@ -31,7 +31,6 @@ type CoinHistoryItem = {
 }
 
 type ApiUser = User & {
-  jb_points?: number | null
   coin_history?: CoinHistoryItem[] | null
 }
 
@@ -54,13 +53,9 @@ export default function AdminUserViewPage() {
   const [coinMessage, setCoinMessage] = useState("")
   const [coinError, setCoinError] = useState("")
 
-  useEffect(() => {
+  const loadUser = useCallback(async () => {
     if (!userId) return
-    void loadUser()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId])
 
-  async function loadUser() {
     try {
       setLoading(true)
       setError("")
@@ -85,7 +80,7 @@ export default function AdminUserViewPage() {
         rawUser
           ? {
               ...rawUser,
-              coins: Number(rawUser.coins ?? rawUser.jb_points ?? 0),
+              coins: Number(rawUser.coins ?? 0),
             }
           : null
       )
@@ -96,7 +91,11 @@ export default function AdminUserViewPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [userId])
+
+  useEffect(() => {
+    void loadUser()
+  }, [loadUser])
 
   function getDisplayName(u: User) {
     return u.full_name || u.name || u.username || u.email || "User"
@@ -155,19 +154,10 @@ export default function AdminUserViewPage() {
         return
       }
 
-      setUser((prev) =>
-        prev
-          ? {
-              ...prev,
-              coins: Number(result?.newCoins ?? prev.coins ?? 0),
-            }
-          : prev
-      )
-
       setCoinMessage(result?.message || "JB Coins updated successfully.")
       setCoinAmount("")
       setCoinReason("")
-      void loadUser()
+      await loadUser()
     } catch (err) {
       console.error(err)
       setCoinError("Failed to adjust coins.")
@@ -325,13 +315,14 @@ export default function AdminUserViewPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-2 block text-sm font-bold text-slate-600">
+                <label htmlFor="coinOperation" className="mb-2 block text-sm font-bold text-slate-600">
                   Operation
                 </label>
                 <select
+                  id="coinOperation"
                   value={coinOperation}
                   onChange={(e) => setCoinOperation(e.target.value as AdjustOperation)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition"
                 >
                   <option value="add">Add Coins</option>
                   <option value="subtract">Subtract Coins</option>
@@ -340,30 +331,32 @@ export default function AdminUserViewPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-bold text-slate-600">
+                <label htmlFor="coinAmount" className="mb-2 block text-sm font-bold text-slate-600">
                   Amount
                 </label>
                 <input
+                  id="coinAmount"
                   type="number"
                   min="0"
                   step="1"
                   value={coinAmount}
                   onChange={(e) => setCoinAmount(e.target.value)}
                   placeholder="Enter coin amount"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition"
                 />
               </div>
 
               <div className="sm:col-span-2">
-                <label className="mb-2 block text-sm font-bold text-slate-600">
+                <label htmlFor="coinReason" className="mb-2 block text-sm font-bold text-slate-600">
                   Reason
                 </label>
                 <textarea
+                  id="coinReason"
                   value={coinReason}
                   onChange={(e) => setCoinReason(e.target.value)}
                   rows={4}
                   placeholder="Write the reason for this coin adjustment..."
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition"
                 />
               </div>
             </div>

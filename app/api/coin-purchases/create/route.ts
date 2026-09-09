@@ -6,12 +6,12 @@ import { createClient as createAdminClient } from "@supabase/supabase-js"
 export const runtime = "nodejs"
 
 const VALID_PACKAGES = [
-  { amount: 20, coins: 270 },
-  { amount: 50, coins: 690 },
-  { amount: 100, coins: 1400 },
-  { amount: 200, coins: 2900 },
-  { amount: 500, coins: 7500 },
-  { amount: 1000, coins: 15500 },
+  { amount: 20, coins: 1700 },
+  { amount: 50, coins: 4300 },
+  { amount: 100, coins: 8800 },
+  { amount: 200, coins: 18000 },
+  { amount: 500, coins: 46000 },
+  { amount: 1000, coins: 95000 },
 ]
 
 async function createUserClient() {
@@ -227,6 +227,7 @@ export async function POST(req: Request) {
       .from("coin_purchase_orders")
       .insert({
         user_id: user.id,
+        amount: amountPhp,
         amount_php: amountPhp,
         coins,
         label: label || `₱${amountPhp} Package`,

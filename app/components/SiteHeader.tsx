@@ -18,7 +18,7 @@ const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "🏠" },
   { label: "Profile", href: "/profile", icon: "👤" },
   { label: "Leaderboard", href: "/leaderboard", icon: "🏆" },
-  { label: "Buy COINS", href: "/upgrade", icon: "🪙" },
+  { label: "Buy Coins", href: "/upgrade", icon: "🪙" },
   { label: "Earn Coins", href: "/earn-coins", icon: "🎯" },
   { label: "Mystery Box", href: "/mystery-box", icon: "🎁" },
   { label: "Tutorials", href: "/tutorials", icon: "📘" },
@@ -60,13 +60,11 @@ export default function SiteHeader() {
 
     const { data } = await supabase
       .from("profiles")
-      .select("coins, jb_points")
+      .select("coins")
       .eq("id", userId)
       .maybeSingle()
 
-    setCoins(
-      toSafeNumber(data?.coins ?? data?.jb_points)
-    )
+    setCoins(toSafeNumber(data?.coins))
   }
 
   async function checkUnreadMessages() {
@@ -74,7 +72,6 @@ export default function SiteHeader() {
     if (!userId || userId === "undefined" || userId === "null" || userId.trim() === "") return
 
     try {
-      // 1. Fetch primary messages
       const { data: primaryData } = await supabase
         .from("messages")
         .select("id, is_read, user_id, title, subject, body")
@@ -84,7 +81,6 @@ export default function SiteHeader() {
       let allMessages = primaryData || []
 
       if (!allMessages.length) {
-        // FIX: Idinagdag ang 'subject: null' sa fallbackData mapping upang maging katugma ng TypeScript type ng allMessages
         const { data: fallbackData } = await supabase
           .from("user_messages")
           .select("id, is_read, user_id, title, body")
@@ -97,11 +93,9 @@ export default function SiteHeader() {
         }))
       }
 
-      // 2. Filter out dismissed items
       const dismissed = getDismissedIds()
       let validMessages = allMessages.filter(msg => !dismissed.includes(msg.id))
 
-      // 3. Apply LocalStorage logic for global announcements
       let localReadIds: string[] = []
       if (typeof window !== "undefined") {
         try {
@@ -116,7 +110,6 @@ export default function SiteHeader() {
         return msg
       })
 
-      // 4. Exact Deduplication Logic
       const uniqueList: any[] = []
       const seen = new Set<string>()
 
@@ -129,7 +122,6 @@ export default function SiteHeader() {
         }
       }
 
-      // 5. Count final unread
       const finalUnreadCount = uniqueList.filter(msg => !msg.is_read).length
       setUnreadCount(finalUnreadCount)
 
@@ -139,6 +131,8 @@ export default function SiteHeader() {
   }
 
   useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
     async function init() {
       const {
         data: { user },
@@ -158,13 +152,39 @@ export default function SiteHeader() {
 
       await refreshWallet()
       await checkUnreadMessages()
+
+      channel = supabase
+        .channel(`profile_coins_${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "profiles",
+            filter: `id=eq.${user.id}`,
+          },
+          (payload) => {
+            const updatedCoins = payload.new?.coins
+            if (typeof updatedCoins === "number") {
+              setCoins(updatedCoins)
+            } else {
+              void refreshWallet()
+            }
+          }
+        )
+        .subscribe()
     }
 
     void init()
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Auto-refresh interval (Checks every 2 seconds quietly)
   useEffect(() => {
     const intervalId = setInterval(() => {
       if (currentUserIdRef.current) {
@@ -248,8 +268,6 @@ export default function SiteHeader() {
             </Link>
 
             <div className="ml-auto flex items-center gap-2">
-
-              {/* Message Icon Button with Notification Badge */}
               <Link
                 href="/messages"
                 className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/30 text-base text-white transition hover:bg-white/20 sm:h-10 sm:w-10 sm:text-lg"
@@ -264,7 +282,6 @@ export default function SiteHeader() {
                 )}
               </Link>
 
-              {/* Coins Wallet Box */}
               <div className="rounded-full border border-white/20 bg-black/30 px-3 py-1.5 sm:min-w-[150px]">
                 <div className="flex items-center gap-2">
                   <img src="/jb-coin.png" alt="JB Coin" className="h-4 w-4 object-contain" />

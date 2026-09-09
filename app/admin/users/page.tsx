@@ -35,10 +35,7 @@ type UserRow = {
   recent_activities?: UserActivity[]
 }
 
-type ApiUserRow = Omit<UserRow, "coins"> & {
-  coins?: number | null
-  jb_points?: number | null
-}
+type ApiUserRow = UserRow
 
 type AdminProfile = {
   role?: string | null
@@ -116,8 +113,8 @@ function getActivityLabel(type?: string | null) {
 
 function getActivityAmount(amount?: number | null) {
   if (amount === null || amount === undefined) return "—"
-  if (amount > 0) return `+${amount} JB`
-  return `${amount} JB`
+  if (amount > 0) return `+${amount} Coins`
+  return `${amount} Coins`
 }
 
 function isOnlineNow(user: UserRow) {
@@ -371,7 +368,7 @@ export default function AdminUsersPage() {
       const rawUsers = (result?.users as ApiUserRow[]) || []
       const nextUsers: UserRow[] = rawUsers.map((user) => ({
         ...user,
-        coins: Number(user.jb_points ?? user.coins ?? 0),
+        coins: Number(user.coins ?? 0),
       }))
 
       setUsers(nextUsers)
@@ -572,7 +569,7 @@ export default function AdminUsersPage() {
       const result = await res.json()
 
       if (!res.ok) {
-        setCoinErrorMessage(result?.error || "Failed to adjust JB Coins.")
+        setCoinErrorMessage(result?.error || "Failed to adjust Coins.")
         return
       }
 
@@ -580,7 +577,6 @@ export default function AdminUsersPage() {
         result?.newCoins ??
           result?.newBalance ??
           result?.coins ??
-          result?.jb_points ??
           selectedUser.coins ??
           0
       )
@@ -605,14 +601,14 @@ export default function AdminUsersPage() {
         )
       )
 
-      setCoinSuccessMessage(result?.message || "JB Coins updated successfully.")
+      setCoinSuccessMessage(result?.message || "Coins updated successfully.")
       setEditCoins("")
       setCoinReason("")
       setCoinOperation("add")
       await loadUsers(false)
     } catch (error) {
       console.error("Apply coin adjustment error:", error)
-      setCoinErrorMessage("Failed to adjust JB Coins.")
+      setCoinErrorMessage("Failed to adjust Coins.")
     } finally {
       setCoinLoading(false)
     }
@@ -987,7 +983,7 @@ export default function AdminUsersPage() {
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                       <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-center backdrop-blur">
                         <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/65">
-                          JB Coins
+                          Coins
                         </div>
                         <div className="mt-1 text-xl font-black text-amber-300">
                           {Number(selectedUser.coins || 0).toLocaleString()}
@@ -1375,11 +1371,11 @@ export default function AdminUsersPage() {
                   </SectionCard>
 
                   <SectionCard
-                    title="JB Coins Control"
-                    subtitle="Add, subtract, or set the exact JB Coin balance for this user."
+                    title="Coins Control"
+                    subtitle="Add, subtract, or set the exact Coin balance for this user."
                   >
                     <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-300">
-                      Current Balance: {Number(selectedUser.coins || 0).toLocaleString()} JB Coins
+                      Current Balance: {Number(selectedUser.coins || 0).toLocaleString()} Coins
                     </div>
 
                     {coinErrorMessage ? (

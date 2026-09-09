@@ -8,8 +8,8 @@ type RedeemPlan = "premium" | "platinum"
 
 // ✅ UPDATED COSTS (FINAL)
 const PLAN_COST: Record<RedeemPlan, number> = {
-  premium: 3000,
-  platinum: 4000,
+  premium: 8000,
+  platinum: 10000,
 }
 
 function normalizeMembership(profile: {

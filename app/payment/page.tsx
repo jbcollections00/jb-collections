@@ -24,7 +24,6 @@ import {
   WalletCards,
   X,
 } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 import SiteHeader from "@/app/components/SiteHeader"
 
 function formatPeso(value: number) {
@@ -215,7 +214,6 @@ function decodeLabel(value: string | null) {
 }
 
 function PaymentPageContent() {
-  useMemo(() => createClient(), [])
   const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -1340,14 +1338,14 @@ function PaymentPageContent() {
                             </div>
                           </div>
 
-                         <div className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-400/10 px-3 py-3 text-xs text-fuchsia-200">
-  <div className="font-black uppercase tracking-[0.18em]">
-    Reference Match
-  </div>
-  <div className="mt-1 text-sm font-bold text-white">
-    {isReady ? "Ready to Submit" : "Incomplete"}
-  </div>
-</div>
+                          <div className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-400/10 px-3 py-3 text-xs text-fuchsia-200">
+                            <div className="font-black uppercase tracking-[0.18em]">
+                              Reference Match
+                            </div>
+                            <div className="mt-1 text-sm font-bold text-white">
+                              {isReady ? "Ready to Submit" : "Incomplete"}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ) : null}
@@ -1361,14 +1359,14 @@ function PaymentPageContent() {
 
                   <div className="grid gap-3">
                     <button
- 		       type="submit"
- 		       disabled={
-   		         isSubmitting ||
-		         !isValidPackage ||
-		         !payerName.trim() ||
-		         !referenceNumber.trim() ||
-		         !receiptFile
- 		       }
+                      type="submit"
+                      disabled={
+                        isSubmitting ||
+                        !isValidPackage ||
+                        !payerName.trim() ||
+                        !referenceNumber.trim() ||
+                        !receiptFile
+                      }
                       className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-violet-600 px-5 py-3.5 text-sm font-black text-white shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <CreditCard size={16} />
