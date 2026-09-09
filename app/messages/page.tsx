@@ -2,19 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import {
-  Lock,
-  Megaphone,
-  ArrowLeft,
-  Trash2,
-  Paperclip,
-  Download,
-  Gift,
-  CheckCircle2,
-  Loader2,
-  Sparkles,
-  X,
-} from "lucide-react"
+import { Lock, Megaphone, ArrowLeft, Trash2, Paperclip, Download, Gift } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import SiteHeader from "@/app/components/SiteHeader"
 
@@ -72,165 +60,6 @@ function isImageFile(url: string, name?: string) {
   )
 }
 
-/* ==========================================================================
-   CLAIM REWARD BUTTON COMPONENT
-   ========================================================================== */
-function ClaimRewardButton({ messageId }: { messageId: string }) {
-  const supabase = createClient()
-  const [loading, setLoading] = useState(false)
-  const [checkingStatus, setCheckingStatus] = useState(true)
-  const [claimState, setClaimState] = useState<{ isClaimed: boolean; coinsGranted?: number }>({
-    isClaimed: false,
-  })
-  const [showModal, setShowModal] = useState(false)
-  const [modalData, setModalData] = useState<{
-    success: boolean
-    coins?: number
-    message: string
-  } | null>(null)
-
-  useEffect(() => {
-    async function checkClaimStatus() {
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-
-        if (!user) {
-          setCheckingStatus(false)
-          return
-        }
-
-        const { data } = await supabase
-          .from("broadcast_claims")
-          .select("coins_claimed")
-          .eq("user_id", user.id)
-          .eq("message_id", messageId)
-          .maybeSingle()
-
-        if (data) {
-          setClaimState({ isClaimed: true, coinsGranted: data.coins_claimed })
-        }
-      } catch (err) {
-        console.error("Error checking claim status:", err)
-      } finally {
-        setCheckingStatus(false)
-      }
-    }
-
-    checkClaimStatus()
-  }, [messageId, supabase])
-
-  async function handleClaim() {
-    setLoading(true)
-    try {
-      const { data, error } = await supabase.rpc("claim_broadcast_reward", {
-        p_message_id: messageId,
-      })
-
-      if (error) throw error
-
-      if (data?.success) {
-        setClaimState({ isClaimed: true, coinsGranted: data.coins_granted })
-        setModalData({
-          success: true,
-          coins: data.coins_granted,
-          message: data.message,
-        })
-      } else {
-        setModalData({
-          success: false,
-          message: data?.message || "Hindi ma-claim ang reward.",
-        })
-      }
-      setShowModal(true)
-    } catch (err: any) {
-      alert(err.message || "Nagka-error sa pag-claim ng compensation reward.")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (checkingStatus) return null
-
-  return (
-    <>
-      <div className="mt-6 pt-4 border-t border-white/10">
-        {claimState.isClaimed ? (
-          <div className="inline-flex items-center gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-4 py-2.5 text-xs font-bold text-emerald-400">
-            <CheckCircle2 size={16} />
-            <span>Na-claim mo na ang compensation ({claimState.coinsGranted} Coins)</span>
-          </div>
-        ) : (
-          <button
-            onClick={handleClaim}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 px-5 py-3 text-xs font-black text-black shadow-lg shadow-amber-500/20 hover:from-amber-300 hover:to-yellow-300 transition transform active:scale-95 disabled:opacity-50"
-          >
-            {loading ? <Loader2 size={16} className="animate-spin" /> : <Gift size={16} />}
-            <span>🎁 Claim Compensation Coins</span>
-          </button>
-        )}
-      </div>
-
-      {showModal && modalData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
-          <div className="relative w-full max-w-sm rounded-3xl border border-amber-500/30 bg-[#0f172a] p-6 text-center shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
-            <button
-              onClick={() => setShowModal(false)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white transition"
-            >
-              <X size={18} />
-            </button>
-
-            {modalData.success ? (
-              <>
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/20 text-amber-400 ring-8 ring-amber-500/10">
-                  <Sparkles size={36} className="animate-bounce" />
-                </div>
-
-                <div className="space-y-1">
-                  <h3 className="text-xl font-black text-white">🎉 Congratulations!</h3>
-                  <p className="text-xs text-slate-300 leading-relaxed">{modalData.message}</p>
-                </div>
-
-                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
-                  <span className="block text-[11px] font-bold text-amber-300 uppercase tracking-widest">
-                    Natanggap Mong Reward
-                  </span>
-                  <span className="text-3xl font-black text-amber-400">
-                    +{modalData.coins} COINS
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="w-full rounded-xl bg-amber-400 py-3 text-xs font-extrabold text-black hover:bg-amber-300 transition"
-                >
-                  Salamat!
-                </button>
-              </>
-            ) : (
-              <div className="py-4 space-y-3">
-                <p className="text-sm font-semibold text-slate-300">{modalData.message}</p>
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="rounded-xl bg-slate-800 px-6 py-2 text-xs font-bold text-white hover:bg-slate-700 transition"
-                >
-                  Isara
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </>
-  )
-}
-
-/* ==========================================================================
-   MAIN MESSAGES PAGE CONTENT
-   ========================================================================== */
 function MessagesPageContent() {
   const supabase = createClient()
   const router = useRouter()
@@ -238,11 +67,11 @@ function MessagesPageContent() {
   const searchParams = useSearchParams()
 
   const [loading, setLoading] = useState(true)
-  const [userName, setUserName] = useState<string>("User")
   const [messages, setMessages] = useState<UserMessage[]>([])
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [showMobileList, setShowMobileList] = useState(true)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [userName, setUserName] = useState<string>("User")
 
   const selectedMessage = useMemo(() => {
     return messages.find((item) => item.id === selectedMessageId) || null
@@ -258,6 +87,7 @@ function MessagesPageContent() {
     void initializePage()
   }, [])
 
+  // Sync selection based on URL changes
   useEffect(() => {
     if (loading || !messages.length || !messageFromUrl) return
     const exists = messages.some((item) => item.id === messageFromUrl)
@@ -267,6 +97,7 @@ function MessagesPageContent() {
     setShowMobileList(false)
   }, [messageFromUrl, messages, loading, selectedMessageId])
 
+  // AUTO-READ WATCHER: Ensures any selected message is automatically marked as read
   useEffect(() => {
     if (selectedMessageId) {
       const currentMsg = messages.find((m) => m.id === selectedMessageId)
@@ -309,22 +140,16 @@ function MessagesPageContent() {
         return
       }
 
-      // Kunin ang tunay na pangalan ng user mula sa Profile
+      // Kunin ang profile name ng user para sa {{name}} variable
       const { data: profile } = await supabase
         .from("profiles")
         .select("full_name, name, username")
         .eq("id", user.id)
         .maybeSingle()
 
-      const resolvedName =
-        profile?.full_name ||
-        profile?.name ||
-        profile?.username ||
-        user.user_metadata?.full_name ||
-        user.user_metadata?.name ||
-        "User"
-
-      setUserName(resolvedName)
+      if (profile) {
+        setUserName(profile.full_name || profile.name || profile.username || "User")
+      }
 
       await loadMessages(user.id)
     } catch (err) {
@@ -355,6 +180,7 @@ function MessagesPageContent() {
       const dismissed = getDismissedIds()
       let filteredList = loadedList.filter((msg) => !dismissed.includes(msg.id))
 
+      // Apply LocalStorage read state for global announcements on load
       if (typeof window !== "undefined") {
         try {
           const readStorageKey = "jb_read_announcements"
@@ -406,6 +232,7 @@ function MessagesPageContent() {
   function markAsRead(messageId: string) {
     const targetMsg = messages.find((m) => m.id === messageId)
 
+    // Update local UI immediately
     setMessages((prev) =>
       prev.map((msg) => (msg.id === messageId ? { ...msg, is_read: true } : msg))
     )
@@ -433,15 +260,14 @@ function MessagesPageContent() {
     }
   }
 
+  // 🛡️ LIGTAS NA DELETE/DISMISS: Para sa user na ito lang mawawala ang message, HINDI sa buong Supabase DB!
   async function handleDeleteMessage(targetId: string) {
-    if (!confirm("Are you sure you want to delete this announcement?")) return
+    if (!confirm("Sigurado ka bang gusto mong alisin ang anunsyong ito sa iyong inbox?")) return
 
     setIsDeleting(true)
 
+    // I-save lang sa localStorage ng user para sa kanya lang mag-hide
     saveDismissedId(targetId)
-
-    await supabase.from("messages").delete().eq("id", targetId)
-    await supabase.from("user_messages").delete().eq("id", targetId)
 
     const remainingMessages = messages.filter((m) => m.id !== targetId)
     setMessages(remainingMessages)
@@ -468,11 +294,12 @@ function MessagesPageContent() {
   }
 
   function renderMessageBody(text: string) {
-    // Awtomatikong palitan ang {{name}} ng tunay na pangalan ng user
+    if (!text) return ""
+
+    // Palitan ang {{name}} variable ng pangalan ng naka-login na user
     const personalizedText = text.replace(/\{\{name\}\}/g, userName)
-    const cleanText = personalizedText.replace(/\[CLAIM_REWARD\]/g, "").trim()
     const urlRegex = /(https?:\/\/[^\s]+)/g
-    const parts = cleanText.split(urlRegex)
+    const parts = personalizedText.split(urlRegex)
 
     return parts.map((part, index) => {
       if (part.match(urlRegex)) {
@@ -494,8 +321,7 @@ function MessagesPageContent() {
 
   function getTitle(msg: UserMessage | null) {
     if (!msg) return "Select an Announcement"
-    const rawTitle = msg.title || msg.subject || "Announcement"
-    return rawTitle.replace(/\{\{name\}\}/g, userName)
+    return msg.title || msg.subject || "Announcement"
   }
 
   function parseAttachments(msg: UserMessage): AttachmentItem[] {
@@ -549,7 +375,6 @@ function MessagesPageContent() {
         <div className="mx-auto w-full max-w-[1800px] px-4 pb-6 sm:px-6 sm:pb-8 lg:px-8">
           <section className="overflow-hidden rounded-[22px] border border-white/10 bg-[#0f172a] shadow-[0_24px_60px_rgba(0,0,0,0.38)] sm:rounded-[30px]">
             <div className="grid min-h-[calc(100vh-8rem)] grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]">
-              
               {/* Sidebar List */}
               <aside
                 className={`border-r border-white/10 bg-[#111827] flex flex-col ${
@@ -572,9 +397,7 @@ function MessagesPageContent() {
 
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
                   {loading ? (
-                    <div className="p-4 text-center text-xs text-slate-400">
-                      Loading announcements...
-                    </div>
+                    <div className="p-4 text-center text-xs text-slate-400">Loading announcements...</div>
                   ) : messages.length === 0 ? (
                     <div className="p-4 text-center text-xs text-slate-400">
                       No announcements yet.
@@ -598,10 +421,13 @@ function MessagesPageContent() {
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="truncate font-bold text-white">{getTitle(item)}</div>
-                          <div className="truncate text-xs text-slate-400">
-                            {item.body.replace(/\{\{name\}\}/g, userName).replace(/\[CLAIM_REWARD\]/g, "")}
+                          <div className="flex items-center gap-1.5 truncate font-bold text-white">
+                            <span className="truncate">{getTitle(item)}</span>
+                            {item.has_reward && (
+                              <Gift size={14} className="text-amber-400 shrink-0" />
+                            )}
                           </div>
+                          <div className="truncate text-xs text-slate-400">{item.body}</div>
                         </div>
                       </button>
                     ))
@@ -641,9 +467,10 @@ function MessagesPageContent() {
                       onClick={() => handleDeleteMessage(selectedMessage.id)}
                       disabled={isDeleting}
                       className="flex items-center gap-1.5 rounded-xl bg-red-500/10 px-3.5 py-2 text-xs font-bold text-red-400 border border-red-500/20 hover:bg-red-500/20 transition disabled:opacity-50"
+                      title="Alisin sa sarili mong inbox"
                     >
                       <Trash2 size={16} />
-                      <span>{isDeleting ? "Deleting..." : "Delete"}</span>
+                      <span>{isDeleting ? "Removing..." : "Dismiss"}</span>
                     </button>
                   )}
                 </div>
@@ -653,16 +480,39 @@ function MessagesPageContent() {
                   {selectedMessage ? (
                     <div className="max-w-3xl rounded-[20px] border border-white/10 bg-[#1e293b] p-6 shadow-md space-y-4">
                       <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                        <h2 className="text-xl font-black text-white">
-                          {getTitle(selectedMessage)}
-                        </h2>
-                        <span className="text-xs text-slate-400">
-                          {formatTime(selectedMessage.created_at)}
-                        </span>
+                        <h2 className="text-xl font-black text-white">{getTitle(selectedMessage)}</h2>
+                        <span className="text-xs text-slate-400">{formatTime(selectedMessage.created_at)}</span>
                       </div>
                       <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">
                         {renderMessageBody(selectedMessage.body)}
                       </p>
+
+                      {/* 🎁 Dedicated Compensation Reward Claim Card */}
+                      {selectedMessage.has_reward && (
+                        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-950/50 via-amber-900/30 to-yellow-950/40 p-5 shadow-xl">
+                          <div className="flex items-center gap-3.5">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                              <Gift size={24} />
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-bold text-amber-200 sm:text-base">
+                                Compensation Reward Available!
+                              </h4>
+                              <p className="text-xs text-amber-300/80">
+                                May kasamang coin reward compensation ang anunsyong ito.
+                              </p>
+                            </div>
+                          </div>
+
+                          <a
+                            href="/wallet"
+                            className="w-full sm:w-auto shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 px-6 py-3 text-xs font-black text-black shadow-lg shadow-amber-500/20 transition-all hover:scale-105 active:scale-95"
+                          >
+                            <Gift size={16} />
+                            <span>Claim Reward Now</span>
+                          </a>
+                        </div>
+                      )}
 
                       {/* Attachment List / Image Previews */}
                       {(() => {
@@ -678,8 +528,7 @@ function MessagesPageContent() {
 
                             <div className="space-y-3">
                               {attachmentsList.map((file, idx) => {
-                                const fileName =
-                                  file.name || file.file_name || file.title || "Attachment"
+                                const fileName = file.name || file.file_name || file.title || "Attachment"
                                 const fileUrl = file.url || file.file_path || "#"
                                 const isImg = isImageFile(fileUrl, fileName)
 
@@ -702,9 +551,7 @@ function MessagesPageContent() {
                                         />
                                       </a>
                                       <div className="flex items-center justify-between p-3 text-xs bg-[#0f172a] border-t border-white/10">
-                                        <span className="truncate font-medium text-slate-300">
-                                          {fileName}
-                                        </span>
+                                        <span className="truncate font-medium text-slate-300">{fileName}</span>
                                         <a
                                           href={fileUrl}
                                           target="_blank"
@@ -731,9 +578,7 @@ function MessagesPageContent() {
                                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400">
                                         <Paperclip size={16} />
                                       </div>
-                                      <span className="truncate font-semibold text-slate-200">
-                                        {fileName}
-                                      </span>
+                                      <span className="truncate font-semibold text-slate-200">{fileName}</span>
                                     </div>
                                     <Download size={15} className="text-slate-400 shrink-0" />
                                   </a>
@@ -743,11 +588,6 @@ function MessagesPageContent() {
                           </div>
                         )
                       })()}
-
-                      {/* COMPENSATION CLAIM BUTTON */}
-                      {(selectedMessage.has_reward || selectedMessage.body.includes("[CLAIM_REWARD]")) && (
-                        <ClaimRewardButton messageId={selectedMessage.id} />
-                      )}
                     </div>
                   ) : (
                     <div className="flex h-full items-center justify-center text-sm text-slate-400">
