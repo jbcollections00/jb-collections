@@ -56,9 +56,9 @@ function normalizeMembership(profile?: ProfileRow | null): MembershipLevel {
 
 function getBaseDownloadCoinCost(level: MembershipLevel): number {
   if (level === "admin") return 0
-  if (level === "platinum") return 60
-  if (level === "premium") return 80
-  return 100
+  if (level === "platinum") return 120
+  if (level === "premium") return 180
+  return 250
 }
 
 function getDownloadCoinCost(level: MembershipLevel, file?: FileRow | null): number {

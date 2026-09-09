@@ -38,7 +38,7 @@ const SMARTLINK_TASKS = [
 function EarnCoinsPageContent() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
-  
+
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
 
@@ -74,6 +74,8 @@ function EarnCoinsPageContent() {
         if (profile) {
           setAdWatchCount(profile.ad_watch_count || 0)
         }
+      } catch (err) {
+        console.error("Auth verification failed:", err)
       } finally {
         setCheckingAuth(false)
       }
@@ -87,6 +89,7 @@ function EarnCoinsPageContent() {
     if (!showAdModal || cooldown <= 0) return
 
     const interval = setInterval(() => {
+      // Document is hidden when user switches to the newly opened sponsor tab
       if (document.hidden) {
         setIsTabFocused(true)
         setCooldown((prev) => Math.max(0, prev - 1))
@@ -131,22 +134,26 @@ function EarnCoinsPageContent() {
         dailyAdCoins = 0
       }
 
-      const DAILY_LIMIT = 2000
+      const DAILY_LIMIT = 1000
       const remainingLimit = Math.max(0, DAILY_LIMIT - dailyAdCoins)
-      
+
       const actualReward = Math.min(activeTaskReward, remainingLimit)
       const newDailyAdCoins = dailyAdCoins + actualReward
       const updatedCoins = currentCoins + actualReward
 
-      await supabase
+      const { error: updateError } = await supabase
         .from("profiles")
-        .update({ 
+        .update({
           ad_watch_count: newCount,
           coins: updatedCoins,
           daily_ad_coins: newDailyAdCoins,
-          last_ad_date: todayStr
+          last_ad_date: todayStr,
         })
         .eq("id", userId)
+
+      if (updateError) {
+        throw updateError
+      }
 
       if (actualReward > 0) {
         await supabase.from("coin_history").insert({
@@ -156,18 +163,23 @@ function EarnCoinsPageContent() {
           description: "Completed SmartLink Task",
         })
 
-        window.dispatchEvent(new CustomEvent("jb-coins-updated", { detail: { reward: actualReward } }))
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("jb-coins-updated", { detail: { reward: actualReward } })
+          )
+        }
         alert(`💰 You received ${actualReward} JB Coins!`)
       } else {
-        alert(`📺 Task counted! You have reached your daily limit of 2,000 JB Coins. Come back tomorrow!`)
+        alert(
+          `📺 Task counted! You have reached your daily limit of 1,000 JB Coins. Come back tomorrow!`
+        )
       }
 
       setAdWatchCount(newCount)
       setShowAdModal(false)
-      
     } catch (err) {
-      console.error("Error claiming ad:", err)
-      alert("Something went wrong. Please try again.")
+      console.error("Error claiming ad reward:", err)
+      alert("Something went wrong claiming your reward. Please try again.")
     } finally {
       setClaiming(false)
     }
@@ -199,7 +211,7 @@ function EarnCoinsPageContent() {
 
           {/* USER INSTRUCTION BANNER */}
           <div className="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 backdrop-blur-md">
-            <div className="flex items-center gap-2 mb-3 text-amber-400">
+            <div className="mb-3 flex items-center gap-2 text-amber-400">
               <span className="text-lg">💡</span>
               <h3 className="text-sm font-black uppercase tracking-wider">
                 Paalala at Instruksyon sa Pag-Watch ng Ads
@@ -208,40 +220,51 @@ function EarnCoinsPageContent() {
 
             <ul className="grid gap-3 text-xs font-medium text-amber-100/90 sm:grid-cols-3">
               <li className="rounded-xl border border-amber-500/20 bg-black/40 p-3.5">
-                <strong className="block mb-1 text-white text-xs font-bold">1. Maghintay sa Ad Page</strong>
-                Kapag nagbukas ang sponsor link (tulad ng <code className="text-amber-300 font-mono">profitableratecpmnetwork.com</code> o <code className="text-amber-300 font-mono font-semibold">omg10.com</code>), manatili roon nang ayon sa segundo ng napili mong task (10s, 15s, 30s, o 60s).
+                <strong className="mb-1 block text-xs font-bold text-white">
+                  1. Maghintay sa Ad Page
+                </strong>
+                Kapag nagbukas ang sponsor link (tulad ng{" "}
+                <code className="font-mono text-amber-300">profitableratecpmnetwork.com</code> o{" "}
+                <code className="font-mono font-semibold text-amber-300">omg10.com</code>), manatili
+                roon nang ayon sa segundo ng napili mong task (10s, 15s, 30s, o 60s).
               </li>
 
               <li className="rounded-xl border border-amber-500/20 bg-black/40 p-3.5">
-                <strong className="block mb-1 text-white text-xs font-bold">2. Pwede i-Close / i-Back</strong>
-                Kung may ibang ads o extra pop-up page na lumabas, maaari mo na itong i-close o i-back pagkatapos ng itinakdang oras ng countdown.
+                <strong className="mb-1 block text-xs font-bold text-white">
+                  2. Pwede i-Close / i-Back
+                </strong>
+                Kung may ibang ads o extra pop-up page na lumabas, maaari mo na itong i-close o
+                i-back pagkatapos ng itinakdang oras ng countdown.
               </li>
 
               <li className="rounded-xl border border-amber-500/20 bg-black/40 p-3.5">
-                <strong className="block mb-1 text-white text-xs font-bold">3. I-claim ang Coins</strong>
-                Bumalik sa tab na ito at i-click ang <strong className="text-emerald-400 font-extrabold">Claim Coins</strong> button kapag natapos na ang timer para pumasok ang reward sa iyong JB Wallet.
+                <strong className="mb-1 block text-xs font-bold text-white">
+                  3. I-claim ang Coins
+                </strong>
+                Bumalik sa tab na ito at i-click ang{" "}
+                <strong className="font-extrabold text-emerald-400">Claim Coins</strong> button
+                kapag natapos na ang timer para pumasok ang reward sa iyong JB Wallet.
               </li>
             </ul>
           </div>
 
           {/* MAIN UNLIMITED ADS BUTTON (MONETAG CRAZY LINK) */}
           <div className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/60 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-md">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between mb-5">
+            <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-400">
                   Unlimited Earnings
                 </p>
-                <h2 className="mt-1 text-2xl font-black text-white">
-                  Watch Ads, Earn Coins
-                </h2>
+                <h2 className="mt-1 text-2xl font-black text-white">Watch Ads, Earn Coins</h2>
                 <p className="mt-1 text-sm text-slate-400">
-                  Earn <strong className="text-amber-400">15 JB Coins</strong> for every ad you watch! (Max 2,000 Coins/day)
+                  Earn <strong className="text-amber-400">15 JB Coins</strong> for every ad you
+                  watch! (Max 1,000 Coins/day)
                 </p>
               </div>
             </div>
 
-            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950 p-6 flex flex-col items-center justify-center min-h-[180px]">
-              <div className="w-full max-w-md mx-auto text-center">
+            <div className="relative flex min-h-[180px] flex-col items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-slate-950 p-6">
+              <div className="mx-auto w-full max-w-md text-center">
                 <div className="mb-4">
                   <span className="text-5xl">📺</span>
                 </div>
@@ -264,14 +287,12 @@ function EarnCoinsPageContent() {
 
           {/* TIERED SMARTLINK TASKS */}
           <section className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/60 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-md">
-            <div className="flex flex-col gap-4 mb-6">
+            <div className="mb-6 flex flex-col gap-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-400">
                   Smart Tasks
                 </p>
-                <h2 className="mt-1 text-2xl font-black text-white">
-                  High Paying Visit Tasks
-                </h2>
+                <h2 className="mt-1 text-2xl font-black text-white">High Paying Visit Tasks</h2>
                 <p className="mt-1 text-sm text-slate-400">
                   Pumili ng task. Mas matagal na pagbisita, mas malaking reward ang makukuha mo.
                 </p>
@@ -286,8 +307,8 @@ function EarnCoinsPageContent() {
                     className="flex flex-col justify-between rounded-2xl border border-white/10 bg-slate-900/80 p-5 text-left transition hover:border-sky-500/40 hover:bg-slate-900"
                   >
                     <div>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="rounded-full bg-sky-500/10 border border-sky-500/20 px-2.5 py-0.5 text-[11px] font-extrabold uppercase text-sky-400">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-extrabold uppercase text-sky-400">
                           {task.cooldown}s Timer
                         </span>
                         <span className="text-xs font-bold text-amber-400">
@@ -295,9 +316,7 @@ function EarnCoinsPageContent() {
                         </span>
                       </div>
                       <h4 className="text-base font-bold text-white">{task.title}</h4>
-                      <p className="mt-1 text-xs text-slate-400">
-                        {task.description}
-                      </p>
+                      <p className="mt-1 text-xs text-slate-400">{task.description}</p>
                     </div>
 
                     <button
@@ -316,36 +335,36 @@ function EarnCoinsPageContent() {
 
       {/* --- DYNAMIC AD VALIDATION MODAL --- */}
       {showAdModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-in fade-in duration-200">
           <div className="relative w-full max-w-md rounded-3xl border border-white/20 bg-slate-900 p-6 text-center text-white shadow-2xl">
-            <button 
+            <button
               onClick={() => setShowAdModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white text-sm font-bold bg-white/5 hover:bg-white/10 px-3 py-1 rounded-full transition"
+              className="absolute top-4 right-4 rounded-full bg-white/5 px-3 py-1 text-sm font-bold text-slate-400 transition hover:bg-white/10 hover:text-white"
             >
               ✕ Close
             </button>
 
-            <h3 className="text-xl font-black text-white mt-2">Validating Visit</h3>
+            <h3 className="mt-2 text-xl font-black text-white">Validating Visit</h3>
             <p className="mt-1 text-xs text-slate-300">
               Please stay on the newly opened tab to claim your reward.
             </p>
 
             <div className="my-6 flex min-h-[200px] flex-col items-center justify-center rounded-2xl border border-emerald-500/20 bg-slate-950/80 p-6 text-center">
               <div className="relative mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-2xl text-emerald-400">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-20"></span>
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-20"></span>
                 🌐
               </div>
               <p className="text-sm font-bold text-emerald-400">Sponsor Page Active</p>
-              
+
               {!isTabFocused && cooldown > 0 && (
-                <p className="mt-2 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
+                <p className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2 text-xs font-semibold text-amber-400">
                   ⚠️ Timer paused! Please switch back to the sponsor tab to continue countdown.
                 </p>
               )}
             </div>
 
             {cooldown > 0 ? (
-              <div className="w-full rounded-xl bg-slate-800 py-3 text-center text-sm font-bold text-amber-400 border border-amber-500/20">
+              <div className="w-full rounded-xl border border-amber-500/20 bg-slate-800 py-3 text-center text-sm font-bold text-amber-400">
                 Stay on ad tab for {cooldown}s to Claim...
               </div>
             ) : (

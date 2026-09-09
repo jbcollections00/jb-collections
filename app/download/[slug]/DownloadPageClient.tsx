@@ -15,8 +15,6 @@ type FileRow = {
   title?: string | null
   description?: string | null
   visibility?: FileVisibility | null
-  shrinkme_url?: string | null
-  linkvertise_url?: string | null
   monetization_enabled?: boolean | null
   status?: string | null
   category_id?: string | null
@@ -150,11 +148,20 @@ function getShortDescription(file: FileRow | null) {
   return raw
 }
 
-function getDownloadCoinCost(level: MembershipLevel) {
+function getDownloadCoinCost(level: MembershipLevel, file?: FileRow | null) {
   if (level === "admin") return 0
-  if (level === "platinum") return 60
-  if (level === "premium") return 80
-  return 100
+
+  let cost = 250
+  if (level === "platinum") cost = 120
+  else if (level === "premium") cost = 180
+
+  if (file) {
+    const downloadsCount = Number(file.downloads_count || 0)
+    if (downloadsCount >= 5000) cost += 5
+    else if (downloadsCount >= 1000) cost += 2
+  }
+
+  return Math.max(0, cost)
 }
 
 function getRewardAmount(level: MembershipLevel) {
@@ -210,7 +217,10 @@ export default function DownloadPageClient() {
   const previewAsset = useMemo(() => getPreviewAsset(file), [file])
   const previewKind = useMemo(() => inferPreviewKind(file), [file])
   const fileTypeLabel = useMemo(() => inferExtension(file), [file])
-  const estimatedCoinCost = useMemo(() => getDownloadCoinCost(membershipLevel), [membershipLevel])
+  const estimatedCoinCost = useMemo(
+    () => getDownloadCoinCost(membershipLevel, file),
+    [membershipLevel, file]
+  )
 
   const clearRewardNoticeTimer = useCallback(() => {
     if (rewardNoticeTimerRef.current) {
@@ -389,7 +399,7 @@ export default function DownloadPageClient() {
       const baseQuery = supabase
         .from("files")
         .select(
-          "id, title, description, visibility, shrinkme_url, linkvertise_url, monetization_enabled, status, category_id, thumbnail_url, cover_url, file_url, slug, downloads_count, created_at, updated_at, file_type"
+          "id, title, description, visibility, monetization_enabled, status, category_id, thumbnail_url, cover_url, file_url, slug, downloads_count, created_at, updated_at, file_type"
         )
         .eq("status", "published")
 
@@ -465,7 +475,7 @@ export default function DownloadPageClient() {
             monetization_enabled: foundFile.monetization_enabled !== false,
             unlocked_from_query: unlockedFromQuery,
             membership_level: level,
-            estimated_coin_cost: getDownloadCoinCost(level),
+            estimated_coin_cost: getDownloadCoinCost(level, foundFile),
           },
           realFileId
         )
@@ -555,7 +565,9 @@ export default function DownloadPageClient() {
       if (!res.ok) {
         if (res.status === 402) {
           setRequiredCoins(Number(data?.requiredCoins ?? data?.required ?? estimatedCoinCost))
-          setCurrentCoins(Number(data?.currentCoins ?? data?.coins ?? data?.jb_coins ?? data?.balance ?? 0))
+          setCurrentCoins(
+            Number(data?.currentCoins ?? data?.coins ?? data?.jb_coins ?? data?.balance ?? 0)
+          )
           setShowInsufficientCoins(true)
           setStartingDownload(false)
           return
@@ -581,10 +593,10 @@ export default function DownloadPageClient() {
       }
 
       if (data?.redirectUrl) {
-        const isExternalGate = /linkvertise|shrinkme/i.test(data.redirectUrl)
-        const isSelf = typeof window !== "undefined" && data.redirectUrl.includes(window.location.pathname)
+        const isSelf =
+          typeof window !== "undefined" && data.redirectUrl.includes(window.location.pathname)
 
-        if (!isExternalGate && !isSelf) {
+        if (!isSelf) {
           window.location.href = data.redirectUrl
           return
         }
@@ -912,9 +924,9 @@ export default function DownloadPageClient() {
       )}
 
       {showAdModal && (
-        <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
-          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl text-center">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-600">
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-md">
+          <div className="relative my-auto flex max-h-[90vh] w-full max-w-md flex-col overflow-y-auto rounded-3xl border border-slate-200 bg-white p-5 text-center shadow-2xl sm:p-6">
+            <div className="mb-3 inline-flex items-center justify-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-600">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"></span>
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500"></span>
@@ -923,21 +935,21 @@ export default function DownloadPageClient() {
             </div>
 
             <h3 className="text-xl font-black text-slate-900">Preparing Secure Download</h3>
-            
+
             <p className="mt-2 text-xs leading-relaxed text-slate-500">
               Due to high concurrent download requests from our users, we require a brief countdown to prevent server congestion and ensure high-speed delivery.
             </p>
 
-            <div className="my-5 flex flex-col items-center justify-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-900 text-2xl font-black text-white shadow-inner">
+            <div className="my-3 flex flex-col items-center justify-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-2xl font-black text-white shadow-inner">
                 {adTimer > 0 ? adTimer : "✓"}
               </div>
-              <p className="mt-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              <p className="mt-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
                 {adTimer > 0 ? "Please wait..." : "Ready to proceed"}
               </p>
             </div>
 
-            <div className="my-4 flex items-center justify-center">
+            <div className="my-3 flex items-center justify-center">
               <AdsterraBanner />
             </div>
 
@@ -945,7 +957,7 @@ export default function DownloadPageClient() {
               type="button"
               disabled={!canProceedFromAd}
               onClick={handleAdModalComplete}
-              className="mt-2 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3.5 text-xs font-bold text-white shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-40"
+              className="mt-2 w-full shrink-0 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3.5 text-xs font-bold text-white shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {canProceedFromAd ? "Continue to Confirmation →" : `Please wait ${adTimer}s...`}
             </button>
