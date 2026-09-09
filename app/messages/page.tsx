@@ -2,7 +2,18 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Lock, Megaphone, ArrowLeft, Trash2, Paperclip, Download, Gift } from "lucide-react"
+import {
+  Lock,
+  Megaphone,
+  ArrowLeft,
+  Trash2,
+  Paperclip,
+  Download,
+  Gift,
+  CheckCircle2,
+  Loader2,
+  Sparkles,
+} from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import SiteHeader from "@/app/components/SiteHeader"
 
@@ -72,6 +83,15 @@ function MessagesPageContent() {
   const [showMobileList, setShowMobileList] = useState(true)
   const [isDeleting, setIsDeleting] = useState(false)
   const [userName, setUserName] = useState<string>("User")
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  // Reward States
+  const [claimedMessageIds, setClaimedMessageIds] = useState<string[]>([])
+  const [isClaiming, setIsClaiming] = useState(false)
+  const [rewardModal, setRewardModal] = useState<{ open: boolean; coins: number }>({
+    open: false,
+    coins: 0,
+  })
 
   const selectedMessage = useMemo(() => {
     return messages.find((item) => item.id === selectedMessageId) || null
@@ -87,7 +107,6 @@ function MessagesPageContent() {
     void initializePage()
   }, [])
 
-  // Sync selection based on URL changes
   useEffect(() => {
     if (loading || !messages.length || !messageFromUrl) return
     const exists = messages.some((item) => item.id === messageFromUrl)
@@ -97,7 +116,6 @@ function MessagesPageContent() {
     setShowMobileList(false)
   }, [messageFromUrl, messages, loading, selectedMessageId])
 
-  // AUTO-READ WATCHER: Ensures any selected message is automatically marked as read
   useEffect(() => {
     if (selectedMessageId) {
       const currentMsg = messages.find((m) => m.id === selectedMessageId)
@@ -140,7 +158,8 @@ function MessagesPageContent() {
         return
       }
 
-      // Kunin ang profile name ng user para sa {{name}} variable
+      setCurrentUserId(user.id)
+
       const { data: profile } = await supabase
         .from("profiles")
         .select("full_name, name, username")
@@ -149,6 +168,16 @@ function MessagesPageContent() {
 
       if (profile) {
         setUserName(profile.full_name || profile.name || profile.username || "User")
+      }
+
+      // Load Claim History
+      const { data: claims } = await supabase
+        .from("reward_claims")
+        .select("message_id")
+        .eq("user_id", user.id)
+
+      if (claims) {
+        setClaimedMessageIds(claims.map((c) => c.message_id))
       }
 
       await loadMessages(user.id)
@@ -180,7 +209,6 @@ function MessagesPageContent() {
       const dismissed = getDismissedIds()
       let filteredList = loadedList.filter((msg) => !dismissed.includes(msg.id))
 
-      // Apply LocalStorage read state for global announcements on load
       if (typeof window !== "undefined") {
         try {
           const readStorageKey = "jb_read_announcements"
@@ -232,7 +260,6 @@ function MessagesPageContent() {
   function markAsRead(messageId: string) {
     const targetMsg = messages.find((m) => m.id === messageId)
 
-    // Update local UI immediately
     setMessages((prev) =>
       prev.map((msg) => (msg.id === messageId ? { ...msg, is_read: true } : msg))
     )
@@ -260,13 +287,10 @@ function MessagesPageContent() {
     }
   }
 
-  // 🛡️ LIGTAS NA DELETE/DISMISS: Para sa user na ito lang mawawala ang message, HINDI sa buong Supabase DB!
   async function handleDeleteMessage(targetId: string) {
     if (!confirm("Sigurado ka bang gusto mong alisin ang anunsyong ito sa iyong inbox?")) return
 
     setIsDeleting(true)
-
-    // I-save lang sa localStorage ng user para sa kanya lang mag-hide
     saveDismissedId(targetId)
 
     const remainingMessages = messages.filter((m) => m.id !== targetId)
@@ -284,6 +308,40 @@ function MessagesPageContent() {
     setIsDeleting(false)
   }
 
+  async function handleClaimReward() {
+    if (!selectedMessage || isClaiming) return
+
+    setIsClaiming(true)
+
+    try {
+      const wonCoins = Math.floor(Math.random() * (500 - 200 + 1)) + 200
+
+      const { error } = await supabase.rpc("claim_compensation_reward", {
+        p_message_id: selectedMessage.id,
+        p_reward_coins: wonCoins,
+      })
+
+      if (error) {
+        if (error.message.includes("already claimed")) {
+          alert("Naka-claim ka na ng reward para sa anunsyong ito!")
+          setClaimedMessageIds((prev) => [...prev, selectedMessage.id])
+          return
+        }
+        throw error
+      }
+
+      setClaimedMessageIds((prev) => [...prev, selectedMessage.id])
+      setRewardModal({ open: true, coins: wonCoins })
+    } catch (err: unknown) {
+      console.error("Error claiming reward:", err)
+      const errorMessage =
+        err instanceof Error ? err.message : "Nagka-error sa pag-claim ng reward."
+      alert(errorMessage)
+    } finally {
+      setIsClaiming(false)
+    }
+  }
+
   function formatTime(dateString: string) {
     return new Date(dateString).toLocaleString([], {
       month: "short",
@@ -296,7 +354,6 @@ function MessagesPageContent() {
   function renderMessageBody(text: string) {
     if (!text) return ""
 
-    // Palitan ang {{name}} variable ng pangalan ng naka-login na user
     const personalizedText = text.replace(/\{\{name\}\}/g, userName)
     const urlRegex = /(https?:\/\/[^\s]+)/g
     const parts = personalizedText.split(urlRegex)
@@ -309,7 +366,7 @@ function MessagesPageContent() {
             href={part}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-cyan-400 font-bold underline hover:text-cyan-300 break-all"
+            className="font-bold text-cyan-400 underline hover:text-cyan-300 break-all"
           >
             {part}
           </a>
@@ -377,7 +434,7 @@ function MessagesPageContent() {
             <div className="grid min-h-[calc(100vh-8rem)] grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]">
               {/* Sidebar List */}
               <aside
-                className={`border-r border-white/10 bg-[#111827] flex flex-col ${
+                className={`flex flex-col border-r border-white/10 bg-[#111827] ${
                   showMobileList ? "block" : "hidden lg:flex"
                 }`}
               >
@@ -395,9 +452,11 @@ function MessagesPageContent() {
                   </h2>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                <div className="flex-1 space-y-2 overflow-y-auto p-3">
                   {loading ? (
-                    <div className="p-4 text-center text-xs text-slate-400">Loading announcements...</div>
+                    <div className="p-4 text-center text-xs text-slate-400">
+                      Loading announcements...
+                    </div>
                   ) : messages.length === 0 ? (
                     <div className="p-4 text-center text-xs text-slate-400">
                       No announcements yet.
@@ -424,7 +483,7 @@ function MessagesPageContent() {
                           <div className="flex items-center gap-1.5 truncate font-bold text-white">
                             <span className="truncate">{getTitle(item)}</span>
                             {item.has_reward && (
-                              <Gift size={14} className="text-amber-400 shrink-0" />
+                              <Gift size={14} className="shrink-0 text-amber-400" />
                             )}
                           </div>
                           <div className="truncate text-xs text-slate-400">{item.body}</div>
@@ -442,16 +501,16 @@ function MessagesPageContent() {
                 }`}
               >
                 {/* Header Pane */}
-                <div className="border-b border-white/10 bg-[#0f172a] px-4 py-4 sm:px-6 flex items-center justify-between">
+                <div className="flex items-center justify-between border-b border-white/10 bg-[#0f172a] px-4 py-4 sm:px-6">
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => setShowMobileList(true)}
-                      className="lg:hidden p-2 rounded-lg bg-white/5 text-slate-300 hover:text-white"
+                      className="rounded-lg bg-white/5 p-2 text-slate-300 hover:text-white lg:hidden"
                     >
                       <ArrowLeft size={18} />
                     </button>
 
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white shrink-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white">
                       <Megaphone size={18} />
                     </div>
                     <div>
@@ -466,7 +525,7 @@ function MessagesPageContent() {
                     <button
                       onClick={() => handleDeleteMessage(selectedMessage.id)}
                       disabled={isDeleting}
-                      className="flex items-center gap-1.5 rounded-xl bg-red-500/10 px-3.5 py-2 text-xs font-bold text-red-400 border border-red-500/20 hover:bg-red-500/20 transition disabled:opacity-50"
+                      className="flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/10 px-3.5 py-2 text-xs font-bold text-red-400 transition hover:bg-red-500/20 disabled:opacity-50"
                       title="Alisin sa sarili mong inbox"
                     >
                       <Trash2 size={16} />
@@ -478,20 +537,24 @@ function MessagesPageContent() {
                 {/* Body Content */}
                 <div className="flex-1 overflow-y-auto p-4 sm:p-6">
                   {selectedMessage ? (
-                    <div className="max-w-3xl rounded-[20px] border border-white/10 bg-[#1e293b] p-6 shadow-md space-y-4">
+                    <div className="max-w-3xl space-y-4 rounded-[20px] border border-white/10 bg-[#1e293b] p-6 shadow-md">
                       <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                        <h2 className="text-xl font-black text-white">{getTitle(selectedMessage)}</h2>
-                        <span className="text-xs text-slate-400">{formatTime(selectedMessage.created_at)}</span>
+                        <h2 className="text-xl font-black text-white">
+                          {getTitle(selectedMessage)}
+                        </h2>
+                        <span className="text-xs text-slate-400">
+                          {formatTime(selectedMessage.created_at)}
+                        </span>
                       </div>
                       <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">
                         {renderMessageBody(selectedMessage.body)}
                       </p>
 
-                      {/* 🎁 Dedicated Compensation Reward Claim Card */}
+                      {/* Reward Card */}
                       {selectedMessage.has_reward && (
-                        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-950/50 via-amber-900/30 to-yellow-950/40 p-5 shadow-xl">
+                        <div className="mt-6 flex flex-col items-center justify-between gap-4 rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-950/50 via-amber-900/30 to-yellow-950/40 p-5 shadow-xl sm:flex-row">
                           <div className="flex items-center gap-3.5">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/20 text-amber-400">
                               <Gift size={24} />
                             </div>
                             <div>
@@ -499,36 +562,59 @@ function MessagesPageContent() {
                                 Compensation Reward Available!
                               </h4>
                               <p className="text-xs text-amber-300/80">
-                                May kasamang coin reward compensation ang anunsyong ito.
+                                {claimedMessageIds.includes(selectedMessage.id)
+                                  ? "Nakuha mo na ang iyong coin compensation reward sa anunsyong ito."
+                                  : "I-click ang button para makakuha ng random compensation coins (200-500 JB Coins)."}
                               </p>
                             </div>
                           </div>
 
-                          <a
-                            href="/wallet"
-                            className="w-full sm:w-auto shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 px-6 py-3 text-xs font-black text-black shadow-lg shadow-amber-500/20 transition-all hover:scale-105 active:scale-95"
-                          >
-                            <Gift size={16} />
-                            <span>Claim Reward Now</span>
-                          </a>
+                          {claimedMessageIds.includes(selectedMessage.id) ? (
+                            <button
+                              disabled
+                              className="inline-flex w-full shrink-0 cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/20 px-6 py-3 text-xs font-black text-emerald-400 sm:w-auto"
+                            >
+                              <CheckCircle2 size={16} />
+                              <span>Reward Claimed</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={handleClaimReward}
+                              disabled={isClaiming}
+                              className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 px-6 py-3 text-xs font-black text-black shadow-lg shadow-amber-500/20 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 sm:w-auto"
+                            >
+                              {isClaiming ? (
+                                <>
+                                  <Loader2 size={16} className="animate-spin" />
+                                  <span>Claiming...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Gift size={16} />
+                                  <span>Claim Reward Now</span>
+                                </>
+                              )}
+                            </button>
+                          )}
                         </div>
                       )}
 
-                      {/* Attachment List / Image Previews */}
+                      {/* Attachments */}
                       {(() => {
                         const attachmentsList = parseAttachments(selectedMessage)
                         if (!attachmentsList.length) return null
 
                         return (
-                          <div className="mt-6 border-t border-white/10 pt-4 space-y-3">
-                            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                          <div className="mt-6 space-y-3 border-t border-white/10 pt-4">
+                            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
                               <Paperclip size={13} />
                               <span>Attachments ({attachmentsList.length})</span>
                             </div>
 
                             <div className="space-y-3">
                               {attachmentsList.map((file, idx) => {
-                                const fileName = file.name || file.file_name || file.title || "Attachment"
+                                const fileName =
+                                  file.name || file.file_name || file.title || "Attachment"
                                 const fileUrl = file.url || file.file_path || "#"
                                 const isImg = isImageFile(fileUrl, fileName)
 
@@ -547,16 +633,18 @@ function MessagesPageContent() {
                                         <img
                                           src={fileUrl}
                                           alt={fileName}
-                                          className="max-h-96 w-full object-contain rounded-t-xl bg-black/40 transition-transform duration-300 group-hover:scale-[1.01]"
+                                          className="max-h-96 w-full rounded-t-xl bg-black/40 object-contain transition-transform duration-300 group-hover:scale-[1.01]"
                                         />
                                       </a>
-                                      <div className="flex items-center justify-between p-3 text-xs bg-[#0f172a] border-t border-white/10">
-                                        <span className="truncate font-medium text-slate-300">{fileName}</span>
+                                      <div className="flex items-center justify-between border-t border-white/10 bg-[#0f172a] p-3 text-xs">
+                                        <span className="truncate font-medium text-slate-300">
+                                          {fileName}
+                                        </span>
                                         <a
                                           href={fileUrl}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="flex items-center gap-1 text-cyan-400 font-bold hover:underline shrink-0 ml-2"
+                                          className="ml-2 flex shrink-0 items-center gap-1 font-bold text-cyan-400 hover:underline"
                                         >
                                           <Download size={14} />
                                           <span>Open Full</span>
@@ -574,13 +662,15 @@ function MessagesPageContent() {
                                     rel="noopener noreferrer"
                                     className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#0f172a] p-3 text-xs transition hover:border-cyan-500/50 hover:bg-[#111827]"
                                   >
-                                    <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="flex min-w-0 items-center gap-2.5">
                                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400">
                                         <Paperclip size={16} />
                                       </div>
-                                      <span className="truncate font-semibold text-slate-200">{fileName}</span>
+                                      <span className="truncate font-semibold text-slate-200">
+                                        {fileName}
+                                      </span>
                                     </div>
-                                    <Download size={15} className="text-slate-400 shrink-0" />
+                                    <Download size={15} className="shrink-0 text-slate-400" />
                                   </a>
                                 )
                               })}
@@ -598,7 +688,7 @@ function MessagesPageContent() {
 
                 {/* Footer Banner */}
                 <div className="border-t border-white/10 bg-[#0f172a] p-4 text-center">
-                  <div className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 bg-white/5 px-4 py-2 rounded-full border border-white/10">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-slate-400">
                     <Lock size={14} className="text-cyan-400" />
                     <span>Replies are disabled for this channel. Need help? Use </span>
                     <a href="/contact" className="text-cyan-400 underline hover:text-cyan-300">
@@ -606,11 +696,53 @@ function MessagesPageContent() {
                     </a>
                   </div>
                 </div>
-
               </section>
             </div>
           </section>
         </div>
+
+        {/* Celebration Modal Animation */}
+        {rewardModal.open && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-in fade-in duration-300">
+            <div className="relative w-full max-w-sm overflow-hidden rounded-3xl border-2 border-amber-400/60 bg-gradient-to-b from-[#1e1b4b] via-[#0f172a] to-[#020617] p-8 text-center shadow-[0_0_80px_rgba(245,158,11,0.35)] animate-in zoom-in-95 duration-300">
+              <div className="pointer-events-none absolute -top-20 left-1/2 h-40 w-40 -translate-x-1/2 rounded-full bg-amber-500/30 blur-3xl" />
+
+              <div className="relative mx-auto flex h-24 w-24 animate-bounce items-center justify-center rounded-3xl bg-gradient-to-br from-amber-400 to-yellow-600 text-black shadow-xl shadow-amber-500/40">
+                <Gift size={48} className="drop-shadow-md" />
+                <Sparkles className="absolute -top-2 -right-2 animate-spin text-yellow-200" size={24} />
+              </div>
+
+              <h2 className="mt-6 text-2xl font-black tracking-wide text-white">
+                CONGRATULATIONS! 🎉
+              </h2>
+
+              <p className="mt-2 text-xs font-medium uppercase tracking-widest text-amber-200/80">
+                Compensation Reward Received
+              </p>
+
+              <div className="my-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 py-4 shadow-inner">
+                <span className="block text-xs font-bold text-amber-300/80">YOU WON</span>
+                <span className="text-4xl font-black text-amber-400 drop-shadow-[0_2px_10px_rgba(245,158,11,0.5)]">
+                  +{rewardModal.coins} JB COINS
+                </span>
+              </div>
+
+              <p className="text-xs leading-relaxed text-slate-300">
+                Awtomatikong naisama at naidagdag na sa iyong JB Wallet ang napanalunang coins!
+              </p>
+
+              <button
+                onClick={() => {
+                  setRewardModal({ open: false, coins: 0 })
+                  window.location.reload()
+                }}
+                className="mt-6 w-full rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 py-3.5 text-sm font-black text-black shadow-lg shadow-amber-500/30 transition-all hover:scale-105 active:scale-95"
+              >
+                Collect & Continue
+              </button>
+            </div>
+          </div>
+        )}
       </main>
     </>
   )
