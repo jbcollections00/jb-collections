@@ -13,6 +13,8 @@ import {
   Trash2,
   Loader2,
   FileText,
+  FileTextIcon,
+  Gift,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import SiteHeader from "@/app/components/SiteHeader"
@@ -37,6 +39,46 @@ type GroupedBroadcast = {
   created_at: string
   recipientCount: number
   attachments?: any
+  has_reward?: boolean
+}
+
+// Helper function para gawing clickable ang links at palitan ang {{name}} placeholder
+export function renderFormattedMessage(text: string, namePlaceholder: string = "User") {
+  if (!text) return null
+
+  // 1. Palitan ang {{name}} ng aktuwal na pangalan
+  const personalizedText = text.replace(/\{\{name\}\}/g, namePlaceholder)
+
+  // 2. Regex para maghanap ng URLs (http, https, www)
+  const urlRegex = /(https?:\/\/[^\s]+)/g
+
+  const lines = personalizedText.split("\n")
+
+  return lines.map((line, lineIndex) => {
+    const parts = line.split(urlRegex)
+    return (
+      <span key={lineIndex}>
+        {parts.map((part, partIndex) => {
+          if (part.match(urlRegex)) {
+            return (
+              <a
+                key={partIndex}
+                href={part}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-cyan-400 underline hover:text-cyan-300 font-medium break-all"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {part}
+              </a>
+            )
+          }
+          return part
+        })}
+        {lineIndex < lines.length - 1 && <br />}
+      </span>
+    )
+  })
 }
 
 export default function AdminMessagesPage() {
@@ -51,6 +93,7 @@ export default function AdminMessagesPage() {
   const [sendToOption, setSendToOption] = useState<string>("all")
   const [title, setTitle] = useState("")
   const [body, setBody] = useState("")
+  const [hasReward, setHasReward] = useState(false)
   const [isSending, setIsSending] = useState(false)
 
   // Specific User Directory & Selection State
@@ -67,7 +110,6 @@ export default function AdminMessagesPage() {
     fetchBroadcasts()
   }, [])
 
-  // Lazy-load directory when "Specific User(s)" option is chosen
   useEffect(() => {
     if (sendToOption === "specific" && users.length === 0) {
       fetchUserDirectory()
@@ -86,7 +128,6 @@ export default function AdminMessagesPage() {
         const groupedMap = new Map<string, GroupedBroadcast>()
 
         for (const msg of data) {
-          // Group duplicate entries generated during a single broadcast
           const groupKey = `${msg.title || ""}_${msg.body}_${msg.created_at}`
 
           if (groupedMap.has(groupKey)) {
@@ -103,6 +144,7 @@ export default function AdminMessagesPage() {
               created_at: msg.created_at,
               recipientCount: 1,
               attachments: msg.attachments,
+              has_reward: msg.has_reward,
             })
           }
         }
@@ -136,13 +178,23 @@ export default function AdminMessagesPage() {
     }
   }
 
+  // Pre-fill Apology Letter Template gamit ang {{name}} variable at i-check ang compensation reward
+  function applyApologyTemplate() {
+    setTitle("Taos-Pusong Paumanhin Mula sa JB Collections")
+    setBody(
+      `Mahal naming {{name}},\n\nNais naming humingi ng taos-pusong paumanhin sa anumang abala o pagkaantala na iyong naranasan sa paggamit ng aming website kamakailan. Alam naming mahalaga ang iyong oras at ang tuluy-tuloy na karanasan sa pag-access ng aming mga serbisyo.\n\nAno ang ginawa ng aming koponan?\n• System Maintenance & Optimization: Agad na umaksyon ang aming technical team upang ayusin ang mga naitalang problema at masigurong mas mabilis na ang ating platform.\n• Continuous Monitoring: Patuloy naming binabantayan ang server upang maiwasan ang muling pagkakaroon ng error.\n\nKailangan mo ba ng tulong sa iyong account o order?\nKung mayroon kang naisampang Coin Order, nahuling kredito, o anumang usapin na hindi pa naaayos, bisitahin ang aming Support Page sa https://jbcollections.com/support o mag-iwan ng mensahe dito kasama ang iyong Order Reference Number.\n\nMaraming salamat sa iyong walang katapat na pag-unawa, pasensya, at patuloy na pagtitiwala sa JB Collections.\n\nSumasainyo,\nAng JB Collections Team`
+    )
+    setHasReward(true)
+  }
+
   const filteredUsers = users.filter((u) => {
     const q = userSearchQuery.toLowerCase()
-    const emailMatch = u.email?.toLowerCase().includes(q)
-    const fullNameMatch = u.full_name?.toLowerCase().includes(q)
-    const nameMatch = u.name?.toLowerCase().includes(q)
-    const usernameMatch = u.username?.toLowerCase().includes(q)
-    return emailMatch || fullNameMatch || nameMatch || usernameMatch
+    return (
+      u.email?.toLowerCase().includes(q) ||
+      u.full_name?.toLowerCase().includes(q) ||
+      u.name?.toLowerCase().includes(q) ||
+      u.username?.toLowerCase().includes(q)
+    )
   })
 
   function toggleUserSelection(userId: string) {
@@ -161,8 +213,7 @@ export default function AdminMessagesPage() {
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files) {
-      const selectedFiles = Array.from(e.target.files)
-      setAttachments((prev) => [...prev, ...selectedFiles])
+      setAttachments((prev) => [...prev, ...Array.from(e.target.files!)])
     }
   }
 
@@ -236,6 +287,7 @@ export default function AdminMessagesPage() {
         user_id: uid,
         title: title.trim() || null,
         body: body.trim(),
+        has_reward: hasReward,
         attachments: uploadedAttachments.length > 0 ? uploadedAttachments : null,
         created_at: new Date().toISOString(),
       }))
@@ -246,6 +298,7 @@ export default function AdminMessagesPage() {
 
       setTitle("")
       setBody("")
+      setHasReward(false)
       setAttachments([])
       setSelectedUserIds([])
       setSendToOption("all")
@@ -280,7 +333,6 @@ export default function AdminMessagesPage() {
         <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.18),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(168,85,247,0.14),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#081120_100%)]" />
 
         <div className="mx-auto w-full max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
-          {/* Header Bar */}
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-white/10 pb-6">
             <div>
               <div className="text-xs font-bold uppercase tracking-widest text-cyan-400">
@@ -298,7 +350,6 @@ export default function AdminMessagesPage() {
             </button>
           </div>
 
-          {/* Messages Table / List */}
           <div className="mt-8 space-y-4">
             {loadingMessages ? (
               <div className="flex items-center justify-center p-12 text-sm text-slate-400">
@@ -319,7 +370,7 @@ export default function AdminMessagesPage() {
                       <Megaphone size={18} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="font-bold text-white truncate">
                           {msg.title || "Broadcast Announcement"}
                         </span>
@@ -330,9 +381,16 @@ export default function AdminMessagesPage() {
                             ? `${msg.recipientCount} Specific Users`
                             : "1 Specific User"}
                         </span>
+                        {msg.has_reward && (
+                          <span className="flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-bold text-amber-400 border border-amber-500/20 shrink-0">
+                            <Gift size={12} /> Reward Included
+                          </span>
+                        )}
                       </div>
-                      <p className="mt-1 text-xs text-slate-300 line-clamp-2">{msg.body}</p>
-                      <span className="mt-2 block text-[11px] text-slate-500">
+                      <div className="mt-2 text-xs text-slate-300 leading-relaxed">
+                        {renderFormattedMessage(msg.body, "User")}
+                      </div>
+                      <span className="mt-3 block text-[11px] text-slate-500">
                         {new Date(msg.created_at).toLocaleString()}
                       </span>
                     </div>
@@ -355,8 +413,6 @@ export default function AdminMessagesPage() {
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
             <div className="relative w-full max-w-xl rounded-2xl border border-white/10 bg-[#0f172a] p-6 shadow-2xl space-y-5 max-h-[90vh] flex flex-col overflow-hidden">
-              
-              {/* Modal Header */}
               <div className="flex items-center justify-between border-b border-white/10 pb-4 shrink-0">
                 <div className="flex items-center gap-2.5">
                   <Megaphone className="text-cyan-400" size={20} />
@@ -370,9 +426,7 @@ export default function AdminMessagesPage() {
                 </button>
               </div>
 
-              {/* Modal Body */}
               <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-                {/* Send To Selection */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold uppercase tracking-wider text-slate-300">
                     Send To
@@ -396,7 +450,6 @@ export default function AdminMessagesPage() {
                   </div>
                 </div>
 
-                {/* Specific User Search & Multi-Select Container */}
                 {sendToOption === "specific" && (
                   <div className="rounded-xl border border-white/10 bg-[#111827] p-3 space-y-3">
                     <div className="flex items-center justify-between">
@@ -412,7 +465,6 @@ export default function AdminMessagesPage() {
                       </button>
                     </div>
 
-                    {/* Search Input */}
                     <div className="relative">
                       <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
                       <input
@@ -424,7 +476,6 @@ export default function AdminMessagesPage() {
                       />
                     </div>
 
-                    {/* Checkbox List */}
                     <div className="max-h-44 overflow-y-auto space-y-1 pr-1 border border-white/5 rounded-lg p-1 bg-[#0b1220]">
                       {loadingUsers ? (
                         <div className="flex items-center justify-center p-4 text-xs text-slate-400">
@@ -437,12 +488,8 @@ export default function AdminMessagesPage() {
                       ) : (
                         filteredUsers.map((user) => {
                           const isSelected = selectedUserIds.includes(user.id)
-                          const displayName =
-                            user.full_name || user.name || user.username || user.email
-                          const subText =
-                            user.email && displayName !== user.email
-                              ? user.email
-                              : user.membership_tier || user.membership || user.role || ""
+                          const displayName = user.full_name || user.name || user.username || user.email
+                          const subText = user.email && displayName !== user.email ? user.email : user.membership_tier || user.membership || user.role || ""
 
                           return (
                             <div
@@ -453,12 +500,8 @@ export default function AdminMessagesPage() {
                               }`}
                             >
                               <div className="min-w-0 flex-1 pr-2">
-                                <div className="truncate font-medium text-white">
-                                  {displayName}
-                                </div>
-                                {subText && (
-                                  <div className="truncate text-[10px] text-slate-400">{subText}</div>
-                                )}
+                                <div className="truncate font-medium text-white">{displayName}</div>
+                                {subText && <div className="truncate text-[10px] text-slate-400">{subText}</div>}
                               </div>
                               {isSelected ? (
                                 <CheckSquare size={16} className="text-cyan-400 shrink-0" />
@@ -478,7 +521,6 @@ export default function AdminMessagesPage() {
                   </div>
                 )}
 
-                {/* Optional Title Input */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold uppercase tracking-wider text-slate-300">
                     Title (Optional)
@@ -492,18 +534,48 @@ export default function AdminMessagesPage() {
                   />
                 </div>
 
-                {/* Broadcast Body Textarea */}
                 <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                      Message Content
+                    </label>
+                    <button
+                      type="button"
+                      onClick={applyApologyTemplate}
+                      className="flex items-center gap-1 text-xs font-bold text-cyan-400 hover:text-cyan-300 transition"
+                    >
+                      <FileTextIcon size={13} />
+                      <span>✉️ Gamitin ang Apology Letter Template</span>
+                    </button>
+                  </div>
+
                   <textarea
-                    rows={4}
+                    rows={8}
                     placeholder="Type your message broadcast here..."
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-[#1e293b] p-4 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none resize-none"
+                    className="w-full rounded-xl border border-white/10 bg-[#1e293b] p-4 text-xs sm:text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none resize-none leading-relaxed"
                   />
+                  <p className="text-[11px] text-slate-400">
+                    💡 Tip: Gamitin ang <code className="text-cyan-400 font-bold">{"{{name}}"}</code> para awtomatikong lumabas ang pangalan ng user.
+                  </p>
                 </div>
 
-                {/* Attachments Section */}
+                {/* --- COMPENSATION REWARD TOGGLE --- */}
+                <div className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5">
+                  <input
+                    type="checkbox"
+                    id="hasRewardToggle"
+                    checked={hasReward}
+                    onChange={(e) => setHasReward(e.target.checked)}
+                    className="h-4 w-4 rounded border-amber-500 text-amber-500 focus:ring-amber-400 accent-amber-500 cursor-pointer"
+                  />
+                  <label htmlFor="hasRewardToggle" className="flex items-center gap-2 text-xs font-bold text-amber-300 cursor-pointer select-none">
+                    <Gift size={16} className="text-amber-400" />
+                    <span>Isama ang Compensation Coin Reward Claim Button sa Mensaheng Ito</span>
+                  </label>
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-xs font-bold uppercase tracking-wider text-slate-300">
                     Attachments
@@ -513,18 +585,11 @@ export default function AdminMessagesPage() {
                     <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-[#1e293b] px-4 py-2.5 text-xs font-bold text-slate-300 hover:bg-white/10 transition">
                       <Paperclip size={16} className="text-cyan-400" />
                       <span>Select Files</span>
-                      <input
-                        type="file"
-                        multiple
-                        onChange={handleFileChange}
-                        className="hidden"
-                      />
+                      <input type="file" multiple onChange={handleFileChange} className="hidden" />
                     </label>
 
                     {attachments.length > 0 && (
-                      <span className="text-xs text-slate-400">
-                        {attachments.length} file(s) attached
-                      </span>
+                      <span className="text-xs text-slate-400">{attachments.length} file(s) attached</span>
                     )}
                   </div>
 
@@ -553,7 +618,6 @@ export default function AdminMessagesPage() {
                 </div>
               </div>
 
-              {/* Modal Actions */}
               <div className="flex items-center justify-end gap-3 border-t border-white/10 pt-4 shrink-0">
                 <button
                   type="button"
@@ -583,7 +647,6 @@ export default function AdminMessagesPage() {
                   )}
                 </button>
               </div>
-
             </div>
           </div>
         )}
