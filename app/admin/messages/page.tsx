@@ -43,7 +43,7 @@ type GroupedBroadcast = {
 }
 
 // Helper function para gawing clickable ang links at palitan ang {{name}} placeholder
-export function renderFormattedMessage(text: string, namePlaceholder: string = "User") {
+function renderFormattedMessage(text: string, namePlaceholder: string = "User") {
   if (!text) return null
 
   // 1. Palitan ang {{name}} ng aktuwal na pangalan
