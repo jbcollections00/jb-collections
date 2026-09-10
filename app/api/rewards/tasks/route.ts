@@ -4,13 +4,8 @@ import { createClient as createSupabaseAdmin } from "@supabase/supabase-js"
 
 export const runtime = "nodejs"
 
-const MAX_ADS_PER_DAY = 5
-const AD_COOLDOWN_SECONDS = 30
-const FIVE_ADS_BONUS_COINS = 20
 const REFERRAL_PASSIVE_PERCENT = 10
 const DOUBLE_REWARD_AD_SECONDS = 10
-
-const AD_LINK = "https://www.profitablecpmratenetwork.com/ek44eeb04?key=99f05c43be188cef9d877a7519d8166a"
 
 type EarnTask = {
   id: string
@@ -59,24 +54,55 @@ function createAdminDb() {
   return createSupabaseAdmin(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
-    { auth: { autoRefreshToken: false, persistSession: false } },
+    { auth: { autoRefreshToken: false, persistSession: false } }
   )
 }
 
 function getEarnTasks(): EarnTask[] {
   return [
     {
-      id: "watch_ad",
-      title: "Watch Sponsor Bonus",
-      description: "Open sponsor page and return here to claim your reward. You can do this up to 5 times per day.",
-      reward: 10,
+      id: "task-1",
+      title: "Quick Visit",
+      description: "Bisitahin ang sponsor page nang 15 seconds.",
+      reward: 25,
       type: "ad",
-      required_time: 10,
-      link: AD_LINK,
-      max_claims_per_day: MAX_ADS_PER_DAY,
-      cooldown_seconds: AD_COOLDOWN_SECONDS,
-      bonus_at_claim_count: MAX_ADS_PER_DAY,
-      bonus_reward: FIVE_ADS_BONUS_COINS,
+      required_time: 15,
+      link: "https://profitableratecpmnetwork.com/vja5sy3m?key=fc8ea4a621cb34f209a9fa31d4b85bea",
+      max_claims_per_day: 30,
+      cooldown_seconds: 15,
+    },
+    {
+      id: "task-2",
+      title: "Standard Visit",
+      description: "Mag-stay sa sponsor page nang 30 seconds para sa mas malaking reward.",
+      reward: 50,
+      type: "ad",
+      required_time: 30,
+      link: "https://omg10.com/4/11698464",
+      max_claims_per_day: 5,
+      cooldown_seconds: 30,
+    },
+    {
+      id: "task-3",
+      title: "Extended Visit",
+      description: "Mag-stay ng 45 seconds sa sponsor page para sa mas malaking reward.",
+      reward: 100,
+      type: "ad",
+      required_time: 45,
+      link: "https://omg10.com/4/11743847",
+      max_claims_per_day: 5,
+      cooldown_seconds: 45,
+    },
+    {
+      id: "task-4",
+      title: "Premium Visit",
+      description: "Kailangan ng extra coins? Maghintay ng 60 seconds sa page na ito.",
+      reward: 150,
+      type: "ad",
+      required_time: 60,
+      link: "https://profitableratecpmnetwork.com/kvx8tkwni0?key=af8f3ec4f9904d2b3f92245d38b66963",
+      max_claims_per_day: 5,
+      cooldown_seconds: 60,
     },
     {
       id: "visit_store",
@@ -120,7 +146,7 @@ function getMaxClaims(task: EarnTask) {
 }
 
 function isAdTask(task: EarnTask) {
-  return task.type === "ad" || task.id === "watch_ad"
+  return task.type === "ad" || task.id.startsWith("task-") || task.id === "watch_ad"
 }
 
 function getManilaDateString(date = new Date()) {
@@ -210,16 +236,28 @@ function decorateTask(task: EarnTask, claim?: EarnTaskClaimRow | null) {
 
 async function getAuthenticatedUser() {
   const supabase = await createClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser()
 
   if (error || !user) {
-    return { ok: false as const, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) }
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+    }
   }
 
   return { ok: true as const, user }
 }
 
-async function addCoins(adminDb: ReturnType<typeof createAdminDb>, userId: string, amount: number, type: string, description: string) {
+async function addCoins(
+  adminDb: ReturnType<typeof createAdminDb>,
+  userId: string,
+  amount: number,
+  type: string,
+  description: string
+) {
   if (amount <= 0) return
 
   const { error } = await adminDb.rpc("handle_coin_change", {
@@ -232,7 +270,12 @@ async function addCoins(adminDb: ReturnType<typeof createAdminDb>, userId: strin
   if (error) throw new Error(error.message || "Failed to add JB Coins.")
 }
 
-async function addPassiveReferralEarnings(adminDb: ReturnType<typeof createAdminDb>, referredUserId: string, sourceTaskId: string, sourceRewardAmount: number) {
+async function addPassiveReferralEarnings(
+  adminDb: ReturnType<typeof createAdminDb>,
+  referredUserId: string,
+  sourceTaskId: string,
+  sourceRewardAmount: number
+) {
   if (sourceRewardAmount <= 0) return { passiveReward: 0, referrerId: null as string | null }
 
   const { data: referral, error: referralError } = await adminDb
@@ -251,14 +294,17 @@ async function addPassiveReferralEarnings(adminDb: ReturnType<typeof createAdmin
     return { passiveReward: 0, referrerId: null as string | null }
   }
 
-  const passiveReward = Math.max(1, Math.floor((sourceRewardAmount * REFERRAL_PASSIVE_PERCENT) / 100))
+  const passiveReward = Math.max(
+    1,
+    Math.floor((sourceRewardAmount * REFERRAL_PASSIVE_PERCENT) / 100)
+  )
 
   await addCoins(
     adminDb,
     referralRow.referrer_id,
     passiveReward,
     "passive_referral_earning",
-    `Passive referral earning from ${sourceTaskId}. +${passiveReward} JB Coins added.`,
+    `Passive referral earning from ${sourceTaskId}. +${passiveReward} JB Coins added.`
   )
 
   const { error: logError } = await adminDb.from("referral_earnings").insert({
@@ -293,7 +339,10 @@ export async function GET() {
       .in("task_id", taskIds)
 
     if (claimsError) {
-      return NextResponse.json({ error: claimsError.message || "Failed to load earn task claims." }, { status: 500 })
+      return NextResponse.json(
+        { error: claimsError.message || "Failed to load earn task claims." },
+        { status: 500 }
+      )
     }
 
     const claimMap = new Map<string, EarnTaskClaimRow>()
@@ -305,11 +354,16 @@ export async function GET() {
       ok: true,
       tasks,
       openTasks: tasks.filter((task) => !task.completed).length,
-      availableCoins: tasks.filter((task) => task.can_claim).reduce((sum, task) => sum + task.reward, 0),
+      availableCoins: tasks
+        .filter((task) => task.can_claim)
+        .reduce((sum, task) => sum + task.reward, 0),
     })
   } catch (error) {
     console.error("Earn tasks GET error:", error)
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to load earn tasks." }, { status: 500 })
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to load earn tasks." },
+      { status: 500 }
+    )
   }
 }
 
@@ -342,55 +396,81 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (existingError) {
-      return NextResponse.json({ error: existingError.message || "Failed to verify task status." }, { status: 500 })
+      return NextResponse.json(
+        { error: existingError.message || "Failed to verify task status." },
+        { status: 500 }
+      )
     }
 
     const claim = existingClaim as EarnTaskClaimRow | null
     const currentClaimCount = Number(claim?.claim_count || 0)
 
     if (action === "start") {
-      if (currentClaimCount >= maxClaims) {
-        return NextResponse.json({
-          error: isAdTask(task) ? `Daily ad limit reached (${maxClaims}/${maxClaims}).` : "Task already completed today.",
-          task: decorateTask(task, claim),
-        }, { status: 400 })
+      // Allow continuous watching for ads even if max claims are reached
+      if (!isAdTask(task) && currentClaimCount >= maxClaims) {
+        return NextResponse.json(
+          {
+            error: "Task already completed today.",
+            task: decorateTask(task, claim),
+          },
+          { status: 400 }
+        )
       }
 
       if (claim?.started_at && claim?.ready_at && getSecondsRemaining(claim.ready_at) > 0) {
-        return NextResponse.json({ ok: true, message: "Task already started. Visit the required page, then return to claim.", task: decorateTask(task, claim) })
+        return NextResponse.json({
+          ok: true,
+          message: "Task already started. Visit the required page, then return to claim.",
+          task: decorateTask(task, claim),
+        })
       }
 
       const cooldownRemaining = getCooldownRemaining(claim, task)
       if (cooldownRemaining > 0) {
-        return NextResponse.json({
-          error: `Please wait ${cooldownRemaining} more second${cooldownRemaining === 1 ? "" : "s"} before starting another sponsor task.`,
-          cooldown_remaining: cooldownRemaining,
-          task: decorateTask(task, claim),
-        }, { status: 400 })
+        return NextResponse.json(
+          {
+            error: `Please wait ${cooldownRemaining} more second${
+              cooldownRemaining === 1 ? "" : "s"
+            } before starting another task.`,
+            cooldown_remaining: cooldownRemaining,
+            task: decorateTask(task, claim),
+          },
+          { status: 400 }
+        )
       }
 
       const readyAt = addSeconds(now, task.required_time).toISOString()
 
       const { data: startedClaim, error: startError } = await adminDb
         .from("earn_task_claims")
-        .upsert({
-          user_id: auth.user.id,
-          task_id: task.id,
-          reward_date: today,
-          claim_count: currentClaimCount,
-          started_at: now.toISOString(),
-          ready_at: readyAt,
-          completed_at: null,
-          updated_at: now.toISOString(),
-        }, { onConflict: "user_id,task_id,reward_date" })
+        .upsert(
+          {
+            user_id: auth.user.id,
+            task_id: task.id,
+            reward_date: today,
+            claim_count: currentClaimCount,
+            started_at: now.toISOString(),
+            ready_at: readyAt,
+            completed_at: null,
+            updated_at: now.toISOString(),
+          },
+          { onConflict: "user_id,task_id,reward_date" }
+        )
         .select("*")
         .single()
 
-      if (startError) return NextResponse.json({ error: startError.message || "Failed to start task." }, { status: 500 })
+      if (startError)
+        return NextResponse.json(
+          { error: startError.message || "Failed to start task." },
+          { status: 500 }
+        )
 
       return NextResponse.json({
         ok: true,
-        message: task.type === "visit" ? "Task started. Visit the required page, then return to claim." : `Sponsor task started. Ad ${currentClaimCount + 1}/${maxClaims} is ready to open.`,
+        message:
+          task.type === "visit"
+            ? "Task started. Visit the required page, then return to claim."
+            : `Sponsor task started. Ad is ready to open.`,
         task: decorateTask(task, startedClaim as EarnTaskClaimRow),
       })
     }
@@ -463,24 +543,68 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    if (!claim?.started_at || !claim?.ready_at) return NextResponse.json({ error: "Start this task first before claiming." }, { status: 400 })
-
-    if (currentClaimCount >= maxClaims) {
-      return NextResponse.json({
-        error: isAdTask(task) ? `Daily ad limit reached (${maxClaims}/${maxClaims}).` : "Task already completed today.",
-        task: decorateTask(task, claim),
-      }, { status: 400 })
-    }
+    if (!claim?.started_at || !claim?.ready_at)
+      return NextResponse.json(
+        { error: "Start this task first before claiming." },
+        { status: 400 }
+      )
 
     const readyDate = new Date(claim.ready_at)
     const secondsRemaining = getSecondsRemaining(claim.ready_at)
 
     if (Number.isNaN(readyDate.getTime()) || now.getTime() < readyDate.getTime()) {
+      return NextResponse.json(
+        {
+          error: `Please wait ${secondsRemaining} more second${
+            secondsRemaining === 1 ? "" : "s"
+          } before claiming.`,
+          seconds_remaining: secondsRemaining,
+          task: decorateTask(task, claim),
+        },
+        { status: 400 }
+      )
+    }
+
+    const isLimitReached = currentClaimCount >= maxClaims
+    const newClaimCount = currentClaimCount + 1
+
+    // Continuous watch flow: if limit reached, silently finish without giving coins or errors
+    if (isLimitReached) {
+      const { data: completedClaim, error: completeError } = await adminDb
+        .from("earn_task_claims")
+        .update({
+          claim_count: newClaimCount,
+          started_at: null,
+          ready_at: null,
+          completed_at: now.toISOString(),
+          updated_at: now.toISOString(),
+        })
+        .eq("id", claim.id)
+        .eq("user_id", auth.user.id)
+        .select("*")
+        .single()
+
+      if (completeError) {
+        return NextResponse.json(
+          { error: completeError.message || "Failed to update task completion." },
+          { status: 500 }
+        )
+      }
+
       return NextResponse.json({
-        error: `Please wait ${secondsRemaining} more second${secondsRemaining === 1 ? "" : "s"} before claiming.`,
-        seconds_remaining: secondsRemaining,
-        task: decorateTask(task, claim),
-      }, { status: 400 })
+        ok: true,
+        limitReached: true,
+        message: `${task.title} view recorded.`,
+        task: decorateTask(task, completedClaim as EarnTaskClaimRow),
+        coinsAdded: 0,
+        reward: 0,
+        baseReward: 0,
+        boostReward: 0,
+        bonusReward: 0,
+        passiveReferralReward: 0,
+        claimCount: newClaimCount,
+        maxClaims,
+      })
     }
 
     const boosted = Boolean(body?.boosted || body?.double_reward || body?.boost)
@@ -511,7 +635,10 @@ export async function POST(req: NextRequest) {
       const boostReadyDate = new Date(claim.boost_ready_at)
       const boostSecondsRemaining = getSecondsRemaining(claim.boost_ready_at)
 
-      if (Number.isNaN(boostReadyDate.getTime()) || now.getTime() < boostReadyDate.getTime()) {
+      if (
+        Number.isNaN(boostReadyDate.getTime()) ||
+        now.getTime() < boostReadyDate.getTime()
+      ) {
         return NextResponse.json(
           {
             error: `Please wait ${boostSecondsRemaining} more second${
@@ -527,7 +654,6 @@ export async function POST(req: NextRequest) {
       boostReward = task.reward
     }
 
-    const newClaimCount = currentClaimCount + 1
     let totalReward = task.reward + boostReward
     let bonusReward = 0
 
@@ -549,10 +675,21 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (isAdTask(task) && task.bonus_at_claim_count && task.bonus_reward && newClaimCount === task.bonus_at_claim_count) {
+    if (
+      isAdTask(task) &&
+      task.bonus_at_claim_count &&
+      task.bonus_reward &&
+      newClaimCount === task.bonus_at_claim_count
+    ) {
       bonusReward = Number(task.bonus_reward || 0)
       totalReward += bonusReward
-      await addCoins(adminDb, auth.user.id, bonusReward, "earn_task_watch_ad_bonus", `Watched ${task.bonus_at_claim_count} sponsor ads bonus. +${bonusReward} JB Coins added.`)
+      await addCoins(
+        adminDb,
+        auth.user.id,
+        bonusReward,
+        "earn_task_watch_ad_bonus",
+        `Watched ${task.bonus_at_claim_count} sponsor ads bonus. +${bonusReward} JB Coins added.`
+      )
     }
 
     const passive = await addPassiveReferralEarnings(adminDb, auth.user.id, task.id, totalReward)
@@ -573,7 +710,13 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (completeError) {
-      return NextResponse.json({ error: completeError.message || "Coins were added, but task completion could not be saved." }, { status: 500 })
+      return NextResponse.json(
+        {
+          error:
+            completeError.message || "Coins were added, but task completion could not be saved.",
+        },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({
@@ -582,8 +725,8 @@ export async function POST(req: NextRequest) {
         boostReward > 0
           ? `${task.title} complete. Double reward activated. +${totalReward} JB Coins added!`
           : bonusReward > 0
-            ? `${task.title} complete. +${task.reward} JB Coins added, plus +${bonusReward} bonus coins!`
-            : `${task.title} complete. +${task.reward} JB Coins added.`,
+          ? `${task.title} complete. +${task.reward} JB Coins added, plus +${bonusReward} bonus coins!`
+          : `${task.title} complete. +${task.reward} JB Coins added.`,
       task: decorateTask(task, completedClaim as EarnTaskClaimRow),
       coinsAdded: totalReward,
       reward: totalReward,
@@ -597,6 +740,9 @@ export async function POST(req: NextRequest) {
     })
   } catch (error) {
     console.error("Earn tasks POST error:", error)
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to process earn task." }, { status: 500 })
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to process earn task." },
+      { status: 500 }
+    )
   }
 }

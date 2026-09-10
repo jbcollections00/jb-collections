@@ -164,9 +164,9 @@ function getShortDescription(file: FileRow | null) {
 function getDownloadCoinCost(level: MembershipLevel, file?: FileRow | null) {
   if (level === "admin") return 0
 
-  let cost = 250
-  if (level === "platinum") cost = 120
-  else if (level === "premium") cost = 180
+  let cost = 350
+  if (level === "platinum") cost = 300
+  else if (level === "premium") cost = 325
 
   if (file) {
     const downloadsCount = Number(file.downloads_count || 0)

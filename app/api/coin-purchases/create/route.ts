@@ -5,13 +5,14 @@ import { createClient as createAdminClient } from "@supabase/supabase-js"
 
 export const runtime = "nodejs"
 
+// ✅ UPDATED PACKAGES (1 PHP = 1,000 JB Coins)
 const VALID_PACKAGES = [
-  { amount: 20, coins: 1700 },
-  { amount: 50, coins: 4300 },
-  { amount: 100, coins: 8800 },
-  { amount: 200, coins: 18000 },
-  { amount: 500, coins: 46000 },
-  { amount: 1000, coins: 95000 },
+  { amount: 20, coins: 20000 },
+  { amount: 50, coins: 50000 },
+  { amount: 100, coins: 100000 },
+  { amount: 200, coins: 200000 },
+  { amount: 500, coins: 500000 },
+  { amount: 1000, coins: 1000000 },
 ]
 
 async function createUserClient() {
@@ -65,7 +66,7 @@ async function sendTelegramPaymentAlert(params: {
 🧾 <b>Order:</b> ${escapeHtml(params.orderId)}
 👤 <b>Payer:</b> ${escapeHtml(params.payerName)}
 💵 <b>Amount:</b> ₱${params.amountPhp}
-🪙 <b>Coins:</b> ${params.coins}
+🪙 <b>Coins:</b> ${params.coins.toLocaleString()}
 📦 <b>Package:</b> ${escapeHtml(params.label)}
 📱 <b>Method:</b> ${escapeHtml(params.paymentMethod.toUpperCase())}
 🔢 <b>Reference:</b> ${escapeHtml(params.paymentReference)}

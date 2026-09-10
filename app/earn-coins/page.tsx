@@ -15,22 +15,34 @@ const SMARTLINK_TASKS = [
     description: "Bisitahin ang sponsor page nang 15 seconds.",
     reward: 25,
     cooldown: 15,
+    limit: 30,
     url: "https://profitableratecpmnetwork.com/vja5sy3m?key=fc8ea4a621cb34f209a9fa31d4b85bea", // Adsterra Link 1
   },
   {
     id: "task-2",
     title: "Standard Visit",
     description: "Mag-stay sa sponsor page nang 30 seconds para sa mas malaking reward.",
-    reward: 60,
+    reward: 50,
     cooldown: 30,
-    url: "https://omg10.com/4/11698464", // Monetag Link 1 (Fair Link)
+    limit: 5,
+    url: "https://omg10.com/4/11698464", // Monetag Link 1
   },
   {
     id: "task-3",
+    title: "Extended Visit",
+    description: "Mag-stay ng 45 seconds sa sponsor page para sa mas malaking reward.",
+    reward: 100,
+    cooldown: 45,
+    limit: 5,
+    url: "https://omg10.com/4/11743847", // Monetag Link 2
+  },
+  {
+    id: "task-4",
     title: "Premium Visit",
     description: "Kailangan ng extra coins? Maghintay ng 60 seconds sa page na ito.",
     reward: 150,
     cooldown: 60,
+    limit: 5,
     url: "https://profitableratecpmnetwork.com/kvx8tkwni0?key=af8f3ec4f9904d2b3f92245d38b66963", // Adsterra Link 2
   },
 ]
@@ -48,7 +60,16 @@ function EarnCoinsPageContent() {
   const [cooldown, setCooldown] = useState(15)
   const [claiming, setClaiming] = useState(false)
   const [isTabFocused, setIsTabFocused] = useState(false)
+
+  // --- TRACKING PER TASK REWARD LIMITS ---
   const [activeTaskReward, setActiveTaskReward] = useState(25)
+  const [activeTaskLimit, setActiveTaskLimit] = useState(30)
+  const [dailyTaskCounts, setDailyTaskCounts] = useState<Record<number, number>>({
+    25: 0,
+    50: 0,
+    100: 0,
+    150: 0,
+  })
 
   useEffect(() => {
     async function checkUser() {
@@ -73,6 +94,25 @@ function EarnCoinsPageContent() {
 
         if (profile) {
           setAdWatchCount(profile.ad_watch_count || 0)
+        }
+
+        // Fetch user's claimed ad rewards today from coin_history
+        const todayStart = new Date().toISOString().split("T")[0] + "T00:00:00.000Z"
+        const { data: history } = await supabase
+          .from("coin_history")
+          .select("amount")
+          .eq("user_id", user.id)
+          .eq("type", "ad_reward")
+          .gte("created_at", todayStart)
+
+        if (history) {
+          const counts: Record<number, number> = { 25: 0, 50: 0, 100: 0, 150: 0 }
+          history.forEach((item) => {
+            if (typeof item.amount === "number" && item.amount in counts) {
+              counts[item.amount] = (counts[item.amount] || 0) + 1
+            }
+          })
+          setDailyTaskCounts(counts)
         }
       } catch (err) {
         console.error("Auth verification failed:", err)
@@ -101,8 +141,9 @@ function EarnCoinsPageContent() {
     return () => clearInterval(interval)
   }, [showAdModal, cooldown])
 
-  const handleWatchAd = (url: string, reward: number, time: number) => {
+  const handleWatchAd = (url: string, reward: number, time: number, limit: number = 5) => {
     setActiveTaskReward(reward)
+    setActiveTaskLimit(limit)
     setCooldown(time)
     setIsTabFocused(false)
     setShowAdModal(true)
@@ -112,8 +153,11 @@ function EarnCoinsPageContent() {
     }
   }
 
+  const currentTaskCount = dailyTaskCounts[activeTaskReward] || 0
+  const isLimitReached = currentTaskCount >= activeTaskLimit
+
   const handleClaimProgress = async () => {
-    if (!userId || claiming) return
+    if (!userId || claiming || isLimitReached) return
     setClaiming(true)
 
     try {
@@ -134,12 +178,8 @@ function EarnCoinsPageContent() {
         dailyAdCoins = 0
       }
 
-      const DAILY_LIMIT = 1000
-      const remainingLimit = Math.max(0, DAILY_LIMIT - dailyAdCoins)
-
-      const actualReward = Math.min(activeTaskReward, remainingLimit)
-      const newDailyAdCoins = dailyAdCoins + actualReward
-      const updatedCoins = currentCoins + actualReward
+      const newDailyAdCoins = dailyAdCoins + activeTaskReward
+      const updatedCoins = currentCoins + activeTaskReward
 
       const { error: updateError } = await supabase
         .from("profiles")
@@ -155,25 +195,25 @@ function EarnCoinsPageContent() {
         throw updateError
       }
 
-      if (actualReward > 0) {
-        await supabase.from("coin_history").insert({
-          user_id: userId,
-          amount: actualReward,
-          type: "ad_reward",
-          description: "Completed SmartLink Task",
-        })
+      await supabase.from("coin_history").insert({
+        user_id: userId,
+        amount: activeTaskReward,
+        type: "ad_reward",
+        description: "Completed SmartLink Task",
+      })
 
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(
-            new CustomEvent("jb-coins-updated", { detail: { reward: actualReward } })
-          )
-        }
-        alert(`💰 You received ${actualReward} JB Coins!`)
-      } else {
-        alert(
-          `📺 Task counted! You have reached your daily limit of 1,000 JB Coins. Come back tomorrow!`
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("jb-coins-updated", { detail: { reward: activeTaskReward } })
         )
       }
+
+      setDailyTaskCounts((prev) => ({
+        ...prev,
+        [activeTaskReward]: (prev[activeTaskReward] || 0) + 1,
+      }))
+
+      alert(`💰 You received ${activeTaskReward} JB Coins!`)
 
       setAdWatchCount(newCount)
       setShowAdModal(false)
@@ -226,7 +266,7 @@ function EarnCoinsPageContent() {
                 Kapag nagbukas ang sponsor link (tulad ng{" "}
                 <code className="font-mono text-amber-300">profitableratecpmnetwork.com</code> o{" "}
                 <code className="font-mono font-semibold text-amber-300">omg10.com</code>), manatili
-                roon nang ayon sa segundo ng napili mong task (10s, 15s, 30s, o 60s).
+                roon nang ayon sa segundo ng napili mong task (15s, 30s, 45s, o 60s).
               </li>
 
               <li className="rounded-xl border border-amber-500/20 bg-black/40 p-3.5">
@@ -248,17 +288,17 @@ function EarnCoinsPageContent() {
             </ul>
           </div>
 
-          {/* MAIN UNLIMITED ADS BUTTON (MONETAG CRAZY LINK) */}
+          {/* MAIN UNLIMITED ADS BUTTON */}
           <div className="mt-6 rounded-[32px] border border-white/10 bg-slate-900/60 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-md">
             <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-400">
-                  Unlimited Earnings
+                  Continuous Earnings
                 </p>
                 <h2 className="mt-1 text-2xl font-black text-white">Watch Ads, Earn Coins</h2>
                 <p className="mt-1 text-sm text-slate-400">
-                  Earn <strong className="text-amber-400">15 JB Coins</strong> for every ad you
-                  watch! (Max 1,000 Coins/day)
+                  Earn <strong className="text-amber-400">25 JB Coins</strong> for every ad view!
+                  (Up to 2,250 Coins daily across all tasks)
                 </p>
               </div>
             </div>
@@ -272,14 +312,15 @@ function EarnCoinsPageContent() {
                 <button
                   onClick={() =>
                     handleWatchAd(
-                      "https://omg10.com/4/11743847", // Monetag Link 2 (Crazy Link)
+                      "https://omg10.com/4/11743847",
+                      25,
                       15,
-                      10
+                      30
                     )
                   }
                   className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-4 text-sm font-black text-white shadow-lg shadow-emerald-500/20 transition hover:scale-[1.02] active:scale-95"
                 >
-                  Watch Ad (+15 Coins)
+                  Watch Ad (+25 Coins)
                 </button>
               </div>
             </div>
@@ -300,7 +341,7 @@ function EarnCoinsPageContent() {
             </div>
 
             <div className="w-full rounded-[24px] border border-white/10 bg-slate-950 p-6">
-              <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
                 {SMARTLINK_TASKS.map((task) => (
                   <div
                     key={task.id}
@@ -320,7 +361,7 @@ function EarnCoinsPageContent() {
                     </div>
 
                     <button
-                      onClick={() => handleWatchAd(task.url, task.reward, task.cooldown)}
+                      onClick={() => handleWatchAd(task.url, task.reward, task.cooldown, task.limit)}
                       className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-md shadow-sky-500/20 transition hover:scale-[1.01] active:scale-95"
                     >
                       Start Task ↗
@@ -367,6 +408,13 @@ function EarnCoinsPageContent() {
               <div className="w-full rounded-xl border border-amber-500/20 bg-slate-800 py-3 text-center text-sm font-bold text-amber-400">
                 Stay on ad tab for {cooldown}s to Claim...
               </div>
+            ) : isLimitReached ? (
+              <button
+                onClick={() => setShowAdModal(false)}
+                className="w-full rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-sky-500/30 transition hover:scale-[1.02] active:scale-95"
+              >
+                Watch Ads
+              </button>
             ) : (
               <button
                 onClick={handleClaimProgress}

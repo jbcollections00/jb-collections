@@ -6,10 +6,10 @@ export const runtime = "nodejs"
 
 type RedeemPlan = "premium" | "platinum"
 
-// ✅ UPDATED COSTS (FINAL)
+// ✅ UPDATED COSTS (75,000 JB Coins for Premium, 100,000 JB Coins for Platinum)
 const PLAN_COST: Record<RedeemPlan, number> = {
-  premium: 8000,
-  platinum: 10000,
+  premium: 75000,
+  platinum: 100000,
 }
 
 function normalizeMembership(profile: {
@@ -85,7 +85,7 @@ export async function POST(req: Request) {
     if (currentCoins < requiredCoins) {
       return NextResponse.json(
         {
-          error: `You need ${requiredCoins} JB Coins to redeem ${plan}.`,
+          error: `You need ${requiredCoins.toLocaleString()} JB Coins to redeem ${plan}.`,
         },
         { status: 400 }
       )
@@ -113,7 +113,7 @@ export async function POST(req: Request) {
       p_user_id: user.id,
       p_amount: -requiredCoins,
       p_type: "redeem_membership",
-      p_description: `Redeemed ${plan} membership (-${requiredCoins} JB Coins)`,
+      p_description: `Redeemed ${plan} membership (-${requiredCoins.toLocaleString()} JB Coins)`,
     })
 
     if (deductError) {

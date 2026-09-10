@@ -29,9 +29,7 @@ export async function POST() {
               cookiesToSet.forEach(({ name, value, options }) =>
                 cookieStore.set(name, value, options)
               )
-            } catch {
-              // Safe fallback kapag tinawag mula sa Server Component
-            }
+            } catch {}
           },
         },
       }
@@ -58,11 +56,10 @@ export async function POST() {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    // Isinama na ang 'coins' o 'jb_coins' sa query
     const { data: profile, error: profileError } = await adminSupabase
       .from("profiles")
       .select(
-        "id, role, membership, is_premium, coins, jb_coins, membership_payment_type, membership_started_at, membership_expires_at"
+        "id, role, membership, is_premium, coins, membership_payment_type, membership_started_at, membership_expires_at"
       )
       .eq("id", user.id)
       .maybeSingle()
@@ -75,7 +72,7 @@ export async function POST() {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    const userCoins = profile.coins ?? profile.jb_coins ?? 0
+    const userCoins = profile.coins ?? 0
 
     if (String(profile.role || "").toLowerCase() === "admin") {
       return NextResponse.json({

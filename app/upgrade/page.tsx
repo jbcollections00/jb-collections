@@ -33,8 +33,6 @@ type PlanFeature = {
   platinum: string
 }
 
-const COINS_PER_PHP = 80
-
 function formatCoins(value: number) {
   return `${new Intl.NumberFormat("en-PH").format(value)} JB Coins`
 }
@@ -57,18 +55,19 @@ function StorePageContent() {
   const [redeemError, setRedeemError] = useState("")
   const [redeemSuccess, setRedeemSuccess] = useState("")
 
-  // Membership Prices in JB Coins
+  // Membership Prices in JB Coins (1 PHP = 1000 Coins)
   const MEMBERSHIP_PRICES = {
-    premium: 8000,   // 8,000 JB Coins = ₱100.00 for 30 days
-    platinum: 10000, // 10,000 JB Coins = ₱125.00 for 30 days
+    premium: 75000,   // 75,000 JB Coins for 30 days
+    platinum: 100000, // 100,000 JB Coins for 30 days
   }
 
+  // Coin Packages calculated at 1 PHP = 500 Coins
   const packages: CoinPackage[] = [
     {
       id: "php20",
       php: 20,
-      baseCoins: 20 * COINS_PER_PHP,
-      bonusCoins: 100,
+      baseCoins: 20000,
+      bonusCoins: 0,
       badge: "STARTER",
       badgeStyle: "bg-emerald-500/15 text-emerald-300 border border-emerald-400/20",
       gradient: "from-emerald-500 via-teal-500 to-cyan-500",
@@ -78,8 +77,8 @@ function StorePageContent() {
     {
       id: "php50",
       php: 50,
-      baseCoins: 50 * COINS_PER_PHP,
-      bonusCoins: 300,
+      baseCoins: 50000,
+      bonusCoins: 0,
       badge: "POPULAR",
       badgeStyle: "bg-amber-500/15 text-amber-300 border border-amber-400/20",
       gradient: "from-amber-500 via-orange-500 to-red-500",
@@ -89,8 +88,8 @@ function StorePageContent() {
     {
       id: "php100",
       php: 100,
-      baseCoins: 100 * COINS_PER_PHP,
-      bonusCoins: 800,
+      baseCoins: 100000,
+      bonusCoins: 0,
       badge: "BEST SELLER",
       badgeStyle: "bg-pink-500/15 text-pink-300 border border-pink-400/20",
       gradient: "from-pink-500 via-rose-500 to-red-500",
@@ -100,8 +99,8 @@ function StorePageContent() {
     {
       id: "php200",
       php: 200,
-      baseCoins: 200 * COINS_PER_PHP,
-      bonusCoins: 2000,
+      baseCoins: 200000,
+      bonusCoins: 0,
       badge: "GREAT VALUE",
       badgeStyle: "bg-violet-500/15 text-violet-300 border border-violet-400/20",
       gradient: "from-violet-500 via-purple-500 to-fuchsia-500",
@@ -111,25 +110,25 @@ function StorePageContent() {
     {
       id: "php500",
       php: 500,
-      baseCoins: 500 * COINS_PER_PHP,
-      bonusCoins: 6000,
+      baseCoins: 500000,
+      bonusCoins: 0,
       badge: "HOT DEAL",
       badgeStyle: "bg-yellow-500/15 text-yellow-300 border border-yellow-400/20",
       gradient: "from-yellow-500 via-amber-500 to-orange-500",
       border: "border-yellow-400/30",
-      description: "High-value package with a strong bonus boost.",
+      description: "High-value package for active downloads.",
     },
     {
       id: "php1000",
       php: 1000,
-      baseCoins: 1000 * COINS_PER_PHP,
-      bonusCoins: 15000,
+      baseCoins: 1000000,
+      bonusCoins: 0,
       badge: "BEST OFFER",
       badgeStyle: "bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-400/20",
       gradient: "from-fuchsia-500 via-purple-500 to-indigo-500",
       border: "border-fuchsia-400/40",
       featured: true,
-      description: "Best for power users who want the highest bonus coins.",
+      description: "Best for power users who need high coin capacity.",
     },
   ]
 
@@ -162,7 +161,6 @@ function StorePageContent() {
 
   const selectedPackage = packages.find((item) => item.id === selectedPackageId) || packages[0]
   const totalCoins = selectedPackage.baseCoins + selectedPackage.bonusCoins
-  const bonusPercent = Math.round((selectedPackage.bonusCoins / selectedPackage.baseCoins) * 100)
 
   function handleBuyClick(packageId: string) {
     setSelectedPackageId(packageId)
@@ -197,8 +195,7 @@ function StorePageContent() {
 
       const price = MEMBERSHIP_PRICES[tier]
 
-      // Call handle_coin_change RPC function to deduct coins
-      const { data, error } = await supabase.rpc("handle_coin_change", {
+      const { error } = await supabase.rpc("handle_coin_change", {
         p_user_id: user.id,
         p_amount: -price,
         p_type: `membership_redeem_${tier}`,
@@ -213,11 +210,9 @@ function StorePageContent() {
         throw new Error(error.message)
       }
 
-      // Calculate 30 days expiration
       const expiresAt = new Date()
       expiresAt.setDate(expiresAt.getDate() + 30)
 
-      // Update user profile membership tier
       const { error: profileError } = await supabase
         .from("profiles")
         .update({
@@ -243,7 +238,6 @@ function StorePageContent() {
 
       <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.18),transparent_24%),linear-gradient(180deg,#020617_0%,#0f172a_45%,#111827_100%)] px-4 pb-10 pt-24 text-white">
         <div className="mx-auto w-full max-w-7xl">
-          {/* Global Alert Notices */}
           {redeemError ? (
             <div className="mb-6 rounded-2xl border border-red-400/20 bg-red-500/10 px-5 py-4 text-sm font-bold text-red-200">
               ⚠️ {redeemError}
@@ -394,7 +388,7 @@ function StorePageContent() {
                 <h2 className="mt-2 text-2xl font-black text-white sm:text-3xl">Choose the package that fits you.</h2>
               </div>
               <div className="hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-right text-sm text-slate-300 md:block">
-                Secure checkout, clear bonuses, trusted wallet details.
+                Secure checkout, transparent totals, trusted wallet details.
               </div>
             </div>
 
@@ -402,7 +396,6 @@ function StorePageContent() {
               {packages.map((item) => {
                 const packageTotalCoins = item.baseCoins + item.bonusCoins
                 const isFeatured = item.featured === true
-                const savePercent = Math.round((item.bonusCoins / item.baseCoins) * 100)
 
                 return (
                   <article
@@ -432,10 +425,10 @@ function StorePageContent() {
                     <p className="mt-2 text-sm text-slate-300">{item.description}</p>
 
                     <div className="mt-5 rounded-[24px] border border-white/10 bg-slate-950/60 p-5 backdrop-blur">
-                      <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Equivalent Coins</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Total Coins</p>
 
                       <div className={`${isFeatured ? "text-3xl" : "text-2xl"} mt-3 font-black text-white`}>
-                        {formatCoins(item.baseCoins)}
+                        {formatCoins(packageTotalCoins)}
                       </div>
 
                       {item.bonusCoins > 0 ? (
@@ -443,16 +436,6 @@ function StorePageContent() {
                           Bonus +{item.bonusCoins.toLocaleString()} Coins
                         </div>
                       ) : null}
-
-                      <div className="mt-3 flex items-center justify-between gap-3 text-sm text-slate-300">
-                        <span>Total Receive</span>
-                        <span className="font-black text-white">{formatCoins(packageTotalCoins)}</span>
-                      </div>
-
-                      <div className="mt-3 flex items-center justify-between gap-3 text-sm text-slate-300">
-                        <span>Bonus Value</span>
-                        <span className="font-black text-amber-300">+{savePercent}%</span>
-                      </div>
                     </div>
 
                     <button
@@ -515,15 +498,7 @@ function StorePageContent() {
 
                   <div className="mt-4 grid gap-3">
                     <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                      <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Base Coins</div>
-                      <div className="mt-1 text-lg font-black text-white">{formatCoins(selectedPackage.baseCoins)}</div>
-                    </div>
-                    <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3">
-                      <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-200">Bonus Coins</div>
-                      <div className="mt-1 text-lg font-black text-emerald-300">+{selectedPackage.bonusCoins.toLocaleString()} Coins</div>
-                    </div>
-                    <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                      <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Total Receive</div>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Total Coins to Receive</div>
                       <div className="mt-1 text-xl font-black text-white">{formatCoins(totalCoins)}</div>
                     </div>
                   </div>
@@ -543,10 +518,6 @@ function StorePageContent() {
                         <span>{item}</span>
                       </div>
                     ))}
-                  </div>
-
-                  <div className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-                    You save more with this package through an extra <span className="font-black">+{bonusPercent}%</span> bonus value.
                   </div>
                 </div>
               </div>

@@ -317,7 +317,7 @@ function ProfileContent() {
     avatar_url: "",
   })
 
-  // Derived variables declared early to avoid scope/TDZ issues
+  // Derived variables
   const displayName =
     profile?.full_name || profile?.name || profile?.username || authEmail.split("@")[0] || "User"
 
@@ -342,6 +342,7 @@ function ProfileContent() {
   const nextMilestone = dailyRewardStatus?.nextMilestone || null
   const todayRewardCoins = Number(dailyRewardStatus?.coins || baseCoins + streakBonus || 15)
 
+  // Membership redemption conditions
   const canRedeemPremium =
     membershipLevel !== "admin" &&
     membershipLevel !== "premium" &&
@@ -1014,6 +1015,9 @@ function ProfileContent() {
       await loadCoinHistory()
       await loadProfileViewStats()
       await loadDownloadsHistory()
+
+      // Dispatch event so top header coin display updates immediately
+      window.dispatchEvent(new Event("jb-coins-updated"))
     } catch (err) {
       const message = err instanceof Error ? err.message : "Redeem failed."
       setSaveError(message)
@@ -1097,6 +1101,8 @@ function ProfileContent() {
       await loadDailyRewardStatus()
       await loadProfileViewStats()
       await loadDownloadsHistory()
+
+      window.dispatchEvent(new Event("jb-coins-updated"))
     } catch (err) {
       console.error("Daily reward claim error:", err)
       setSaveError("Failed to claim daily reward.")
@@ -1579,11 +1585,12 @@ function ProfileContent() {
                     </div>
 
                     <div className="mt-4 grid gap-3">
+                      {/* Premium Card */}
                       <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="text-sm font-black text-white">Premium</p>
-                            <p className="mt-1 text-xs text-slate-300">8,000 coins</p>
+                            <p className="mt-1 text-xs text-slate-300">75,000 coins</p>
                           </div>
                           <button
                             type="button"
@@ -1591,19 +1598,32 @@ function ProfileContent() {
                             disabled={redeemingPlan !== null || !canRedeemPremium}
                             className="rounded-2xl bg-cyan-400 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {redeemingPlan === "premium" ? "Redeeming..." : canRedeemPremium ? "Redeem" : "Locked"}
+                            {redeemingPlan === "premium"
+                              ? "Redeeming..."
+                              : membershipLevel === "admin" || membershipLevel === "premium" || membershipLevel === "platinum"
+                                ? "Active"
+                                : canRedeemPremium
+                                  ? "Redeem"
+                                  : "Locked"}
                           </button>
                         </div>
-                        {!canRedeemPremium ? (
+                        {membershipLevel === "admin" ? (
+                          <p className="mt-2 text-xs text-cyan-300 font-semibold">Full access granted via Admin role.</p>
+                        ) : membershipLevel === "platinum" ? (
+                          <p className="mt-2 text-xs text-cyan-300 font-semibold">Included with Platinum membership.</p>
+                        ) : membershipLevel === "premium" ? (
+                          <p className="mt-2 text-xs text-emerald-400 font-semibold">You currently have Premium membership.</p>
+                        ) : !canRedeemPremium ? (
                           <p className="mt-2 text-xs text-slate-400">Need {premiumCoinsNeeded.toLocaleString()} more coins.</p>
                         ) : null}
                       </div>
 
+                      {/* Platinum Card */}
                       <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="text-sm font-black text-white">Platinum</p>
-                            <p className="mt-1 text-xs text-slate-300">10,000 coins</p>
+                            <p className="mt-1 text-xs text-slate-300">100,000 coins</p>
                           </div>
                           <button
                             type="button"
@@ -1611,10 +1631,20 @@ function ProfileContent() {
                             disabled={redeemingPlan !== null || !canRedeemPlatinum}
                             className="rounded-2xl bg-white px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {redeemingPlan === "platinum" ? "Redeeming..." : canRedeemPlatinum ? "Redeem" : "Locked"}
+                            {redeemingPlan === "platinum"
+                              ? "Redeeming..."
+                              : membershipLevel === "admin" || membershipLevel === "platinum"
+                                ? "Active"
+                                : canRedeemPlatinum
+                                  ? "Redeem"
+                                  : "Locked"}
                           </button>
                         </div>
-                        {!canRedeemPlatinum ? (
+                        {membershipLevel === "admin" ? (
+                          <p className="mt-2 text-xs text-cyan-300 font-semibold">Full access granted via Admin role.</p>
+                        ) : membershipLevel === "platinum" ? (
+                          <p className="mt-2 text-xs text-purple-300 font-semibold">You currently have Platinum membership.</p>
+                        ) : !canRedeemPlatinum ? (
                           <p className="mt-2 text-xs text-slate-400">Need {platinumCoinsNeeded.toLocaleString()} more coins.</p>
                         ) : null}
                       </div>

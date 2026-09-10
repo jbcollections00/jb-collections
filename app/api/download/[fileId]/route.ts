@@ -16,7 +16,6 @@ interface ProfileRow {
   membership?: string | null
   is_premium?: boolean | null
   coins?: number | null
-  jb_coins?: number | null
 }
 
 interface FileRow {
@@ -57,9 +56,9 @@ function normalizeMembership(profile?: ProfileRow | null): MembershipLevel {
 
 function getBaseDownloadCoinCost(level: MembershipLevel): number {
   if (level === "admin") return 0
-  if (level === "platinum") return 120
-  if (level === "premium") return 180
-  return 250
+  if (level === "platinum") return 300
+  if (level === "premium") return 325
+  return 350
 }
 
 function getDownloadCoinCost(level: MembershipLevel, file?: FileRow | null): number {
@@ -138,12 +137,12 @@ export async function GET(
     let profile: ProfileRow | null = null
 
     if (adminDb) {
-      const { data } = await adminDb.from("profiles").select("id, role, membership, is_premium, coins, jb_coins").eq("id", user.id).maybeSingle()
+      const { data } = await adminDb.from("profiles").select("id, role, membership, is_premium, coins").eq("id", user.id).maybeSingle()
       profile = data as ProfileRow | null
     }
 
     if (!profile) {
-      const { data, error } = await supabase.from("profiles").select("id, role, membership, is_premium, coins, jb_coins").eq("id", user.id).maybeSingle()
+      const { data, error } = await supabase.from("profiles").select("id, role, membership, is_premium, coins").eq("id", user.id).maybeSingle()
       if (error) return NextResponse.json({ error: "Failed to read user coins", details: error.message }, { status: 500 })
       profile = data as ProfileRow | null
     }
@@ -151,7 +150,7 @@ export async function GET(
     if (!profile) return NextResponse.json({ error: "User profile not found" }, { status: 404 })
 
     const membershipLevel = normalizeMembership(profile)
-    const userCoins = Number(profile.coins ?? profile.jb_coins ?? 0)
+    const userCoins = Number(profile.coins || 0)
 
     const baseFileQuery = supabase.from("files").select("id, title, slug, visibility, status, downloads_count, monetization_enabled")
     const { data: fileData, error: fileError } = isUuid(fileId)
@@ -232,14 +231,9 @@ export async function GET(
       } else {
         const newBalance = userCoins - downloadCoinCost
         if (newBalance >= 0) {
-          // Bawasan alinman sa available field name
-          const updatePayload = profile.coins !== undefined && profile.coins !== null 
-            ? { coins: newBalance } 
-            : { jb_coins: newBalance }
-
           const { error: updateError } = await adminDb
             .from("profiles")
-            .update(updatePayload)
+            .update({ coins: newBalance })
             .eq("id", user.id)
 
           if (!updateError) deducted = true
