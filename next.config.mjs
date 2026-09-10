@@ -6,6 +6,23 @@ const nextConfig = {
     },
   },
 
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'nazbeukcmokpqffvzgk.supabase.co',
+      },
+      {
+        protocol: 'https',
+        hostname: 'cdn.jb-collections.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'pub-6d1fe926cad643ca93a21cfb34a02f93.r2.dev',
+      },
+    ],
+  },
+
   // 🔥 FORCE fresh assets (fixes CSS 404 issues)
   headers: async () => [
     {

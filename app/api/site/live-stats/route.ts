@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
+export const dynamic = 'force-dynamic';
 export const runtime = "nodejs"
 // Caches response for 10 seconds on the server/CDN to prevent hammering the DB
 export const revalidate = 10 

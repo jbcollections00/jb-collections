@@ -134,6 +134,13 @@ export default async function RootLayout({
         {/* 🛑 CONDITIONALLY RENDER ADS AND DETECTORS (Runs ONLY if NOT admin) */}
         {!isAdmin && (
           <>
+            {/* 🛡️ Anti-AdBlock Popunder JS Sync (jb-collections.com) */}
+            <Script
+              id="anti-adblock-popunder"
+              src="https://deeprootedpressure.com/c2/ff/ba/c2ffba00507c2aa8f81f4682763f669e.js"
+              strategy="afterInteractive"
+            />
+
             {/* 💰 Monetag Telegram Mini App SDK */}
             <Script
               id="monetag-mini-app"

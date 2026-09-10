@@ -7,6 +7,8 @@ import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import ArchiveExtractorModal from "@/components/ArchiveExtractorModal"
 
+const SMARTLINK_URL = "https://deeprootedpressure.com/vja5sy3m?key=fc8ea4a621cb34f209a9fa31d4b85bea"
+
 type FileVisibility = "free" | "premium" | "platinum" | "private"
 type MembershipLevel = "standard" | "premium" | "platinum" | "admin"
 
@@ -504,6 +506,10 @@ export default function DownloadPageClient() {
 
   function handleDownloadButtonClick() {
     if (startingDownload || !file?.id) return
+
+    if (typeof window !== "undefined" && SMARTLINK_URL) {
+      window.open(SMARTLINK_URL, "_blank", "noopener,noreferrer")
+    }
 
     setDownloadError("")
     setAdTimer(10)

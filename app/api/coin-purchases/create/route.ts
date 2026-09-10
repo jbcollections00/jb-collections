@@ -223,12 +223,11 @@ export async function POST(req: Request) {
 
     const proofUrl = publicUrlData.publicUrl
 
-    const { data: order, error: insertError } = await supabase
+    const { data: order, error: insertError } = await admin
       .from("coin_purchase_orders")
       .insert({
         user_id: user.id,
         amount: amountPhp,
-        amount_php: amountPhp,
         coins,
         label: label || `₱${amountPhp} Package`,
         payment_method: paymentMethod,
@@ -238,7 +237,7 @@ export async function POST(req: Request) {
         proof_url: proofUrl,
         status: "pending",
       })
-      .select("id, status, created_at, amount_php, coins, label, payment_method, payment_reference")
+      .select("id, status, created_at, amount, coins, label, payment_method, payment_reference")
       .single()
 
     if (insertError) {
@@ -251,7 +250,7 @@ export async function POST(req: Request) {
     await sendTelegramPaymentAlert({
       orderId: order.id,
       payerName,
-      amountPhp: order.amount_php,
+      amountPhp: Number(order.amount),
       coins: order.coins,
       label: order.label,
       paymentMethod: order.payment_method,
@@ -266,7 +265,7 @@ export async function POST(req: Request) {
       transaction: {
         id: order.id,
         label: order.label,
-        amount: order.amount_php,
+        amount: Number(order.amount),
         coins: order.coins,
         bonus: 0,
         base: coins,

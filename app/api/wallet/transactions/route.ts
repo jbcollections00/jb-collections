@@ -54,7 +54,7 @@ function mapMethod(value: unknown): PaymentMethod {
 function mapStatus(status: unknown): TransactionStatus {
   const value = String(status || "pending").trim().toLowerCase()
   if (value === "rejected") return "rejected"
-  if (value === "approved") return "credited"
+  if (value === "approved" || value === "credited") return "credited"
   return "pending"
 }
 
@@ -76,7 +76,7 @@ export async function GET() {
     const { data: orders, error } = await adminDb
       .from("coin_purchase_orders")
       .select(
-        "id, amount_php, coins, label, payment_method, payment_reference, proof_url, status, admin_note, created_at"
+        "id, amount, coins, label, payment_method, payment_reference, proof_url, status, admin_note, payer_name, notes, created_at"
       )
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
@@ -91,17 +91,17 @@ export async function GET() {
     const transactions = (orders || []).map((row) => ({
       id: row.id,
       label: row.label || "JB Coin Package",
-      amount: Number(row.amount_php || 0),
+      amount: Number(row.amount || 0),
       coins: Number(row.coins || 0),
       bonus: 0,
       base: Number(row.coins || 0),
       method: mapMethod(row.payment_method),
-      payerName: "",
+      payerName: String(row.payer_name || ""),
       referenceNumber: String(row.payment_reference || ""),
-      notes: String(row.admin_note || ""),
+      notes: String(row.notes || row.admin_note || ""),
       status: mapStatus(row.status),
 
-      // ✅ REAL DATE FROM DB
+      // REAL DATE FROM DB
       createdAt: String(row.created_at || ""),
 
       receiptName: row.proof_url
