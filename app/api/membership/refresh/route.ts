@@ -21,11 +21,18 @@ export async function POST() {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value
+          getAll() {
+            return cookieStore.getAll()
           },
-          set() {},
-          remove() {},
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              )
+            } catch {
+              // Safe fallback kapag tinawag mula sa Server Component
+            }
+          },
         },
       }
     )
@@ -51,10 +58,11 @@ export async function POST() {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
+    // Isinama na ang 'coins' o 'jb_coins' sa query
     const { data: profile, error: profileError } = await adminSupabase
       .from("profiles")
       .select(
-        "id, role, membership, is_premium, membership_payment_type, membership_started_at, membership_expires_at"
+        "id, role, membership, is_premium, coins, jb_coins, membership_payment_type, membership_started_at, membership_expires_at"
       )
       .eq("id", user.id)
       .maybeSingle()
@@ -67,13 +75,18 @@ export async function POST() {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
+    const userCoins = profile.coins ?? profile.jb_coins ?? 0
+
     if (String(profile.role || "").toLowerCase() === "admin") {
       return NextResponse.json({
         success: true,
+        role: "admin",
         expired: false,
         membership: "platinum",
         is_premium: true,
         is_platinum: true,
+        coins: userCoins,
+        jb_coins: userCoins,
         membership_payment_type: "none",
         membership_started_at: null,
         membership_expires_at: null,
@@ -105,10 +118,13 @@ export async function POST() {
 
       return NextResponse.json({
         success: true,
+        role: profile.role || "user",
         expired: true,
         membership: "standard",
         is_premium: false,
         is_platinum: false,
+        coins: userCoins,
+        jb_coins: userCoins,
         membership_payment_type: "none",
         membership_started_at: null,
         membership_expires_at: null,
@@ -117,10 +133,13 @@ export async function POST() {
 
     return NextResponse.json({
       success: true,
+      role: profile.role || "user",
       expired: false,
       membership,
       is_premium: membership === "premium" || membership === "platinum",
       is_platinum: membership === "platinum",
+      coins: userCoins,
+      jb_coins: userCoins,
       membership_payment_type: profile.membership_payment_type || "none",
       membership_started_at: profile.membership_started_at ?? null,
       membership_expires_at: expiresAt ?? null,

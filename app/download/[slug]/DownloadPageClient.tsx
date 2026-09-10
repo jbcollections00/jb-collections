@@ -7,7 +7,18 @@ import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import ArchiveExtractorModal from "@/components/ArchiveExtractorModal"
 
-const SMARTLINK_URL = "https://deeprootedpressure.com/vja5sy3m?key=fc8ea4a621cb34f209a9fa31d4b85bea"
+const SMART_LINKS = [
+  "https://deeprootedpressure.com/ek44eeb04?key=99f05c43be188cef9d877a7519d8166a", // Smartlink 1
+  "https://deeprootedpressure.com/kvx8tkwni0?key=af8f3ec4f9904d2b3f92245d38b66963", // Smartlink 2
+  "https://deeprootedpressure.com/tw8ajp18mf?key=786d474da794ee7cd3596da3aab40fcc", // Smartlink 3
+  "https://deeprootedpressure.com/pyuze51wkf?key=089f5accce969646a828061bc3a846f2", // Smartlink 4
+  "https://deeprootedpressure.com/vja5sy3m?key=fc8ea4a621cb34f209a9fa31d4b85bea", // Smartlink 5
+]
+
+function getRandomSmartlink() {
+  const randomIndex = Math.floor(Math.random() * SMART_LINKS.length)
+  return SMART_LINKS[randomIndex]
+}
 
 type FileVisibility = "free" | "premium" | "platinum" | "private"
 type MembershipLevel = "standard" | "premium" | "platinum" | "admin"
@@ -507,8 +518,9 @@ export default function DownloadPageClient() {
   function handleDownloadButtonClick() {
     if (startingDownload || !file?.id) return
 
-    if (typeof window !== "undefined" && SMARTLINK_URL) {
-      window.open(SMARTLINK_URL, "_blank", "noopener,noreferrer")
+    if (typeof window !== "undefined") {
+      const activeLink = getRandomSmartlink()
+      window.open(activeLink, "_blank", "noopener,noreferrer")
     }
 
     setDownloadError("")
