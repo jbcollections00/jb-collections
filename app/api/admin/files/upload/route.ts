@@ -149,16 +149,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle()
-
-    if (profileError || profile?.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
-
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
     if (!serviceRoleKey) {
       return NextResponse.json(
@@ -177,6 +167,17 @@ export async function POST(req: NextRequest) {
         },
       }
     )
+
+    // Bypass RLS using adminDb to verify admin privileges
+    const { data: profile, error: profileError } = await adminDb
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    if (profileError || String(profile?.role || "").toLowerCase() !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
 
     const body = (await req.json()) as RequestBody
 
@@ -440,4 +441,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     )
   }
-}	
+}

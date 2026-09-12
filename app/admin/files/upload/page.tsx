@@ -27,8 +27,9 @@ type FinalizeResponse = {
 type Visibility = "free" | "premium" | "platinum" | "private"
 type FileStatus = "draft" | "review" | "published" | "flagged" | "removed"
 
+const supabase = createClient()
+
 export default function UploadFilePage() {
-  const supabase = createClient()
   const router = useRouter()
   const lastProgressRef = useRef(0)
 

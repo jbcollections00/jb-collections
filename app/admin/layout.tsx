@@ -40,7 +40,8 @@ const navItems = [
   { label: "Support Inbox", href: "/admin/queries", icon: "📥" },
   { label: "Categories", href: "/admin/categories", icon: "📂" },
   { label: "Coin Purchases", href: "/admin/coin-purchases", icon: "🪙" },
-  { label: "Upload Files", href: "/admin/files", icon: "📁" },
+  { label: "Manage Files", href: "/admin/files", icon: "📁" },
+  { label: "Upload File", href: "/admin/files/upload", icon: "📤" },
   { label: "Users", href: "/admin/users", icon: "👥" },
 ]
 
@@ -118,8 +119,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <nav className="flex flex-1 flex-col gap-1.5 overflow-hidden">
           {navItems.map((item) => {
             const isActive =
-              item.href === "/admin"
-                ? pathname === "/admin"
+              item.href === "/admin" || item.href === "/admin/files"
+                ? pathname === item.href
                 : pathname.startsWith(item.href)
 
             const isCoinPurchases = item.href === "/admin/coin-purchases"
