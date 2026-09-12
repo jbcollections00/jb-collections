@@ -74,12 +74,12 @@ type WalletSummary = {
 }
 
 const VALID_PACKAGES = [
-  { amount: 20, coins: 270, base: 260, bonus: 10 },
-  { amount: 50, coins: 690, base: 650, bonus: 40 },
-  { amount: 100, coins: 1400, base: 1300, bonus: 100 },
-  { amount: 200, coins: 2900, base: 2600, bonus: 300 },
-  { amount: 500, coins: 7500, base: 6500, bonus: 1000 },
-  { amount: 1000, coins: 15500, base: 13000, bonus: 2500 },
+  { amount: 20, coins: 20000, base: 20000, bonus: 0, label: "₱20 Package" },
+  { amount: 50, coins: 50000, base: 50000, bonus: 0, label: "₱50 Package" },
+  { amount: 100, coins: 100000, base: 100000, bonus: 0, label: "₱100 Package" },
+  { amount: 200, coins: 200000, base: 200000, bonus: 0, label: "₱200 Package" },
+  { amount: 500, coins: 500000, base: 500000, bonus: 0, label: "₱500 Package" },
+  { amount: 1000, coins: 1000000, base: 1000000, bonus: 0, label: "₱1,000 Package" },
 ] as const
 
 function toSafeNumber(value: unknown, fallback = 0) {

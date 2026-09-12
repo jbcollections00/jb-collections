@@ -282,7 +282,7 @@ export default function AdminCoinPurchasesPage() {
       await loadOrders()
     })()
 
-    // 🔔 REALTIME NOTIFICATION & AUTOMATIC SYNC
+    // REALTIME NOTIFICATION & AUTOMATIC SYNC
     const channel = supabase
       .channel("admin-coin-orders-realtime")
       .on(
@@ -312,7 +312,8 @@ export default function AdminCoinPurchasesPage() {
   }, [checkAdmin, loadOrders, supabase])
 
   function spawnCoinBurst() {
-    const next = Array.from({ length: 12 }).map((_, index) => ({
+    // Reduced count from 12 to 5 to prevent confusion with a 12x multiplier
+    const next = Array.from({ length: 5 }).map((_, index) => ({
       id: Date.now() + index,
       x: Math.random() * 260 - 130,
       y: -Math.random() * 140 - 30,

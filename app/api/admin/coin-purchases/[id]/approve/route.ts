@@ -54,25 +54,12 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
       return NextResponse.json({ error: "Order already processed." }, { status: 409 })
     }
 
-    const baseCoins = Number(order.coins || 0)
-    if (baseCoins <= 0) {
+    const coinsToCredit = Number(order.coins || 0)
+    if (coinsToCredit <= 0) {
       return NextResponse.json({ error: "Invalid coin amount on order." }, { status: 400 })
     }
 
-    // 3. First Purchase Promo Calculation
-    const { count: prevOrders, error: prevOrdersErr } = await adminSupabase
-      .from("coin_purchase_orders")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", order.user_id)
-      .in("status", ["credited", "approved"])
-
-    if (prevOrdersErr) return NextResponse.json({ error: prevOrdersErr.message }, { status: 500 })
-
-    const isFirstPurchase = Number(prevOrders || 0) === 0
-    const multiplier = isFirstPurchase ? 12 : 1
-    const coinsToCredit = baseCoins * multiplier
-
-    // 4. Fetch Target User Profile
+    // 3. Fetch Target User Profile
     const { data: targetProfile, error: profileErr } = await adminSupabase
       .from("profiles")
       .select("coins")
@@ -83,7 +70,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
 
     const currentCoins = Number(targetProfile.coins || 0)
 
-    // 5. Update Wallet Balance
+    // 4. Update Wallet Balance
     const { error: walletErr } = await adminSupabase
       .from("profiles")
       .update({ coins: currentCoins + coinsToCredit })
@@ -91,7 +78,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
 
     if (walletErr) return NextResponse.json({ error: walletErr.message }, { status: 500 })
 
-    // 6. Update Order Status & Add History Log
+    // 5. Update Order Status & Add History Log
     const { error: orderUpdateErr } = await adminSupabase
       .from("coin_purchase_orders")
       .update({ status: "credited", approved_at: new Date().toISOString(), approved_by: user.id })
@@ -103,7 +90,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
       user_id: order.user_id,
       amount: coinsToCredit, 
       type: "purchase_credit",
-      description: isFirstPurchase ? `${order.label || "Coins"} - First Purchase Promo x12` : order.label, 
+      description: order.label || "Coin Purchase", 
       reference: orderId,
     })
 
@@ -113,9 +100,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
 
     return NextResponse.json({
       success: true,
-      message: isFirstPurchase
-        ? "Coins credited successfully with First Purchase Promo (x12)."
-        : "Coins credited successfully.",
+      message: "Coins credited successfully.",
       credited: coinsToCredit,
     })
   } catch (error) {
