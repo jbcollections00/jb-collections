@@ -6,18 +6,11 @@ export const runtime = "nodejs"
 
 type RequestBody = {
   userId?: string
+  targetUserId?: string
   amount?: number
   operation?: "add" | "subtract" | "set"
+  action?: "add" | "subtract" | "set"
   reason?: string
-}
-
-type ProfileRow = {
-  id: string
-  role?: string | null
-  jb_points?: number | null
-  full_name?: string | null
-  name?: string | null
-  email?: string | null
 }
 
 function sanitizeOperation(value?: string | null) {
@@ -45,7 +38,7 @@ export async function POST(req: NextRequest) {
       .eq("id", user.id)
       .maybeSingle()
 
-    if (adminProfileError || adminProfile?.role !== "admin") {
+    if (adminProfileError || String(adminProfile?.role).toLowerCase() !== "admin") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -70,45 +63,37 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json()) as RequestBody
 
-    const userId = String(body.userId || "").trim()
-    const amount =
-      typeof body.amount === "number" && Number.isFinite(body.amount)
-        ? Math.trunc(body.amount)
-        : NaN
-    const operation = sanitizeOperation(body.operation)
-    const reason = String(body.reason || "").trim()
+    const userId = String(body.userId || body.targetUserId || "").trim()
+    const rawAmount = typeof body.amount === "number" ? body.amount : Number(body.amount)
+    const amount = Number.isFinite(rawAmount) ? Math.trunc(Math.abs(rawAmount)) : NaN
+    const rawOp = body.operation || body.action
+    const operation = sanitizeOperation(rawOp)
+    const reason = String(body.reason || "").trim() || "Admin balance adjustment"
 
     if (!userId) {
-      return NextResponse.json({ error: "Missing userId" }, { status: 400 })
+      return NextResponse.json({ error: "Missing user ID" }, { status: 400 })
     }
 
     if (!Number.isFinite(amount)) {
       return NextResponse.json({ error: "Invalid amount" }, { status: 400 })
     }
 
-    if (amount < 0) {
-      return NextResponse.json(
-        { error: "Amount must not be negative" },
-        { status: 400 }
-      )
-    }
-
-    if (!reason) {
-      return NextResponse.json({ error: "Reason is required" }, { status: 400 })
-    }
-
+    // 1. Fetch target profile
     const { data: targetProfile, error: targetProfileError } = await adminDb
       .from("profiles")
-      .select("id, jb_points, full_name, name, email")
+      .select("id, coins, full_name, name, email")
       .eq("id", userId)
-      .single()
+      .maybeSingle()
 
-    if (targetProfileError || !targetProfile) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    if (targetProfileError) {
+      return NextResponse.json({ error: targetProfileError.message }, { status: 500 })
     }
 
-    const profile = targetProfile as ProfileRow
-    const currentCoins = Number(profile.jb_points || 0)
+    if (!targetProfile) {
+      return NextResponse.json({ error: "User profile not found" }, { status: 404 })
+    }
+
+    const currentCoins = Number(targetProfile.coins || 0)
 
     let nextCoins = currentCoins
     let transactionAmount = 0
@@ -124,13 +109,12 @@ export async function POST(req: NextRequest) {
       transactionAmount = nextCoins - currentCoins
     }
 
+    // 2. Update coins in profiles
     const { data: updatedProfile, error: updateError } = await adminDb
       .from("profiles")
-      .update({
-        jb_points: nextCoins,
-      })
+      .update({ coins: nextCoins })
       .eq("id", userId)
-      .select("jb_points")
+      .select("coins")
       .single()
 
     if (updateError || !updatedProfile) {
@@ -142,12 +126,13 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // 3. Log transaction to coin_history
     if (transactionAmount !== 0) {
       const targetName =
-        profile.full_name?.trim() ||
-        profile.name?.trim() ||
-        profile.email?.trim() ||
-        profile.id
+        targetProfile.full_name?.trim() ||
+        targetProfile.name?.trim() ||
+        targetProfile.email?.trim() ||
+        targetProfile.id
 
       const description =
         operation === "add"
@@ -166,14 +151,14 @@ export async function POST(req: NextRequest) {
               ? "admin_subtract"
               : "admin_set",
         description,
+        reference: `ADMIN-${Date.now()}`,
       })
 
       if (historyError) {
+        // Rollback balance update if history log fails
         await adminDb
           .from("profiles")
-          .update({
-            jb_points: currentCoins,
-          })
+          .update({ coins: currentCoins })
           .eq("id", userId)
 
         return NextResponse.json(
@@ -184,47 +169,38 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      // Weekly leaderboard update
-      // Only count positive coin gains toward the weekly leaderboard
+      // 4. Update weekly leaderboard if positive balance gain
       if (transactionAmount > 0) {
-        const { data: weekStart, error: weekError } = await adminDb.rpc("get_week_start")
+        try {
+          const { data: weekStart, error: weekError } = await adminDb.rpc("get_week_start")
 
-        if (weekError) {
-          console.error("Weekly leaderboard week error:", weekError)
-        } else if (weekStart) {
-          const { data: existingEntry, error: leaderboardFetchError } = await adminDb
-            .from("jb_weekly_leaderboard")
-            .select("id, total_coins")
-            .eq("user_id", userId)
-            .eq("week_start", weekStart)
-            .maybeSingle()
-
-          if (leaderboardFetchError) {
-            console.error("Weekly leaderboard fetch error:", leaderboardFetchError)
-          } else if (existingEntry?.id) {
-            const { error: leaderboardUpdateError } = await adminDb
+          if (!weekError && weekStart) {
+            const { data: existingEntry } = await adminDb
               .from("jb_weekly_leaderboard")
-              .update({
-                total_coins: Number(existingEntry.total_coins || 0) + transactionAmount,
-              })
-              .eq("id", existingEntry.id)
+              .select("id, total_coins")
+              .eq("user_id", userId)
+              .eq("week_start", weekStart)
+              .maybeSingle()
 
-            if (leaderboardUpdateError) {
-              console.error("Weekly leaderboard update error:", leaderboardUpdateError)
-            }
-          } else {
-            const { error: leaderboardInsertError } = await adminDb
-              .from("jb_weekly_leaderboard")
-              .insert({
-                user_id: userId,
-                total_coins: transactionAmount,
-                week_start: weekStart,
-              })
-
-            if (leaderboardInsertError) {
-              console.error("Weekly leaderboard insert error:", leaderboardInsertError)
+            if (existingEntry?.id) {
+              await adminDb
+                .from("jb_weekly_leaderboard")
+                .update({
+                  total_coins: Number(existingEntry.total_coins || 0) + transactionAmount,
+                })
+                .eq("id", existingEntry.id)
+            } else {
+              await adminDb
+                .from("jb_weekly_leaderboard")
+                .insert({
+                  user_id: userId,
+                  total_coins: transactionAmount,
+                  week_start: weekStart,
+                })
             }
           }
+        } catch (lbErr) {
+          console.error("Weekly leaderboard update non-fatal error:", lbErr)
         }
       }
     }
