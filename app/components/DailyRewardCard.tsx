@@ -132,7 +132,14 @@ export default function DailyRewardCard() {
         cache: "no-store",
       })
 
-      const data: DailyRewardResponse = await res.json()
+      // Handle 401 gracefully without causing crashes or error popups
+      if (res.status === 401) {
+        setShowPopup(false)
+        setShowMarquee(false)
+        return
+      }
+
+      const data: DailyRewardResponse = await res.json().catch(() => ({ ok: false }))
 
       if (!res.ok || !data.ok) {
         setMessage(data.error || "Failed to load daily reward.")
@@ -172,7 +179,6 @@ export default function DailyRewardCard() {
       }, 700)
     } catch (error) {
       console.error("Daily reward load error:", error)
-      setMessage("Failed to load daily reward.")
       setShowPopup(false)
       setShowMarquee(false)
     } finally {
@@ -215,7 +221,12 @@ export default function DailyRewardCard() {
         method: "POST",
       })
 
-      const data: DailyRewardResponse = await res.json()
+      if (res.status === 401) {
+        setMessage("Please log in to claim your daily reward.")
+        return
+      }
+
+      const data: DailyRewardResponse = await res.json().catch(() => ({ ok: false }))
       const responseRewardDate = data.rewardDate ?? rewardDate
 
       if (!res.ok || !data.ok) {
