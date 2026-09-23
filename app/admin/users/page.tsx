@@ -61,6 +61,7 @@ function normalizeMembership(value?: string | null) {
 }
 
 function formatLocalDateTimeInput(date: Date) {
+  if (!date || Number.isNaN(date.getTime())) return ""
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, "0")
   const day = String(date.getDate()).padStart(2, "0")
@@ -70,6 +71,7 @@ function formatLocalDateTimeInput(date: Date) {
 }
 
 function addMonths(dateValue: string, months: number) {
+  if (!dateValue) return ""
   const date = new Date(dateValue)
   if (Number.isNaN(date.getTime())) return ""
 
@@ -81,7 +83,7 @@ function addMonths(dateValue: string, months: number) {
 function isMembershipExpired(user: UserRow) {
   if (String(user.role || "").toLowerCase() === "admin") return false
 
-  const membership = normalizeMembership(user.membership)
+  const membership = normalizeMembership(user.membership || (user.is_premium ? "premium" : "standard"))
   if (membership === "standard") return false
   if (!user.membership_expires_at) return false
 
@@ -93,7 +95,7 @@ function isMembershipExpired(user: UserRow) {
 
 function getEffectiveMembership(user: UserRow) {
   if (String(user.role || "").toLowerCase() === "admin") return "admin"
-  const membership = normalizeMembership(user.membership)
+  const membership = normalizeMembership(user.membership || (user.is_premium ? "premium" : "standard"))
   if (isMembershipExpired(user)) return "standard"
   return membership
 }
@@ -120,6 +122,7 @@ function getActivityAmount(amount?: number | null) {
 function isOnlineNow(user: UserRow) {
   if (!user.last_seen) return false
   const seen = new Date(user.last_seen).getTime()
+  if (Number.isNaN(seen)) return false
   return Date.now() - seen <= 5 * 60 * 1000
 }
 
@@ -423,11 +426,17 @@ export default function AdminUsersPage() {
       return true
     })
 
+    const parseTime = (val?: string | null) => {
+      if (!val) return 0
+      const t = new Date(val).getTime()
+      return Number.isNaN(t) ? 0 : t
+    }
+
     nextUsers = [...nextUsers].sort((a, b) => {
       const nameA = getDisplayName(a).toLowerCase()
       const nameB = getDisplayName(b).toLowerCase()
-      const timeA = new Date(a.created_at || 0).getTime() || 0
-      const timeB = new Date(b.created_at || 0).getTime() || 0
+      const timeA = parseTime(a.created_at)
+      const timeB = parseTime(b.created_at)
       const coinsA = Number(a.coins || 0)
       const coinsB = Number(b.coins || 0)
 
@@ -480,15 +489,17 @@ export default function AdminUsersPage() {
       const paymentType =
         normalizedMembership === "standard" ? "none" : editMembershipPaymentType
 
+      const parseISOOrNull = (val: string) => {
+        if (!val) return null
+        const d = new Date(val)
+        return Number.isNaN(d.getTime()) ? null : d.toISOString()
+      }
+
       const membershipStartedAt =
-        paymentType === "monthly" && editMembershipStartedAt
-          ? new Date(editMembershipStartedAt).toISOString()
-          : null
+        paymentType === "monthly" ? parseISOOrNull(editMembershipStartedAt) : null
 
       const membershipExpiresAt =
-        paymentType === "monthly" && editMembershipExpiresAt
-          ? new Date(editMembershipExpiresAt).toISOString()
-          : null
+        paymentType === "monthly" ? parseISOOrNull(editMembershipExpiresAt) : null
 
       const res = await fetch("/api/admin/users/update", {
         method: "POST",
@@ -541,10 +552,15 @@ export default function AdminUsersPage() {
       setErrorMessage("")
       setSuccessMessage("")
 
+      if (!editCoins.trim()) {
+        setCoinErrorMessage("Please enter a coin amount.")
+        return
+      }
+
       const amount = Number(editCoins)
 
       if (!Number.isFinite(amount) || amount < 0) {
-        setCoinErrorMessage("Please enter a valid coin amount.")
+        setCoinErrorMessage("Please enter a valid positive coin amount.")
         return
       }
 
@@ -1246,9 +1262,9 @@ export default function AdminUsersPage() {
                     <div className="max-h-96 overflow-y-auto rounded-[22px] border border-slate-800 bg-slate-950/60">
                       {selectedUser.recent_activities && selectedUser.recent_activities.length > 0 ? (
                         <div className="divide-y divide-slate-800">
-                          {selectedUser.recent_activities.map((activity) => (
+                          {selectedUser.recent_activities.map((activity, idx) => (
                             <div
-                              key={activity.id}
+                              key={activity.id || idx}
                               className="grid gap-3 p-4 text-sm sm:grid-cols-[140px_1fr_120px] sm:items-center"
                             >
                               <div>
@@ -1283,7 +1299,7 @@ export default function AdminUsersPage() {
                         </div>
                       ) : (
                         <div className="p-6 text-center text-sm text-slate-400">
-                          Wala pang activity record ang user na ito sa coin_history.
+                          No activity records found for this user.
                         </div>
                       )}
                     </div>
